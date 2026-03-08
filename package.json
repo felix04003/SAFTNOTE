@@ -1,0 +1,33 @@
+{
+  "name": "ecolemanager",
+  "version": "1.0.0",
+  "description": "Système de gestion scolaire offline-first — Afrique de l'Ouest",
+  "private": true,
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "scripts": {
+    "install:all":   "npm install --prefix backend && npm install --prefix mobile",
+    "dev":           "docker-compose up -d && npm run dev:backend",
+    "dev:backend":   "npm run dev --prefix backend",
+    "dev:mobile":    "npm run start --prefix mobile",
+    "migrate":       "psql $DATABASE_URL -f migrations/run_all_migrations.sql",
+    "migrate:reset": "docker-compose down -v && docker-compose up -d && sleep 6 && npm run migrate",
+    "test":          "npm test --prefix backend",
+    "test:watch":    "npm run test:watch --prefix backend",
+    "build:android": "npm run build:android --prefix mobile",
+    "build:ios":     "npm run build:ios --prefix mobile",
+    "lint":          "npm run lint --prefix backend",
+    "docker:up":     "docker-compose up -d",
+    "docker:down":   "docker-compose down",
+    "docker:logs":   "docker-compose logs -f api"
+  },
+  "workspaces": [
+    "backend",
+    "mobile"
+  ],
+  "keywords": ["education", "scolaire", "afrique", "offline-first", "nodejs", "react-native"],
+  "author": "EcoleManager",
+  "license": "UNLICENSED"
+}

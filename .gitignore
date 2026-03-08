@@ -1,0 +1,74 @@
+# ═══════════════════════════════════════════════════════
+#  EcoleManager — .gitignore
+# ═══════════════════════════════════════════════════════
+
+# ── Variables d'environnement (JAMAIS commiter) ──────
+.env
+.env.local
+.env.production
+.env.staging
+backend/.env
+mobile/.env
+
+# ── Node.js ──────────────────────────────────────────
+node_modules/
+backend/node_modules/
+mobile/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── Build outputs ────────────────────────────────────
+backend/dist/
+mobile/.expo/
+mobile/dist/
+
+# ── Logs ─────────────────────────────────────────────
+*.log
+logs/
+backend/logs/
+
+# ── Tests ────────────────────────────────────────────
+coverage/
+backend/coverage/
+.nyc_output/
+
+# ── Bulletins PDF générés ────────────────────────────
+backend/storage/bulletins/
+*.pdf
+
+# ── Expo / React Native ──────────────────────────────
+mobile/.expo-shared/
+mobile/android/
+mobile/ios/
+mobile/*.jks
+mobile/*.keystore
+mobile/*.p8
+mobile/*.p12
+mobile/*.mobileprovision
+mobile/google-services.json
+mobile/GoogleService-Info.plist
+expo-env.d.ts
+
+# ── OS ───────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ── IDE ──────────────────────────────────────────────
+.idea/
+.vscode/settings.json
+*.swp
+*.swo
+*~
+
+# ── Docker (volumes locaux) ──────────────────────────
+.docker-data/
+postgres-data/
+
+# ── Archives temporaires ─────────────────────────────
+*.zip
+*.tar.gz

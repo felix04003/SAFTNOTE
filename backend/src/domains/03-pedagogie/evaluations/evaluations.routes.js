@@ -1,0 +1,248 @@
+'use strict';
+
+const express    = require('express');
+const { z }      = require('zod');
+const { v4: uuid } = require('uuid');
+
+const { getDB }          = require('../../../infrastructure/database/pool');
+const { authentifier }   = require('../../../middleware/auth.middleware');
+const { exigerPermission, isolerEtablissement } = require('../../../middleware/permission.middleware');
+const { valider }        = require('../../../middleware/validate.middleware');
+const { ok, cree, liste } = require('../../../utils/reponse');
+const ApiError           = require('../../../utils/ApiError');
+const logger             = require('../../../utils/logger');
+
+const router = express.Router();
+const auth   = authentifier;
+const perm   = exigerPermission;
+const isoler = isolerEtablissement;
+
+// ── GET /evaluations ─────────────────────────────────────────────
+router.get('/evaluations', auth, isoler, perm('notes.voir_classe'), async (req, res, next) => {
+  try {
+    const db = getDB();
+    const { classe_id, periode_id, matiere_id } = req.query;
+
+    let query = db('evaluations as ev')
+      .join('affectations_enseignants as ae', 'ae.id', 'ev.affectation_id')
+      .join('classes as c', 'c.id', 'ae.classe_id')
+      .join('annees_scolaires as a', 'a.id', 'c.annee_scolaire_id')
+      .join('matieres as m', 'm.id', 'ae.matiere_id')
+      .where({ 'a.etablissement_id': req.etablissement_id });
+
+    if (classe_id)  query = query.where('ae.classe_id', classe_id);
+    if (periode_id) query = query.where('ev.periode_id', periode_id);
+    if (matiere_id) query = query.where('ae.matiere_id', matiere_id);
+
+    // Un enseignant ne voit que ses propres évaluations
+    if (req.session.roles.includes('enseignant') && !req.session.roles.includes('directeur')) {
+      query = query.where('ae.enseignant_id', req.session.utilisateur_id);
+    }
+
+    const evals = await query
+      .orderBy(['ev.date_evaluation'])
+      .select(
+        'ev.id', 'ev.type', 'ev.numero', 'ev.titre', 'ev.date_evaluation',
+        'ev.note_max', 'ev.notes_publiees', 'ev.moyenne_classe',
+        'm.nom as matiere', db.raw("CONCAT(n.nom, ' ', c.nom) as classe")
+      )
+      .join('niveaux as n', 'n.id', 'c.niveau_id');
+
+    return liste(res, evals);
+  } catch (err) { next(err); }
+});
+
+// ── POST /evaluations ────────────────────────────────────────────
+router.post('/evaluations', auth, isoler, perm('evaluations.creer'),
+  valider(z.object({
+    affectation_id:  z.string().uuid(),
+    periode_id:      z.string().uuid(),
+    type:            z.enum(['devoir', 'composition', 'interrogation', 'tp', 'expose', 'oral', 'projet']),
+    numero:          z.number().int().min(1).max(5),
+    titre:           z.string().optional(),
+    note_max:        z.number().min(0).max(20).default(20),
+    date_evaluation: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  })),
+  async (req, res, next) => {
+    try {
+      const [evaluation] = await getDB()('evaluations')
+        .insert({
+          id: uuid(),
+          ...req.body,
+          notes_publiees: false,
+        })
+        .returning('*');
+
+      logger.info('Évaluation créée', { id: evaluation.id, type: evaluation.type });
+      return cree(res, evaluation);
+    } catch (err) { next(err); }
+  }
+);
+
+// ── GET /evaluations/:evaluation_id/notes ────────────────────────
+router.get('/evaluations/:evaluation_id/notes', auth, isoler, perm('notes.voir_classe'), async (req, res, next) => {
+  try {
+    const notes = await getDB()('notes as n')
+      .join('utilisateurs as u', 'u.id', 'n.eleve_id')
+      .where({ 'n.evaluation_id': req.params.evaluation_id })
+      .orderBy(['u.nom', 'u.prenom'])
+      .select(
+        'n.id', 'n.eleve_id', 'u.nom', 'u.prenom',
+        'n.valeur', 'n.est_absent', 'n.absence_justifiee',
+        'n.appreciation', 'n.saisie_at'
+      );
+
+    return liste(res, notes);
+  } catch (err) { next(err); }
+});
+
+// ── PUT /evaluations/:evaluation_id/notes — Saisie en masse ─────
+router.put('/evaluations/:evaluation_id/notes', auth, isoler, perm('notes.saisir'),
+  valider(z.object({
+    notes: z.array(z.object({
+      eleve_id:          z.string().uuid(),
+      inscription_id:    z.string().uuid(),
+      valeur:            z.number().min(0).max(20).nullable().optional(),
+      est_absent:        z.boolean().default(false),
+      absence_justifiee: z.boolean().default(false),
+      appreciation:      z.string().optional(),
+    })).min(1),
+  })),
+  async (req, res, next) => {
+    const db = getDB();
+    try {
+      // Vérifier que l'évaluation appartient à l'établissement
+      const evaluation = await db('evaluations as ev')
+        .join('affectations_enseignants as ae', 'ae.id', 'ev.affectation_id')
+        .join('classes as c', 'c.id', 'ae.classe_id')
+        .join('annees_scolaires as a', 'a.id', 'c.annee_scolaire_id')
+        .where({
+          'ev.id':                  req.params.evaluation_id,
+          'a.etablissement_id':     req.etablissement_id,
+          'ev.notes_publiees':      false, // Interdit de modifier des notes publiées sans permission
+        })
+        .first('ev.id', 'ae.matiere_id', 'ae.classe_id');
+
+      if (!evaluation) {
+        throw ApiError.nonTrouve('Évaluation introuvable ou notes déjà publiées');
+      }
+
+      // Un enseignant ne peut saisir que sur ses propres affectations
+      if (req.session.roles.includes('enseignant') && !req.session.roles.includes('directeur')) {
+        const affectation = await db('affectations_enseignants')
+          .where({ id: evaluation.id, enseignant_id: req.session.utilisateur_id })
+          .first();
+        if (!affectation) throw ApiError.interdit('Cette évaluation ne vous appartient pas');
+      }
+
+      await db.transaction(async trx => {
+        const notesAInserer = req.body.notes.map(n => ({
+          id:                uuid(),
+          evaluation_id:     req.params.evaluation_id,
+          eleve_id:          n.eleve_id,
+          inscription_id:    n.inscription_id,
+          valeur:            n.est_absent && !n.absence_justifiee ? 0 : (n.valeur ?? null),
+          est_absent:        n.est_absent,
+          absence_justifiee: n.absence_justifiee,
+          appreciation:      n.appreciation,
+          saisie_par:        req.session.utilisateur_id,
+        }));
+
+        // Upsert : INSERT ou UPDATE si la note existe déjà
+        await trx.raw(
+          `INSERT INTO notes (id, evaluation_id, eleve_id, inscription_id, valeur,
+                              est_absent, absence_justifiee, appreciation, saisie_par)
+           VALUES ${notesAInserer.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?)').join(',')}
+           ON CONFLICT (evaluation_id, eleve_id)
+           DO UPDATE SET
+             valeur = EXCLUDED.valeur,
+             est_absent = EXCLUDED.est_absent,
+             absence_justifiee = EXCLUDED.absence_justifiee,
+             appreciation = EXCLUDED.appreciation,
+             saisie_par = EXCLUDED.saisie_par,
+             saisie_at = NOW()`,
+          notesAInserer.flatMap(n => [
+            n.id, n.evaluation_id, n.eleve_id, n.inscription_id, n.valeur,
+            n.est_absent, n.absence_justifiee, n.appreciation, n.saisie_par
+          ])
+        );
+
+        // Déclencher le recalcul des moyennes en arrière-plan
+        const { enqueuerCalculMoyennes } = require('../../../infrastructure/queue/bullmq');
+        await enqueuerCalculMoyennes({
+          classe_id:        evaluation.classe_id,
+          matiere_id:       evaluation.matiere_id,
+          evaluation_id:    req.params.evaluation_id,
+          etablissement_id: req.etablissement_id,
+        });
+      });
+
+      logger.info('Notes saisies', {
+        evaluation_id: req.params.evaluation_id,
+        nb_notes:      req.body.notes.length,
+        saisie_par:    req.session.utilisateur_id,
+      });
+
+      return ok(res, { message: `${req.body.notes.length} notes enregistrées`, recalcul_en_cours: true });
+    } catch (err) { next(err); }
+  }
+);
+
+// ── PUT /evaluations/:evaluation_id/publier ──────────────────────
+router.put('/evaluations/:evaluation_id/publier', auth, isoler, perm('notes.publier'), async (req, res, next) => {
+  try {
+    const db = getDB();
+    const [evaluation] = await db('evaluations')
+      .where({ id: req.params.evaluation_id })
+      .update({ notes_publiees: true, updated_at: db.raw('NOW()') })
+      .returning('*');
+
+    if (!evaluation) throw ApiError.nonTrouve('Évaluation introuvable');
+
+    // Déclencher les notifications aux parents
+    const { enqueuerNotification } = require('../../../infrastructure/queue/bullmq');
+    await enqueuerNotification({
+      type_notif:       'nouvelle_note',
+      evaluation_id:    evaluation.id,
+      etablissement_id: req.etablissement_id,
+    }, 2);
+
+    logger.info('Notes publiées', { evaluation_id: evaluation.id });
+    return ok(res, { message: 'Notes publiées — parents notifiés' });
+  } catch (err) { next(err); }
+});
+
+// ── GET /eleves/:eleve_id/notes ──────────────────────────────────
+router.get('/eleves/:eleve_id/notes', auth, isoler, perm('notes.voir_classe'), async (req, res, next) => {
+  try {
+    const db = getDB();
+    const { periode_id, matiere_id, depuis } = req.query;
+
+    let query = db('notes as n')
+      .join('evaluations as ev',              'ev.id', 'n.evaluation_id')
+      .join('affectations_enseignants as ae',  'ae.id', 'ev.affectation_id')
+      .join('matieres as m',                   'm.id', 'ae.matiere_id')
+      .join('periodes as p',                   'p.id', 'ev.periode_id')
+      .join('annees_scolaires as a',           'a.id', 'p.annee_scolaire_id')
+      .where({
+        'n.eleve_id':         req.params.eleve_id,
+        'a.etablissement_id': req.etablissement_id,
+        'ev.notes_publiees':  true,
+      })
+      .orderBy(['p.numero', 'ev.date_evaluation']);
+
+    if (periode_id)  query = query.where('ev.periode_id', periode_id);
+    if (matiere_id)  query = query.where('ae.matiere_id', matiere_id);
+    if (depuis)      query = query.where('n.saisie_at', '>', depuis);
+
+    const notes = await query.select(
+      'n.id', 'n.valeur', 'n.est_absent', 'n.appreciation',
+      'ev.type', 'ev.numero', 'ev.date_evaluation',
+      'm.nom as matiere', 'm.couleur_affichage', 'p.numero as trimestre'
+    );
+
+    return liste(res, notes);
+  } catch (err) { next(err); }
+});
+
+module.exports = router;

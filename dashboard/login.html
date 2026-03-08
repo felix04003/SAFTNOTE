@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EcoleManager — Connexion</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="login-wrap">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="sb-mark" style="margin:0 auto 12px;width:52px;height:52px;font-size:22px;border-radius:13px">EM</div>
+      <div style="font-size:20px;font-weight:800;color:var(--g900)">EcoleManager</div>
+      <div style="font-size:12.5px;color:var(--g500);margin-top:4px">Connectez-vous a votre espace</div>
+    </div>
+
+    <div class="login-err" id="login-err"></div>
+
+    <form id="login-form" onsubmit="return handleLogin(event)">
+      <div class="fg">
+        <label class="fl">Identifiant</label>
+        <input class="fi" id="login-id" type="text" placeholder="Email ou telephone (+221...)" required autocomplete="username">
+      </div>
+      <div class="fg">
+        <label class="fl">Mot de passe</label>
+        <input class="fi" id="login-pwd" type="password" placeholder="Votre mot de passe" required autocomplete="current-password">
+      </div>
+      <div class="fg">
+        <label class="fl">Code etablissement</label>
+        <input class="fi" id="login-etab" type="text" placeholder="Ex: LBD-DAKAR-01" required>
+      </div>
+      <button class="btn btn-p btn-full" type="submit" id="login-btn" style="margin-top:8px">
+        Se connecter
+      </button>
+    </form>
+  </div>
+</div>
+
+<div class="tc" id="tc"></div>
+
+<script src="js/config.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script>
+// Redirect if already logged in
+if (Auth.isAuthenticated()) {
+  window.location.href = 'index.html';
+}
+
+async function handleLogin(e) {
+  e.preventDefault();
+  var btn = document.getElementById('login-btn');
+  var errEl = document.getElementById('login-err');
+
+  var identifiant = document.getElementById('login-id').value.trim();
+  var mot_de_passe = document.getElementById('login-pwd').value;
+  var etablissement_code = document.getElementById('login-etab').value.trim();
+
+  btn.disabled = true;
+  btn.textContent = 'Connexion en cours\u2026';
+  errEl.classList.remove('show');
+
+  try {
+    await Auth.login(identifiant, mot_de_passe, etablissement_code);
+  } catch (err) {
+    errEl.textContent = err.message || 'Identifiants incorrects';
+    errEl.classList.add('show');
+    btn.disabled = false;
+    btn.textContent = 'Se connecter';
+  }
+}
+</script>
+</body>
+</html>

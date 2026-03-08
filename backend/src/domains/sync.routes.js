@@ -1,0 +1,207 @@
+'use strict';
+
+const express = require('express');
+const { z }   = require('zod');
+const { v4: uuid } = require('uuid');
+
+const { getDB }      = require('../infrastructure/database/pool');
+const { authentifier } = require('../middleware/auth.middleware');
+const { isolerEtablissement } = require('../middleware/permission.middleware');
+const { valider }    = require('../middleware/validate.middleware');
+const { ok }         = require('../utils/reponse');
+const logger         = require('../utils/logger');
+
+const router = express.Router();
+
+// ── GET /sync — Télécharger les changements ─────────────────────
+// Endpoint central de la synchronisation offline-first
+router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) => {
+  const { depuis } = req.query; // Format ISO : 2025-09-01T06:00:00Z
+  const db = getDB();
+  const { utilisateur_id, etablissement_id, roles } = req.session;
+
+  try {
+    const syncDepuis = depuis ? new Date(depuis) : new Date(0);
+    const syncAt = new Date().toISOString();
+
+    const isEnseignant = roles.includes('enseignant');
+    const isParent     = roles.includes('parent');
+
+    let payload = {};
+
+    if (isEnseignant) {
+      // Payload enseignant : ses classes + élèves + évaluations + notes + EDT
+      const [classes, eleves, evaluations, notes, edt] = await Promise.all([
+        // Classes de l'enseignant
+        db('affectations_enseignants as ae')
+          .join('classes as c', 'c.id', 'ae.classe_id')
+          .join('niveaux as n', 'n.id', 'c.niveau_id')
+          .join('annees_scolaires as a', 'a.id', 'ae.annee_scolaire_id')
+          .where({ 'ae.enseignant_id': utilisateur_id, 'a.est_courante': true })
+          .select('c.id', db.raw("CONCAT(n.nom, ' ', c.nom) as libelle"), 'c.effectif_max'),
+
+        // Élèves modifiés depuis la dernière sync
+        db('inscriptions as i')
+          .join('utilisateurs as u', 'u.id', 'i.eleve_id')
+          .join('eleves as e', 'e.utilisateur_id', 'u.id')
+          .join('classes as c', 'c.id', 'i.classe_id')
+          .join('niveaux as n', 'n.id', 'c.niveau_id')
+          .join('annees_scolaires as a', 'a.id', 'i.annee_scolaire_id')
+          .join('affectations_enseignants as ae', 'ae.classe_id', 'i.classe_id')
+          .where({ 'ae.enseignant_id': utilisateur_id, 'a.est_courante': true, 'i.statut': 'actif' })
+          .where('u.updated_at', '>', syncDepuis)
+          .select('u.id', 'u.nom', 'u.prenom', 'u.photo_url', 'e.matricule', 'i.id as inscription_id', db.raw("CONCAT(n.nom, ' ', c.nom) as classe"))
+          .distinct(),
+
+        // Évaluations modifiées
+        db('evaluations as ev')
+          .join('affectations_enseignants as ae', 'ae.id', 'ev.affectation_id')
+          .join('matieres as m', 'm.id', 'ae.matiere_id')
+          .where({ 'ae.enseignant_id': utilisateur_id })
+          .where('ev.updated_at', '>', syncDepuis)
+          .select('ev.id', 'ev.type', 'ev.numero', 'ev.titre', 'ev.date_evaluation', 'ev.note_max', 'ev.notes_publiees', 'ev.affectation_id', 'm.nom as matiere'),
+
+        // Notes modifiées
+        db('notes as n')
+          .join('evaluations as ev', 'ev.id', 'n.evaluation_id')
+          .join('affectations_enseignants as ae', 'ae.id', 'ev.affectation_id')
+          .where({ 'ae.enseignant_id': utilisateur_id })
+          .where('n.saisie_at', '>', syncDepuis)
+          .select('n.id', 'n.evaluation_id', 'n.eleve_id', 'n.valeur', 'n.est_absent', 'n.absence_justifiee'),
+
+        // EDT de l'enseignant
+        db('emplois_du_temps as edt')
+          .join('affectations_enseignants as ae', 'ae.id', 'edt.affectation_id')
+          .join('plages_horaires as ph', 'ph.id', 'edt.plage_id')
+          .join('matieres as m', 'm.id', 'ae.matiere_id')
+          .where({ 'ae.enseignant_id': utilisateur_id })
+          .where('edt.updated_at', '>', syncDepuis)
+          .select('edt.id', 'edt.jour_semaine', 'edt.salle', 'ph.heure_debut', 'ph.heure_fin', 'm.nom as matiere', 'ae.classe_id'),
+      ]);
+
+      payload = { classes, eleves, evaluations, notes, edt };
+
+    } else if (isParent) {
+      // Payload parent : enfants + notes publiées + absences + bulletins + EDT
+      const [enfants, notes, absences, bulletins, edt] = await Promise.all([
+        // Enfants du parent
+        db('parents_eleves as pe')
+          .join('utilisateurs as u', 'u.id', 'pe.eleve_id')
+          .join('inscriptions as i', 'i.eleve_id', 'pe.eleve_id')
+          .join('classes as c', 'c.id', 'i.classe_id')
+          .join('niveaux as n', 'n.id', 'c.niveau_id')
+          .join('annees_scolaires as a', 'a.id', 'i.annee_scolaire_id')
+          .where({ 'pe.parent_id': utilisateur_id, 'a.est_courante': true, 'i.statut': 'actif' })
+          .select('u.id', 'u.nom', 'u.prenom', 'u.photo_url', 'i.id as inscription_id', db.raw("CONCAT(n.nom, ' ', c.nom) as classe")),
+
+        // Notes publiées depuis la dernière sync
+        db('notes as n')
+          .join('evaluations as ev', 'ev.id', 'n.evaluation_id')
+          .join('affectations_enseignants as ae', 'ae.id', 'ev.affectation_id')
+          .join('matieres as m', 'm.id', 'ae.matiere_id')
+          .join('parents_eleves as pe', 'pe.eleve_id', 'n.eleve_id')
+          .where({ 'pe.parent_id': utilisateur_id, 'ev.notes_publiees': true })
+          .where('n.saisie_at', '>', syncDepuis)
+          .select('n.eleve_id', 'm.nom as matiere', 'ev.type', 'ev.date_evaluation', 'n.valeur'),
+
+        // Absences depuis la dernière sync
+        db('presences as pr')
+          .join('inscriptions as i', 'i.id', 'pr.inscription_id')
+          .join('parents_eleves as pe', 'pe.eleve_id', 'i.eleve_id')
+          .join('appels as a', 'a.id', 'pr.appel_id')
+          .join('emplois_du_temps as edt', 'edt.id', 'a.emploi_du_temps_id')
+          .join('affectations_enseignants as ae', 'ae.id', 'edt.affectation_id')
+          .join('matieres as m', 'm.id', 'ae.matiere_id')
+          .where({ 'pe.parent_id': utilisateur_id })
+          .whereNot({ 'pr.statut': 'present' })
+          .where('pr.updated_at', '>', syncDepuis)
+          .select('i.eleve_id', 'pr.statut', 'pr.est_justifie', 'a.date_cours', 'm.nom as matiere'),
+
+        // Bulletins disponibles
+        db('moyennes_generales as mg')
+          .join('inscriptions as i', 'i.id', 'mg.inscription_id')
+          .join('parents_eleves as pe', 'pe.eleve_id', 'i.eleve_id')
+          .join('periodes as p', 'p.id', 'mg.periode_id')
+          .where({ 'pe.parent_id': utilisateur_id, 'mg.bulletin_genere': true })
+          .where('mg.updated_at', '>', syncDepuis)
+          .select('i.eleve_id', 'mg.moyenne_generale', 'mg.rang', 'mg.rang_sur', 'mg.mention', 'mg.bulletin_url', 'p.numero as trimestre'),
+
+        // EDT classes des enfants
+        db('emplois_du_temps as edt')
+          .join('affectations_enseignants as ae', 'ae.id', 'edt.affectation_id')
+          .join('plages_horaires as ph', 'ph.id', 'edt.plage_id')
+          .join('matieres as m', 'm.id', 'ae.matiere_id')
+          .join('inscriptions as i', 'i.classe_id', 'ae.classe_id')
+          .join('parents_eleves as pe', 'pe.eleve_id', 'i.eleve_id')
+          .join('annees_scolaires as a', 'a.id', 'i.annee_scolaire_id')
+          .where({ 'pe.parent_id': utilisateur_id, 'a.est_courante': true, 'i.statut': 'actif' })
+          .where('edt.updated_at', '>', syncDepuis)
+          .select('edt.jour_semaine', 'ph.heure_debut', 'ph.heure_fin', 'm.nom as matiere', 'ae.classe_id')
+          .distinct(),
+      ]);
+
+      payload = { enfants, notes, absences, bulletins, edt };
+    }
+
+    return ok(res, { sync_at: syncAt, payload });
+
+  } catch (err) { next(err); }
+});
+
+// ── POST /sync/operations — Envoi montant (mobile → serveur) ────
+router.post('/sync/operations', authentifier, isolerEtablissement,
+  valider(z.object({
+    operations: z.array(z.object({
+      id:          z.string().uuid(),
+      type:        z.string(),
+      payload:     z.record(z.unknown()),
+      cree_at_local: z.string().datetime(),
+    })).min(1).max(100),
+  })),
+  async (req, res, next) => {
+    const db = getDB();
+    const resultats = [];
+
+    for (const op of req.body.operations) {
+      try {
+        switch (op.type) {
+
+          case 'notes.saisir': {
+            const { evaluation_id, eleve_id, inscription_id, valeur, est_absent, absence_justifiee } = op.payload;
+            await db('notes')
+              .insert({ id: uuid(), evaluation_id, eleve_id, inscription_id, valeur, est_absent, absence_justifiee, saisie_par: req.session.utilisateur_id })
+              .onConflict(['evaluation_id', 'eleve_id'])
+              .merge(['valeur', 'est_absent', 'absence_justifiee', 'saisie_par', 'saisie_at']);
+            resultats.push({ op_id: op.id, statut: 'ok' });
+            break;
+          }
+
+          case 'presences.saisir': {
+            const { appel_id, inscription_id, statut, minutes_retard } = op.payload;
+            // Vérifier que l'appel n'est pas clôturé
+            const appel = await db('appels').where({ id: appel_id, statut: 'ouvert' }).first('id');
+            if (!appel) {
+              resultats.push({ op_id: op.id, statut: 'erreur', code: 'APPEL_CLOTURE' });
+              break;
+            }
+            await db('presences')
+              .where({ appel_id, inscription_id })
+              .update({ statut, minutes_retard: minutes_retard || 0, updated_at: db.raw('NOW()') });
+            resultats.push({ op_id: op.id, statut: 'ok' });
+            break;
+          }
+
+          default:
+            resultats.push({ op_id: op.id, statut: 'erreur', code: 'TYPE_INCONNU', detail: `Type ${op.type} non géré` });
+        }
+      } catch (err) {
+        logger.warn('Opération sync échouée', { op_id: op.id, type: op.type, error: err.message });
+        resultats.push({ op_id: op.id, statut: 'erreur', code: 'ERREUR_SERVEUR', detail: err.message });
+      }
+    }
+
+    return ok(res, { resultats });
+  }
+);
+
+module.exports = router;
