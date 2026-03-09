@@ -7,36 +7,142 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
+<style>
+  .login-tabs { display:flex; gap:4px; background:var(--g100); border-radius:10px; padding:4px; margin-bottom:22px; }
+  .login-tab  { flex:1; padding:8px 12px; text-align:center; font-size:13px; font-weight:600;
+                border-radius:7px; cursor:pointer; color:var(--g500); transition:.15s; border:none; background:none; }
+  .login-tab.actif { background:#fff; color:var(--g900); box-shadow:0 1px 4px rgba(0,0,0,.1); }
+  .login-panel { display:none; }
+  .login-panel.actif { display:block; }
+  .success-box { background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:16px; margin-bottom:16px; }
+  .success-box .code { font-family:'Space Mono',monospace; font-size:17px; font-weight:700;
+                       color:var(--success); background:#dcfce7; padding:8px 14px; border-radius:7px;
+                       display:inline-block; margin:8px 0; letter-spacing:.5px; }
+  .code-copy { cursor:pointer; font-size:11px; color:var(--g500); margin-left:8px; text-decoration:underline; }
+</style>
 </head>
 <body>
 
 <div class="login-wrap">
-  <div class="login-card">
+  <div class="login-card" style="max-width:440px">
     <div class="login-logo">
       <div class="sb-mark" style="margin:0 auto 12px;width:52px;height:52px;font-size:22px;border-radius:13px">EM</div>
       <div style="font-size:20px;font-weight:800;color:var(--g900)">EcoleManager</div>
-      <div style="font-size:12.5px;color:var(--g500);margin-top:4px">Connectez-vous a votre espace</div>
+      <div style="font-size:12.5px;color:var(--g500);margin-top:4px">Gestion scolaire offline-first</div>
     </div>
 
-    <div class="login-err" id="login-err"></div>
+    <!-- ONGLETS -->
+    <div class="login-tabs">
+      <button class="login-tab actif" onclick="onglet('connexion')">Se connecter</button>
+      <button class="login-tab" onclick="onglet('inscription')">Créer un établissement</button>
+    </div>
 
-    <form id="login-form" onsubmit="return handleLogin(event)">
-      <div class="fg">
-        <label class="fl">Identifiant</label>
-        <input class="fi" id="login-id" type="text" placeholder="Email ou telephone (+221...)" required autocomplete="username">
+    <!-- ═══ PANNEAU CONNEXION ═══ -->
+    <div class="login-panel actif" id="panel-connexion">
+      <div class="login-err" id="login-err"></div>
+      <form id="login-form" onsubmit="return handleLogin(event)">
+        <div class="fg">
+          <label class="fl">Identifiant</label>
+          <input class="fi" id="login-id" type="text" placeholder="Email ou téléphone (+221...)" required autocomplete="username">
+        </div>
+        <div class="fg">
+          <label class="fl">Mot de passe</label>
+          <input class="fi" id="login-pwd" type="password" placeholder="Votre mot de passe" required autocomplete="current-password">
+        </div>
+        <div class="fg">
+          <label class="fl">Code établissement</label>
+          <input class="fi" id="login-etab" type="text" placeholder="Ex: LBD-DAKAR-01" required>
+        </div>
+        <button class="btn btn-p btn-full" type="submit" id="login-btn" style="margin-top:8px">
+          Se connecter
+        </button>
+      </form>
+      <p style="text-align:center;font-size:12px;color:var(--g400);margin-top:16px">
+        Pas encore d'établissement ? <a href="#" onclick="onglet('inscription');return false" style="color:var(--bleu)">Créer le vôtre →</a>
+      </p>
+    </div>
+
+    <!-- ═══ PANNEAU INSCRIPTION ═══ -->
+    <div class="login-panel" id="panel-inscription">
+
+      <!-- Succès affiché après création -->
+      <div id="inscription-success" style="display:none">
+        <div class="success-box">
+          <div style="font-size:14px;font-weight:700;color:var(--g900);margin-bottom:4px">🎉 Établissement créé !</div>
+          <div style="font-size:13px;color:var(--g600)">Votre code établissement :</div>
+          <div>
+            <span class="code" id="code-officiel">—</span>
+            <span class="code-copy" onclick="copierCode()">copier</span>
+          </div>
+          <div style="font-size:12px;color:var(--g500);margin-top:6px">⚠️ Notez ce code — il est nécessaire à chaque connexion.</div>
+        </div>
+        <button class="btn btn-p btn-full" onclick="allerConnexion()">Se connecter maintenant →</button>
       </div>
-      <div class="fg">
-        <label class="fl">Mot de passe</label>
-        <input class="fi" id="login-pwd" type="password" placeholder="Votre mot de passe" required autocomplete="current-password">
+
+      <!-- Formulaire création -->
+      <div id="inscription-form-wrap">
+        <div class="login-err" id="inscription-err"></div>
+
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--g500);margin-bottom:10px">Votre établissement</div>
+        <div class="fg"><label class="fl">Nom de l'établissement *</label>
+          <input id="ins-nom" class="fi" placeholder="Lycée Blaise Diagne" required>
+        </div>
+        <div class="fr">
+          <div class="fg"><label class="fl">Type *</label>
+            <select id="ins-type" class="fs">
+              <option value="lycee">Lycée</option>
+              <option value="college">Collège</option>
+              <option value="primaire">Primaire</option>
+              <option value="college_lycee">Collège + Lycée</option>
+              <option value="primaire_college">Primaire + Collège</option>
+              <option value="complet">Complet (P+C+L)</option>
+              <option value="professionnel">Professionnel</option>
+              <option value="franco_arabe">Franco-arabe</option>
+            </select>
+          </div>
+          <div class="fg"><label class="fl">Pays *</label>
+            <select id="ins-pays" class="fs">
+              <option value="Sénégal">🇸🇳 Sénégal</option>
+              <option value="Côte d'Ivoire">🇨🇮 Côte d'Ivoire</option>
+              <option value="Mali">🇲🇱 Mali</option>
+              <option value="Burkina Faso">🇧🇫 Burkina Faso</option>
+              <option value="Guinée">🇬🇳 Guinée</option>
+              <option value="Cameroun">🇨🇲 Cameroun</option>
+            </select>
+          </div>
+        </div>
+        <div class="fg"><label class="fl">Ville *</label>
+          <input id="ins-ville" class="fi" placeholder="Dakar" required>
+        </div>
+
+        <hr style="border:none;border-top:1px solid var(--g200);margin:14px 0">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--g500);margin-bottom:10px">Compte directeur</div>
+
+        <div class="fr">
+          <div class="fg"><label class="fl">Prénom *</label><input id="ins-prenom" class="fi" placeholder="Mamadou" required></div>
+          <div class="fg"><label class="fl">Nom *</label><input id="ins-nom-dir" class="fi" placeholder="Diallo" required></div>
+        </div>
+        <div class="fr">
+          <div class="fg"><label class="fl">Téléphone * (identifiant)</label>
+            <input id="ins-tel" class="fi" placeholder="+221 77 000 00 00" required>
+          </div>
+          <div class="fg"><label class="fl">Email</label>
+            <input id="ins-email" class="fi" type="email" placeholder="dir@lycee.sn">
+          </div>
+        </div>
+        <div class="fg"><label class="fl">Mot de passe *</label>
+          <input id="ins-mdp" class="fi" type="password" placeholder="Minimum 6 caractères" required>
+        </div>
+
+        <button class="btn btn-p btn-full" onclick="handleInscription()" id="ins-btn" style="margin-top:8px">
+          Créer mon établissement
+        </button>
+        <p style="text-align:center;font-size:12px;color:var(--g400);margin-top:12px">
+          Déjà inscrit ? <a href="#" onclick="onglet('connexion');return false" style="color:var(--bleu)">Se connecter →</a>
+        </p>
       </div>
-      <div class="fg">
-        <label class="fl">Code etablissement</label>
-        <input class="fi" id="login-etab" type="text" placeholder="Ex: LBD-DAKAR-01" required>
-      </div>
-      <button class="btn btn-p btn-full" type="submit" id="login-btn" style="margin-top:8px">
-        Se connecter
-      </button>
-    </form>
+    </div>
+
   </div>
 </div>
 
@@ -47,18 +153,24 @@
 <script src="js/api.js"></script>
 <script src="js/auth.js"></script>
 <script>
-// Redirect if already logged in
 if (Auth.isAuthenticated()) {
   window.location.href = 'index.html';
 }
 
+function onglet(id) {
+  document.querySelectorAll('.login-tab').forEach(function(t, i) {
+    t.classList.toggle('actif', (i === 0 && id === 'connexion') || (i === 1 && id === 'inscription'));
+  });
+  document.getElementById('panel-connexion').classList.toggle('actif', id === 'connexion');
+  document.getElementById('panel-inscription').classList.toggle('actif', id === 'inscription');
+}
+
 async function handleLogin(e) {
   e.preventDefault();
-  var btn = document.getElementById('login-btn');
-  var errEl = document.getElementById('login-err');
-
-  var identifiant = document.getElementById('login-id').value.trim();
-  var mot_de_passe = document.getElementById('login-pwd').value;
+  var btn    = document.getElementById('login-btn');
+  var errEl  = document.getElementById('login-err');
+  var identifiant        = document.getElementById('login-id').value.trim();
+  var mot_de_passe       = document.getElementById('login-pwd').value;
   var etablissement_code = document.getElementById('login-etab').value.trim();
 
   btn.disabled = true;
@@ -73,6 +185,88 @@ async function handleLogin(e) {
     btn.disabled = false;
     btn.textContent = 'Se connecter';
   }
+}
+
+async function handleInscription() {
+  var errEl  = document.getElementById('inscription-err');
+  var btn    = document.getElementById('ins-btn');
+  errEl.classList.remove('show');
+
+  var nom    = document.getElementById('ins-nom').value.trim();
+  var type   = document.getElementById('ins-type').value;
+  var pays   = document.getElementById('ins-pays').value;
+  var ville  = document.getElementById('ins-ville').value.trim();
+  var prenom = document.getElementById('ins-prenom').value.trim();
+  var nomDir = document.getElementById('ins-nom-dir').value.trim();
+  var tel    = document.getElementById('ins-tel').value.trim();
+  var email  = document.getElementById('ins-email').value.trim();
+  var mdp    = document.getElementById('ins-mdp').value;
+
+  if (!nom || !ville || !prenom || !nomDir || !tel || !mdp) {
+    errEl.textContent = 'Veuillez remplir tous les champs obligatoires (*)';
+    errEl.classList.add('show');
+    return;
+  }
+  if (mdp.length < 6) {
+    errEl.textContent = 'Le mot de passe doit contenir au moins 6 caractères';
+    errEl.classList.add('show');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Création en cours\u2026';
+
+  try {
+    var res = await fetch(API_BASE + '/etablissements/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nom:                 nom,
+        type:                type,
+        pays:                pays,
+        ville:               ville,
+        directeur_prenom:    prenom,
+        directeur_nom:       nomDir,
+        directeur_telephone: tel,
+        directeur_email:     email || undefined,
+        directeur_mdp:       mdp,
+      }),
+    });
+    var data = await res.json();
+    if (!res.ok || !data.succes) throw new Error(data.erreur || 'Erreur lors de la création');
+
+    // Afficher le succès
+    var code = data.data.etablissement.code_officiel;
+    document.getElementById('code-officiel').textContent = code;
+    document.getElementById('inscription-form-wrap').style.display = 'none';
+    document.getElementById('inscription-success').style.display = 'block';
+
+    // Pré-remplir le formulaire de connexion
+    document.getElementById('login-id').value    = tel;
+    document.getElementById('login-etab').value  = code;
+
+  } catch (err) {
+    errEl.textContent = err.message || 'Création échouée';
+    errEl.classList.add('show');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Créer mon établissement';
+  }
+}
+
+function copierCode() {
+  var code = document.getElementById('code-officiel').textContent;
+  navigator.clipboard.writeText(code).then(function() {
+    toast('Code copié ✓', 's');
+  }).catch(function() {
+    toast('Code : ' + code, '');
+  });
+}
+
+function allerConnexion() {
+  document.getElementById('inscription-form-wrap').style.display = 'block';
+  document.getElementById('inscription-success').style.display = 'none';
+  onglet('connexion');
 }
 </script>
 </body>
