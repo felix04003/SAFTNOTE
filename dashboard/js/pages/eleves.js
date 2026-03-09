@@ -1,8 +1,7 @@
 'use strict';
 
 /**
- * Page Élèves — charge les données depuis l'API,
- * fallback sur les données mock si le backend est indisponible.
+ * Page Élèves — liste paginée + inscription d'un nouvel élève.
  */
 var PageEleves = {
   page: 1,
@@ -11,6 +10,7 @@ var PageEleves = {
   classeId: '',
   recherche: '',
   data: [],
+  _classes: [],   // cache des classes pour le select du modal
 
   async charger() {
     try {
@@ -25,9 +25,72 @@ var PageEleves = {
       this.renderPagination(res.meta);
       return true;
     } catch (e) {
-      // Fallback sur mock
       console.warn('PageEleves: fallback mock —', e.message);
       return false;
+    }
+  },
+
+  // Charge les classes et alimente le <select> du modal
+  async chargerClasses() {
+    if (this._classes.length) return;
+    try {
+      var res = await Api.get('/classes');
+      this._classes = res.data || [];
+      var sel = document.getElementById('m-eleve-classe');
+      if (!sel) return;
+      sel.innerHTML = '<option value="">— Choisir une classe —</option>' +
+        this._classes.map(function(c) {
+          return '<option value="' + c.id + '">' + (c.nom_classe || c.nom || c.id) + '</option>';
+        }).join('');
+    } catch (e) {
+      console.warn('PageEleves.chargerClasses —', e.message);
+    }
+  },
+
+  async inscrire() {
+    var prenom    = document.getElementById('m-eleve-prenom')?.value?.trim();
+    var nom       = document.getElementById('m-eleve-nom')?.value?.trim();
+    var ddn       = document.getElementById('m-eleve-ddn')?.value;
+    var genre     = document.getElementById('m-eleve-genre')?.value;
+    var classeId  = document.getElementById('m-eleve-classe')?.value;
+    var pTel      = document.getElementById('m-eleve-parent-tel')?.value?.trim();
+    var pNom      = document.getElementById('m-eleve-parent-nom')?.value?.trim();
+    var pPrenom   = document.getElementById('m-eleve-parent-prenom')?.value?.trim();
+    var pLien     = document.getElementById('m-eleve-parent-lien')?.value;
+
+    if (!prenom || !nom) return toast('Prénom et nom obligatoires', 'w');
+    if (!classeId)       return toast('Choisissez une classe', 'w');
+
+    var payload = {
+      prenom: prenom,
+      nom: nom,
+      genre: genre || undefined,
+      date_naissance: ddn || undefined,
+      classe_id: classeId,
+    };
+
+    if (pTel) {
+      payload.parent = {
+        nom:    pNom || nom,
+        prenom: pPrenom || 'Parent',
+        telephone: pTel,
+        lien:   pLien || 'tuteur',
+      };
+    }
+
+    var btn = document.getElementById('btn-inscrire-eleve');
+    if (btn) { btn.disabled = true; btn.textContent = 'Inscription…'; }
+
+    try {
+      await Api.post('/eleves', payload);
+      closeModal('m-eleve');
+      toast('Élève inscrit' + (pTel ? ' — Parent notifié' : '') + ' ✓', 's');
+      this.page = 1;
+      await this.charger();
+    } catch (e) {
+      toast('Erreur : ' + (e.message || 'Inscription échouée'), 'd');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = "Inscrire l'élève"; }
     }
   },
 
@@ -48,11 +111,11 @@ var PageEleves = {
         '<td class="nc" style="display:flex;align-items:center;gap:9px"><div class="av" style="background:' + cn(moy) + '">' + init2(nom) + '</div>' + nom + '</td>' +
         '<td style="font-family:\'Space Mono\',monospace;font-size:11.5px;color:var(--g400)">' + (e.matricule || '—') + '</td>' +
         '<td><span class="badge bp">' + (e.classe || e.niveau || '—') + '</span></td>' +
-        '<td><span class="badge bs">\u2713 Inscrit</span></td>' +
-        '<td>' + (moy != null ? '<span style="font-weight:700;color:' + cn(moy) + '">' + moy + '/20</span>' : '<span class="badge bn">\u2014</span>') + '</td>' +
+        '<td><span class="badge bs">✓ Inscrit</span></td>' +
+        '<td>' + (moy != null ? '<span style="font-weight:700;color:' + cn(moy) + '">' + moy + '/20</span>' : '<span class="badge bn">—</span>') + '</td>' +
         '<td><span style="font-weight:600;color:' + (abs >= 10 ? 'var(--rouge)' : abs >= 5 ? 'var(--warning)' : 'var(--g700)') + '">' + abs + 'j</span></td>' +
         '<td style="font-size:12px;color:var(--g500)">' + (e.parent_nom || '—') + '</td>' +
-        '<td style="display:flex;gap:5px"><button class="btn btn-l btn-sm" onclick="PageEleves.voirFiche(\'' + e.id + '\')">Voir</button><button class="btn btn-l btn-sm" style="color:var(--orange);border-color:var(--orange-lt)" onclick="PageEleves.notifierParent(\'' + e.id + '\')">📱</button></td>' +
+        '<td><button class="btn btn-l btn-sm" onclick="PageEleves.voirFiche(\'' + e.id + '\')">Voir</button></td>' +
       '</tr>';
     }).join('');
   },
@@ -60,55 +123,35 @@ var PageEleves = {
   renderPagination: function(meta) {
     var pag = document.getElementById('pag-eleves');
     if (!pag) return;
-
     var debut = ((meta.page - 1) * meta.limite) + 1;
     var fin = Math.min(meta.page * meta.limite, meta.total);
-
     pag.innerHTML =
       '<span style="font-size:12px;color:var(--g500)">Affichage <b>' + debut + '–' + fin + '</b> sur <b>' + meta.total + '</b></span>' +
       '<div style="display:flex;gap:4px">' +
-        '<button class="btn btn-l btn-sm" ' + (meta.page <= 1 ? 'disabled style="opacity:.4;cursor:default"' : 'onclick="PageEleves.pagePrecedente()"') + '>\u2190 Préc.</button>' +
-        '<button class="btn btn-p btn-sm" ' + (meta.page >= meta.pages ? 'disabled style="opacity:.4;cursor:default"' : 'onclick="PageEleves.pageSuivante()"') + '>Suiv. \u2192</button>' +
+        '<button class="btn btn-l btn-sm" ' + (meta.page <= 1 ? 'disabled style="opacity:.4;cursor:default"' : 'onclick="PageEleves.pagePrecedente()"') + '>← Préc.</button>' +
+        '<button class="btn btn-p btn-sm" ' + (meta.page >= meta.pages ? 'disabled style="opacity:.4;cursor:default"' : 'onclick="PageEleves.pageSuivante()"') + '>Suiv. →</button>' +
       '</div>';
   },
 
-  pageSuivante: function() {
-    this.page++;
-    this.charger();
-  },
-
-  pagePrecedente: function() {
-    if (this.page > 1) { this.page--; this.charger(); }
-  },
+  pageSuivante:   function() { this.page++; this.charger(); },
+  pagePrecedente: function() { if (this.page > 1) { this.page--; this.charger(); } },
 
   filtrerRecherche: function(q) {
-    this.recherche = q;
-    this.page = 1;
-    // Debounce — ne charger qu'après 300ms sans frappe
+    this.recherche = q; this.page = 1;
     clearTimeout(this._debounce);
     var self = this;
     this._debounce = setTimeout(function() { self.charger(); }, 300);
   },
 
-  filtrerClasse: function(classeId) {
-    this.classeId = classeId;
-    this.page = 1;
-    this.charger();
+  filtrerClasse: function(classeId) { this.classeId = classeId; this.page = 1; this.charger(); },
+  voirFiche:     function(id) { toast('Fiche élève — fonctionnalité à venir'); },
+
+  ouvrirModal: function() {
+    this.chargerClasses();
+    openModal('m-eleve');
   },
 
-  voirFiche: function(id) {
-    toast('Fiche élève — fonctionnalité à venir');
-  },
-
-  notifierParent: function(id) {
-    toast('Notification parent envoyée', 's');
-  },
-
-  init: function() {
-    this.page = 1;
-    this.charger();
-  }
+  init: function() { this.page = 1; this.charger(); }
 };
 
-// Hook dans le routeur
 PAGE_HOOKS.eleves = function() { PageEleves.init(); };

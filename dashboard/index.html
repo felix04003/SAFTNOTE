@@ -55,7 +55,7 @@
     <div class="page active" id="page-dashboard">
       <div class="ph">
         <div><div class="ph-titre" id="greeting-name">Bonjour, Moussa 👋</div><div class="ph-sous">Lycée Blaise Diagne · Dakar · Jeudi 27 février 2025</div></div>
-        <button class="btn btn-p" onclick="openModal('m-eleve')">+ Nouvel élève</button>
+        <button class="btn btn-p" onclick="PageEleves.ouvrirModal()">+ Nouvel élève</button>
       </div>
 
       <div class="sg">
@@ -121,7 +121,7 @@
             <option>6e A</option><option>6e B</option><option>3e A</option><option>3e B</option>
             <option>2de A</option><option>2de B</option><option>1re S1</option><option>Term S1</option>
           </select>
-          <button class="btn btn-p" onclick="openModal('m-eleve')">+ Inscrire</button>
+          <button class="btn btn-p" onclick="PageEleves.ouvrirModal()">+ Inscrire</button>
         </div>
       </div>
       <div class="carte">
@@ -225,28 +225,28 @@
     <div class="page" id="page-enseignants">
       <div class="ph">
         <div><div class="ph-titre">Enseignants</div><div class="ph-sous">64 enseignants · 28 matières</div></div>
-        <div style="display:flex;gap:9px"><div class="si"><span>🔍</span><input type="text" placeholder="Rechercher…"></div><button class="btn btn-p">+ Ajouter</button></div>
+        <div style="display:flex;gap:9px"><div class="si"><span>🔍</span><input type="text" placeholder="Rechercher…"></div><button class="btn btn-p" onclick="openModal('m-enseignant')">+ Ajouter</button></div>
       </div>
       <div class="carte"><div class="tw"><table><thead><tr><th>Enseignant</th><th>Matière</th><th>Classes</th><th>H/sem</th><th>Notes saisies</th><th>Appels</th><th>Dernier accès</th><th>Statut</th></tr></thead><tbody id="tb-ens"></tbody></table></div></div>
     </div>
 
     <!-- ═══ PAGE CLASSES ═══ -->
     <div class="page" id="page-classes">
-      <div class="ph"><div><div class="ph-titre">Classes</div><div class="ph-sous">22 classes · 1 248 élèves</div></div><button class="btn btn-p">+ Nouvelle classe</button></div>
+      <div class="ph"><div><div class="ph-titre">Classes</div><div class="ph-sous" id="ph-classes-sous">Chargement…</div></div><button class="btn btn-p" onclick="PageClasses.ouvrirModal()">+ Nouvelle classe</button></div>
       <div id="cls-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px"></div>
     </div>
 
     <!-- ═══ PAGE PARAMÈTRES ═══ -->
     <div class="page" id="page-parametres">
-      <div class="ph"><div><div class="ph-titre">Paramètres</div><div class="ph-sous">Configuration de l'établissement</div></div><button class="btn btn-p" onclick="toast('Modifications sauvegardées','s')">💾 Enregistrer</button></div>
+      <div class="ph"><div><div class="ph-titre">Paramètres</div><div class="ph-sous">Configuration de l'établissement</div></div><button id="btn-param-save" class="btn btn-p" onclick="PageParametres.sauvegarder()">💾 Enregistrer</button></div>
       <div class="g2">
         <div>
           <div class="carte" style="margin-bottom:18px">
             <div class="ch"><span>🏫</span><span class="ct">Établissement</span></div>
             <div class="cb">
-              <div class="fg"><label class="fl">Nom</label><input class="fi" value="Lycée Blaise Diagne"></div>
-              <div class="fr"><div class="fg"><label class="fl">Code</label><input class="fi" value="LBD-DAKAR-01"></div><div class="fg"><label class="fl">Ville</label><input class="fi" value="Dakar"></div></div>
-              <div class="fr"><div class="fg"><label class="fl">Pays</label><select class="fs"><option>Sénégal</option><option>Côte d'Ivoire</option><option>Mali</option><option>Burkina Faso</option></select></div><div class="fg"><label class="fl">Année scolaire</label><input class="fi" value="2024-2025"></div></div>
+              <div class="fg"><label class="fl">Nom</label><input id="param-nom" class="fi" placeholder="Lycée Blaise Diagne"></div>
+              <div class="fr"><div class="fg"><label class="fl">Code officiel</label><input id="param-code" class="fi" placeholder="LBD-DAKAR-01" readonly style="background:var(--g50)"></div><div class="fg"><label class="fl">Ville</label><input id="param-ville" class="fi" placeholder="Dakar"></div></div>
+              <div class="fr"><div class="fg"><label class="fl">Téléphone</label><input id="param-tel" class="fi" placeholder="+221 33 000 00 00"></div><div class="fg"><label class="fl">Email</label><input id="param-email" class="fi" type="email" placeholder="contact@lycee.sn"></div></div>
             </div>
           </div>
           <div class="carte">
@@ -288,14 +288,96 @@
   <div class="modal">
     <div class="mh"><span style="font-size:19px">🎓</span><span class="mt">Inscrire un nouvel élève</span><button class="mc" onclick="closeModal('m-eleve')">✕</button></div>
     <div class="mb">
-      <div class="fr"><div class="fg"><label class="fl">Prénom *</label><input class="fi" placeholder="Aminata"></div><div class="fg"><label class="fl">Nom *</label><input class="fi" placeholder="Traoré"></div></div>
-      <div class="fr"><div class="fg"><label class="fl">Date de naissance</label><input class="fi" type="date"></div><div class="fg"><label class="fl">Sexe</label><select class="fs"><option>Féminin</option><option>Masculin</option></select></div></div>
-      <div class="fr"><div class="fg"><label class="fl">Classe *</label><select class="fs"><option>6e A</option><option>3e B</option><option>2de A</option><option>1re S1</option><option>Term S1</option></select></div><div class="fg"><label class="fl">Matricule</label><input class="fi" placeholder="Auto-généré"></div></div>
+      <div class="fr">
+        <div class="fg"><label class="fl">Prénom *</label><input id="m-eleve-prenom" class="fi" placeholder="Aminata"></div>
+        <div class="fg"><label class="fl">Nom *</label><input id="m-eleve-nom" class="fi" placeholder="Traoré"></div>
+      </div>
+      <div class="fr">
+        <div class="fg"><label class="fl">Date de naissance</label><input id="m-eleve-ddn" class="fi" type="date"></div>
+        <div class="fg"><label class="fl">Sexe</label>
+          <select id="m-eleve-genre" class="fs"><option value="F">Féminin</option><option value="M">Masculin</option></select>
+        </div>
+      </div>
+      <div class="fg"><label class="fl">Classe *</label>
+        <select id="m-eleve-classe" class="fs"><option value="">Chargement des classes…</option></select>
+      </div>
       <hr style="border:none;border-top:1px solid var(--g200);margin:12px 0">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--g500);margin-bottom:10px">Contact parent</div>
-      <div class="fr"><div class="fg"><label class="fl">Téléphone *</label><input class="fi" placeholder="+221 77 000 00 00"></div><div class="fg"><label class="fl">Canal</label><select class="fs"><option>WhatsApp</option><option>SMS</option></select></div></div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--g500);margin-bottom:10px">Contact parent (optionnel)</div>
+      <div class="fr">
+        <div class="fg"><label class="fl">Prénom parent</label><input id="m-eleve-parent-prenom" class="fi" placeholder="Fatou"></div>
+        <div class="fg"><label class="fl">Nom parent</label><input id="m-eleve-parent-nom" class="fi" placeholder="Traoré"></div>
+      </div>
+      <div class="fr">
+        <div class="fg"><label class="fl">Téléphone parent</label><input id="m-eleve-parent-tel" class="fi" placeholder="+221 77 000 00 00"></div>
+        <div class="fg"><label class="fl">Lien</label>
+          <select id="m-eleve-parent-lien" class="fs">
+            <option value="mère">Mère</option><option value="père">Père</option>
+            <option value="tuteur">Tuteur/Tutrice</option><option value="grand-parent">Grand-parent</option>
+          </select>
+        </div>
+      </div>
     </div>
-    <div class="mf"><button class="btn btn-l" onclick="closeModal('m-eleve')">Annuler</button><button class="btn btn-p" onclick="closeModal('m-eleve');toast('Élève inscrit ! Parent notifié par SMS.','s')">Inscrire l'élève</button></div>
+    <div class="mf">
+      <button class="btn btn-l" onclick="closeModal('m-eleve')">Annuler</button>
+      <button id="btn-inscrire-eleve" class="btn btn-p" onclick="PageEleves.inscrire()">Inscrire l'élève</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL ENSEIGNANT -->
+<div class="mo" id="m-enseignant">
+  <div class="modal">
+    <div class="mh"><span style="font-size:19px">👨‍🏫</span><span class="mt">Ajouter un enseignant</span><button class="mc" onclick="closeModal('m-enseignant')">✕</button></div>
+    <div class="mb">
+      <div class="fr">
+        <div class="fg"><label class="fl">Prénom *</label><input id="m-ens-prenom" class="fi" placeholder="Moussa"></div>
+        <div class="fg"><label class="fl">Nom *</label><input id="m-ens-nom" class="fi" placeholder="Sow"></div>
+      </div>
+      <div class="fr">
+        <div class="fg"><label class="fl">Téléphone * (identifiant de connexion)</label><input id="m-ens-tel" class="fi" placeholder="+221 77 000 00 00"></div>
+        <div class="fg"><label class="fl">Email</label><input id="m-ens-email" class="fi" type="email" placeholder="m.sow@lycee.sn"></div>
+      </div>
+      <div class="fr">
+        <div class="fg"><label class="fl">Spécialité / Matière principale</label><input id="m-ens-specialite" class="fi" placeholder="Mathématiques"></div>
+        <div class="fg"><label class="fl">Type de contrat</label>
+          <select id="m-ens-contrat" class="fs">
+            <option value="titulaire">Titulaire</option>
+            <option value="contractuel">Contractuel</option>
+            <option value="vacataire">Vacataire</option>
+            <option value="benevole">Bénévole</option>
+          </select>
+        </div>
+      </div>
+      <div class="fg"><label class="fl">Mot de passe provisoire (vide = numéro de tél.)</label>
+        <input id="m-ens-mdp" class="fi" type="password" placeholder="Laisser vide pour utiliser le numéro de téléphone">
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-l" onclick="closeModal('m-enseignant')">Annuler</button>
+      <button id="btn-ajouter-ens" class="btn btn-p" onclick="PageEnseignants.ajouter()">Créer le compte</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL CLASSE -->
+<div class="mo" id="m-classe">
+  <div class="modal" style="max-width:440px">
+    <div class="mh"><span style="font-size:19px">🏫</span><span class="mt">Nouvelle classe</span><button class="mc" onclick="closeModal('m-classe')">✕</button></div>
+    <div class="mb">
+      <div class="fg"><label class="fl">Niveau *</label>
+        <select id="m-classe-niveau" class="fs"><option value="">Chargement des niveaux…</option></select>
+      </div>
+      <div class="fr">
+        <div class="fg"><label class="fl">Lettre *</label><input id="m-classe-nom" class="fi" placeholder="A" maxlength="5" style="text-transform:uppercase"></div>
+        <div class="fg"><label class="fl">Salle principale</label><input id="m-classe-salle" class="fi" placeholder="Salle 12"></div>
+      </div>
+      <div class="fg"><label class="fl">Effectif maximum</label><input id="m-classe-effectif" class="fi" type="number" min="1" max="200" placeholder="45"></div>
+      <p style="font-size:12px;color:var(--g400);margin-top:8px">Ex : Niveau "3ème" + Lettre "B" → <b>3ème B</b></p>
+    </div>
+    <div class="mf">
+      <button class="btn btn-l" onclick="closeModal('m-classe')">Annuler</button>
+      <button id="btn-creer-classe" class="btn btn-p" onclick="PageClasses.creer()">Créer la classe</button>
+    </div>
   </div>
 </div>
 

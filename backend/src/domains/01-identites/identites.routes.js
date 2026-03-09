@@ -125,6 +125,52 @@ router.post('/annees-scolaires', auth, isoler, perm('config.annee_scolaire'),
   }
 );
 
+// ── POST /classes ─────────────────────────────────────────────────
+router.post('/classes', auth, isoler, perm('config.modifier'),
+  valider(z.object({
+    niveau_id:        z.string().uuid('ID niveau invalide'),
+    nom:              z.string().min(1).max(10),   // 'A', 'B', 'C'…
+    salle_principale: z.string().max(50).optional(),
+    effectif_max:     z.number().int().min(1).max(200).optional(),
+  })),
+  async (req, res, next) => {
+    const db = getDB();
+    try {
+      const annee = await db('annees_scolaires')
+        .where({ etablissement_id: req.etablissement_id, est_courante: true })
+        .first('id');
+      if (!annee) throw ApiError.validationEchouee('Aucune année scolaire courante — créez-en une d\'abord');
+
+      // Vérifier que le niveau appartient à cet établissement
+      const niveau = await db('niveaux')
+        .where({ id: req.body.niveau_id, etablissement_id: req.etablissement_id })
+        .first('id', 'nom');
+      if (!niveau) throw ApiError.nonTrouve('Niveau introuvable');
+
+      const [classe] = await db('classes').insert({
+        id:               uuid(),
+        annee_scolaire_id: annee.id,
+        niveau_id:        req.body.niveau_id,
+        nom:              req.body.nom.toUpperCase(),
+        salle_principale: req.body.salle_principale,
+        effectif_max:     req.body.effectif_max,
+      }).returning('*');
+
+      return cree(res, { ...classe, niveau: niveau.nom });
+    } catch (err) { next(err); }
+  }
+);
+
+// ── GET /niveaux ──────────────────────────────────────────────────
+router.get('/niveaux', auth, isoler, perm('eleves.voir'), async (req, res, next) => {
+  try {
+    const niveaux = await getDB()('niveaux')
+      .where({ etablissement_id: req.etablissement_id })
+      .orderBy('ordre');
+    return liste(res, niveaux);
+  } catch (err) { next(err); }
+});
+
 // ── GET /classes ─────────────────────────────────────────────────
 router.get('/classes', auth, isoler, perm('eleves.voir'), async (req, res, next) => {
   try {
