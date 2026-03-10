@@ -5,19 +5,32 @@ const logger = require('../../utils/logger');
 
 let redisClient;
 
+const REDIS_BASE_OPTIONS = {
+  host:         process.env.REDIS_HOST     || 'localhost',
+  port:         parseInt(process.env.REDIS_PORT) || 6379,
+  password:     process.env.REDIS_PASSWORD || undefined,
+  db:           parseInt(process.env.REDIS_DB) || 0,
+  retryStrategy: (times) => {
+    if (times > 10) return null;
+    return Math.min(times * 100, 3000);
+  },
+};
+
 function createClient() {
   return new Redis({
-    host:         process.env.REDIS_HOST     || 'localhost',
-    port:         parseInt(process.env.REDIS_PORT) || 6379,
-    password:     process.env.REDIS_PASSWORD || undefined,
-    db:           parseInt(process.env.REDIS_DB) || 0,
-    retryStrategy: (times) => {
-      if (times > 10) return null; // Stop après 10 tentatives
-      return Math.min(times * 100, 3000);
-    },
+    ...REDIS_BASE_OPTIONS,
     enableReadyCheck: true,
     maxRetriesPerRequest: 3,
     lazyConnect: true,
+  });
+}
+
+/** Crée un client Redis compatible BullMQ (maxRetriesPerRequest: null requis). */
+function createBullMQConnection() {
+  return new Redis({
+    ...REDIS_BASE_OPTIONS,
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
   });
 }
 
@@ -79,4 +92,4 @@ async function healthCheck() {
   }
 }
 
-module.exports = { connectRedis, getRedis, getOrSet, invalidatePattern, healthCheck };
+module.exports = { connectRedis, getRedis, createBullMQConnection, getOrSet, invalidatePattern, healthCheck };

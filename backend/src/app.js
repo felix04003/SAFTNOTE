@@ -18,6 +18,7 @@ const errorHandler     = require('./middleware/error.middleware');
 const { notFound }     = require('./middleware/notFound.middleware');
 
 // ── Domaines ────────────────────────────────────────────────────
+const setupRouter       = require('./domains/setup/setup.routes');
 const identitesRouter   = require('./domains/01-identites/identites.routes');
 const authRouter        = require('./domains/02-acteurs/auth/auth.routes');
 const elevesRouter      = require('./domains/02-acteurs/eleves/eleves.routes');
@@ -34,7 +35,9 @@ const app = express();
 // ── Sécurité & parsing ──────────────────────────────────────────
 app.use(helmet());
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3001',
+  origin: process.env.FRONTEND_URL
+    ? process.env.FRONTEND_URL.split(',')
+    : ['http://localhost:3001', 'http://localhost:3002', 'http://localhost:3000'],
   credentials: true,
 }));
 app.use(compression());
@@ -171,6 +174,7 @@ app.get('/metrics', async (req, res) => {
 // ── Routes API ──────────────────────────────────────────────────
 const PREFIX = process.env.API_PREFIX || '/api/v1';
 
+app.use(PREFIX, setupRouter);
 app.use(PREFIX, authRouter);
 app.use(PREFIX, identitesRouter);
 app.use(PREFIX, elevesRouter);

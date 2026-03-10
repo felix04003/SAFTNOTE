@@ -9,14 +9,29 @@ var PageBulletins = {
 
   async charger() {
     try {
-      var res = await Api.get('/bulletins');
+      var res = await Api.get('/bulletins/classes');
       this.data = res.data;
       this.renderTable(res.data);
+      this.updateKpis(res.data);
       return true;
     } catch (e) {
       console.warn('PageBulletins: fallback mock —', e.message);
       return false;
     }
+  },
+
+  updateKpis: function(classes) {
+    function set(id, val) { var el = document.getElementById(id); if (el) el.textContent = val; }
+    var totalEleves = classes.reduce(function(s, c) { return s + parseInt(c.effectif || 0); }, 0);
+    var totalGeneres = classes.reduce(function(s, c) { return s + parseInt(c.generes || 0); }, 0);
+    var totalValides = classes.reduce(function(s, c) { return s + parseInt(c.valides || 0); }, 0);
+    set('bull-kpi-generes',  totalGeneres);
+    set('bull-kpi-attente',  totalEleves - totalGeneres);
+    set('bull-kpi-valides',  totalValides);
+    set('bull-kpi-telecharg', '—');
+    // Sous-titre page bulletins
+    var sousTitre = document.getElementById('ph-sous-bulletins');
+    if (sousTitre && totalEleves) sousTitre.textContent = totalEleves + ' \u00E9l\u00E8ves \u00B7 ' + classes.length + ' classe' + (classes.length > 1 ? 's' : '');
   },
 
   renderTable: function(bulletins) {

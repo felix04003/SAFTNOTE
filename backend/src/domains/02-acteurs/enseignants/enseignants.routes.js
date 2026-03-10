@@ -367,4 +367,38 @@ router.put('/enseignants/:id', auth, isoler,
   }
 );
 
+// ── GET /enseignants — Liste admin (directeur / censeur) ─────────
+router.get('/enseignants', auth, isoler, perm('enseignants.voir'), async (req, res, next) => {
+  try {
+    const db = getDB();
+    const annee = await db('annees_scolaires')
+      .where({ etablissement_id: req.etablissement_id, est_courante: true })
+      .first('id');
+
+    const enseignants = await db('enseignants as ens')
+      .join('utilisateurs as u', 'u.id', 'ens.utilisateur_id')
+      .where({ 'u.etablissement_id': req.etablissement_id, 'u.actif': true })
+      .orderBy(['u.nom', 'u.prenom'])
+      .select(
+        'u.id', 'u.nom', 'u.prenom', 'u.email', 'u.telephone',
+        'ens.id as enseignant_id', 'ens.specialite', 'ens.matricule_fonct', 'ens.type_contrat',
+        db.raw(`(
+          SELECT string_agg(DISTINCT m.nom, ', ')
+          FROM affectations_enseignants ae
+          JOIN matieres m ON m.id = ae.matiere_id
+          WHERE ae.enseignant_id = ens.id
+            ${annee ? 'AND ae.annee_scolaire_id = ?' : ''}
+        ) as matieres_assignees`, annee ? [annee.id] : []),
+        db.raw(`(
+          SELECT COUNT(DISTINCT ae.classe_id)
+          FROM affectations_enseignants ae
+          WHERE ae.enseignant_id = ens.id
+            ${annee ? 'AND ae.annee_scolaire_id = ?' : ''}
+        ) as nb_classes`, annee ? [annee.id] : [])
+      );
+
+    return liste(res, enseignants);
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

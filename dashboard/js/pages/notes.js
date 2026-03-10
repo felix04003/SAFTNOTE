@@ -36,12 +36,12 @@ var PageNotes = {
         '<td class="nc">' + (ev.matiere || '\u2014') + '</td>' +
         '<td><span class="badge bp">' + (ev.classe || '\u2014') + '</span></td>' +
         '<td><span class="badge bo">' + (ev.type || '\u2014') + '</span></td>' +
-        '<td style="font-family:\'Space Mono\',monospace;font-size:11.5px">' + (ev.date || '\u2014') + '</td>' +
+        '<td style="font-family:\'Space Mono\',monospace;font-size:11.5px">' + (ev.date_evaluation || ev.date || '\u2014') + '</td>' +
         '<td>' + (ev.enseignant || '\u2014') + '</td>' +
         '<td>' + (moy != null ? '<span style="font-weight:700;color:' + cn(moy) + '">' + moy + '/20</span>' : '<span class="badge bd">Non saisi</span>') + '</td>' +
         '<td style="color:var(--g400)">' + (ev.note_min != null ? ev.note_min : '\u2014') + '</td>' +
         '<td style="color:var(--g400)">' + (ev.note_max != null ? ev.note_max : '\u2014') + '</td>' +
-        '<td><span class="badge ' + (st === 'publi\u00E9e' ? 'bs' : st === 'brouillon' ? 'bw' : 'bd') + '">' + st + '</span></td>' +
+        '<td><span class="badge ' + (st === 'publiee' ? 'bs' : st === 'brouillon' ? 'bw' : 'bd') + '">' + (st === 'publiee' ? 'Publi\u00E9e' : st === 'brouillon' ? 'Brouillon' : 'Non saisie') + '</span></td>' +
       '</tr>';
     }).join('');
   },

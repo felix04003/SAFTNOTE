@@ -18,12 +18,23 @@ const isoler = isolerEtablissement;
 // ── GET /etablissement ───────────────────────────────────────────
 router.get('/etablissement', auth, isoler, perm('config.voir'), async (req, res, next) => {
   try {
-    const etab = await getDB()('etablissements')
+    const db = getDB();
+    const etab = await db('etablissements')
       .where({ id: req.etablissement_id })
+      .select('id', 'nom', 'code_officiel', 'type', 'pays', 'ville', 'telephone', 'email', 'actif', 'created_at')
       .first();
 
     if (!etab) throw ApiError.nonTrouve();
-    return ok(res, etab);
+
+    const annee = await db('annees_scolaires')
+      .where({ etablissement_id: req.etablissement_id, est_courante: true })
+      .first('id', 'libelle', 'date_debut', 'date_fin');
+
+    return ok(res, {
+      ...etab,
+      annee_courante: annee?.libelle || null,
+      annee_scolaire: annee || null,
+    });
   } catch (err) { next(err); }
 });
 
@@ -128,9 +139,44 @@ router.post('/annees-scolaires', auth, isoler, perm('config.annee_scolaire'),
 // ── GET /classes ─────────────────────────────────────────────────
 router.get('/classes', auth, isoler, perm('eleves.voir'), async (req, res, next) => {
   try {
-    const classes = await getDB()('v_classes_completes')
+    const db = getDB();
+    const annee = await db('annees_scolaires')
       .where({ etablissement_id: req.etablissement_id, est_courante: true })
-      .orderBy(['ordre', 'nom_classe']);
+      .first('id');
+
+    if (!annee) return liste(res, []);
+
+    const classes = await db('classes as c')
+      .join('niveaux as n', 'n.id', 'c.niveau_id')
+      .where({ 'c.annee_scolaire_id': annee.id, 'c.actif': true })
+      .orderBy(['n.ordre', 'c.nom'])
+      .select(
+        'c.id', 'c.nom', 'c.effectif_max', 'c.salle_principale',
+        'n.nom as niveau', 'n.ordre',
+        db.raw("n.nom || ' ' || c.nom AS nom_classe"),
+        // Effectif réel
+        db.raw(`(
+          SELECT COUNT(*) FROM inscriptions i
+          WHERE i.classe_id = c.id AND i.statut = 'actif'
+        ) as effectif`),
+        // Moyenne générale de la classe (dernière période calculée)
+        db.raw(`(
+          SELECT ROUND(AVG(mg.moyenne_generale)::NUMERIC, 1)
+          FROM moyennes_generales mg
+          JOIN inscriptions i ON i.id = mg.inscription_id
+          JOIN periodes p ON p.id = mg.periode_id
+          WHERE i.classe_id = c.id
+            AND mg.moyenne_generale IS NOT NULL
+            AND p.numero = (
+              SELECT MAX(p2.numero) FROM periodes p2
+              WHERE p2.annee_scolaire_id = c.annee_scolaire_id
+                AND EXISTS (SELECT 1 FROM moyennes_generales mg2
+                            JOIN inscriptions i2 ON i2.id = mg2.inscription_id
+                            WHERE i2.classe_id = c.id AND mg2.periode_id = p2.id)
+            )
+        ) as moyenne`)
+      );
+
     return liste(res, classes);
   } catch (err) { next(err); }
 });

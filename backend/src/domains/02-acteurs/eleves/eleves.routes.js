@@ -53,7 +53,34 @@ router.get('/eleves', auth, isoler, perm('eleves.voir'), async (req, res, next) 
       .select(
         'u.id', 'u.nom', 'u.prenom', 'u.photo_url', 'u.telephone',
         'e.matricule', 'i.id as inscription_id',
-        'n.nom as niveau', db.raw("CONCAT(n.nom, ' ', c.nom) as classe")
+        'n.nom as niveau', db.raw("CONCAT(n.nom, ' ', c.nom) as classe"),
+        // Dernière moyenne générale calculée
+        db.raw(`(
+          SELECT mg.moyenne_generale
+          FROM moyennes_generales mg
+          JOIN periodes per ON per.id = mg.periode_id
+          WHERE mg.inscription_id = i.id
+          ORDER BY per.numero DESC
+          LIMIT 1
+        ) as moyenne`),
+        // Nombre d'absences injustifiées sur l'année
+        db.raw(`(
+          SELECT COUNT(*)
+          FROM presences pr
+          JOIN appels ap ON ap.id = pr.appel_id
+          WHERE pr.inscription_id = i.id
+            AND pr.statut = 'absent'
+            AND pr.est_justifie = FALSE
+        ) as nb_absences`),
+        // Nom du parent principal
+        db.raw(`(
+          SELECT u2.prenom || ' ' || u2.nom
+          FROM parents_eleves pe
+          JOIN utilisateurs u2 ON u2.id = pe.parent_id
+          WHERE pe.eleve_id = e.id
+          ORDER BY pe.created_at
+          LIMIT 1
+        ) as parent_nom`)
       );
 
     return paginee(res, eleves, { total: parseInt(count), page, limite });

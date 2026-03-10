@@ -12,7 +12,7 @@ services:
       POSTGRES_USER: ecole_user
       POSTGRES_PASSWORD: ecole_password_dev
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d  # auto-exécuté au premier démarrage
@@ -81,11 +81,11 @@ services:
       STORAGE_SECRET_KEY: minioadmin123
       JWT_SECRET: dev_jwt_secret_change_in_production_32chars
     ports:
-      - "3000:3000"
+      - "3010:3000"
     volumes:
       - ./src:/app/src        # hot-reload en dev
       - ./migrations:/app/migrations
-    command: npm run dev
+    command: node src/app.js
 
   # ── Worker notifications ───────────────────────────────
   worker-notif:

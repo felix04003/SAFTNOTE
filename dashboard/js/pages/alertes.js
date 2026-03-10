@@ -19,7 +19,32 @@ var PageAlertes = {
     }
   },
 
+  renderAlertes: function(evenements) {
+    var listeEl = document.getElementById('alertes-list');
+    var sousTitre = document.getElementById('ph-sous-alertes');
+
+    if (listeEl) {
+      if (!evenements.length) {
+        listeEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--g400);font-size:13px">Aucune alerte — tout est en ordre ✅</div>';
+      } else {
+        listeEl.innerHTML = evenements.map(function(ev) {
+          var titre = ev.titre || ev.nom || 'Événement';
+          var desc = ev.description || '';
+          return '<div class="al al-i"><span class="al-ico">📋</span>' +
+            '<div style="flex:1"><div class="al-t">' + titre + '</div>' +
+            '<div class="al-s">' + desc + '</div></div></div>';
+        }).join('');
+      }
+    }
+
+    if (sousTitre) {
+      sousTitre.textContent = evenements.length ? evenements.length + ' alerte' + (evenements.length > 1 ? 's' : '') : 'Aucune alerte';
+    }
+  },
+
   renderNotifs: function(evenements) {
+    this.renderAlertes(evenements);
+
     var tbody = document.getElementById('tb-notif');
     if (!tbody) return;
 
@@ -41,6 +66,9 @@ var PageAlertes = {
   },
 
   init: function() {
+    // Empty state par défaut
+    var listeEl = document.getElementById('alertes-list');
+    if (listeEl) listeEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--g400);font-size:13px">Chargement…</div>';
     this.charger();
   }
 };

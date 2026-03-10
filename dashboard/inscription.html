@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EcoleManager — Inscription</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  .ins-wrap{display:flex;min-height:100vh;background:var(--bg)}
+  .ins-side{width:420px;min-height:100vh;background:var(--vert-dk);display:flex;flex-direction:column;padding:48px 40px;flex-shrink:0}
+  @media(max-width:768px){.ins-side{display:none}}
+  .ins-main{flex:1;display:flex;align-items:center;justify-content:center;padding:40px 24px}
+  .ins-card{background:var(--blanc);border-radius:var(--rl);padding:40px;width:100%;max-width:520px;box-shadow:var(--sh-lg)}
+
+  /* Steps indicator */
+  .steps{display:flex;align-items:center;gap:0;margin-bottom:32px}
+  .step-item{display:flex;align-items:center;flex:1}
+  .step-circle{width:32px;height:32px;border-radius:50%;border:2px solid var(--g200);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--g400);background:var(--blanc);flex-shrink:0;transition:all .2s}
+  .step-circle.actif{border-color:var(--vert);background:var(--vert);color:#fff}
+  .step-circle.fait{border-color:var(--vert);background:var(--vert);color:#fff}
+  .step-line{flex:1;height:2px;background:var(--g200);margin:0 6px;transition:background .2s}
+  .step-line.fait{background:var(--vert)}
+  .step-label{font-size:10.5px;font-weight:600;color:var(--g400);margin-top:5px;white-space:nowrap}
+  .step-label.actif,.step-label.fait{color:var(--vert)}
+  .step-col{display:flex;flex-direction:column;align-items:center}
+
+  /* Panels */
+  .panel{display:none}.panel.actif{display:block}
+
+  /* Error */
+  .ins-err{background:var(--rouge-lt);color:var(--rouge);padding:10px 14px;border-radius:var(--rs);font-size:12.5px;font-weight:600;margin-bottom:14px;display:none}
+  .ins-err.show{display:block}
+
+  /* Select */
+  select.fi{cursor:pointer}
+
+  /* Success panel */
+  .success-icon{width:64px;height:64px;border-radius:50%;background:var(--success-lt);display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 20px}
+  .cred-box{background:var(--g100);border:1.5px solid var(--g200);border-radius:var(--r);padding:18px 20px;margin-bottom:16px}
+  .cred-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--g200)}
+  .cred-row:last-child{border:none}
+  .cred-label{font-size:11.5px;color:var(--g500);font-weight:500}
+  .cred-val{font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:var(--g900)}
+
+  /* Side content */
+  .side-feature{display:flex;align-items:flex-start;gap:12px;margin-bottom:22px}
+  .side-icon{width:36px;height:36px;border-radius:9px;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;margin-top:2px}
+  .side-title{font-size:13px;font-weight:700;color:#fff;margin-bottom:3px}
+  .side-desc{font-size:11.5px;color:rgba(255,255,255,.5);line-height:1.5}
+
+  /* Grid 2 cols */
+  .fg-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:480px){.fg-2{grid-template-columns:1fr}}
+
+  /* Pays select */
+  .pays-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+  .pays-btn{padding:7px 10px;border:1.5px solid var(--g200);border-radius:var(--rs);font-family:'Sora',sans-serif;font-size:11.5px;font-weight:600;color:var(--g700);background:var(--blanc);cursor:pointer;transition:all .15s;text-align:left}
+  .pays-btn:hover{border-color:var(--vert);color:var(--vert)}
+  .pays-btn.sel{border-color:var(--vert);background:var(--vert-bg);color:var(--vert)}
+  .pays-autre{display:none}.pays-autre.show{display:block}
+</style>
+</head>
+<body>
+
+<div class="ins-wrap">
+
+  <!-- Panneau gauche -->
+  <div class="ins-side">
+    <div style="margin-bottom:40px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+        <div class="sb-mark" style="width:40px;height:40px;font-size:17px;border-radius:9px">EM</div>
+        <div style="font-size:20px;font-weight:800;color:#fff">EcoleManager</div>
+      </div>
+      <div style="font-size:12px;color:rgba(255,255,255,.4);letter-spacing:.5px">GESTION SCOLAIRE AFRICAINE</div>
+    </div>
+
+    <div style="margin-bottom:auto">
+      <div style="font-size:22px;font-weight:800;color:#fff;line-height:1.3;margin-bottom:8px">Votre école,<br>gérée simplement.</div>
+      <div style="font-size:13px;color:rgba(255,255,255,.5);margin-bottom:32px;line-height:1.6">Rejoignez les établissements d'Afrique de l'Ouest qui font confiance à EcoleManager.</div>
+
+      <div class="side-feature">
+        <div class="side-icon">📱</div>
+        <div><div class="side-title">100% Offline</div><div class="side-desc">Fonctionne sans internet. Sync automatique quand la connexion revient.</div></div>
+      </div>
+      <div class="side-feature">
+        <div class="side-icon">💬</div>
+        <div><div class="side-title">SMS & WhatsApp</div><div class="side-desc">Les parents reçoivent les absences et les notes directement sur leur téléphone.</div></div>
+      </div>
+      <div class="side-feature">
+        <div class="side-icon">📊</div>
+        <div><div class="side-title">Bulletins automatiques</div><div class="side-desc">Calcul des moyennes, classements et génération PDF en un clic.</div></div>
+      </div>
+      <div class="side-feature">
+        <div class="side-icon">🔒</div>
+        <div><div class="side-title">Données isolées</div><div class="side-desc">Chaque établissement a ses données séparées. Aucun accès croisé.</div></div>
+      </div>
+    </div>
+
+    <div style="font-size:11px;color:rgba(255,255,255,.25);margin-top:32px">
+      © 2025 EcoleManager · Sénégal · Côte d'Ivoire · Mali · Burkina Faso
+    </div>
+  </div>
+
+  <!-- Formulaire principal -->
+  <div class="ins-main">
+    <div class="ins-card">
+
+      <!-- Logo mobile -->
+      <div style="display:none" id="logo-mobile">
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:24px">
+          <div class="sb-mark" style="width:36px;height:36px;font-size:15px;border-radius:8px;background:var(--vert-dk)">EM</div>
+          <div style="font-size:17px;font-weight:800;color:var(--g900)">EcoleManager</div>
+        </div>
+      </div>
+
+      <!-- Steps -->
+      <div class="steps" id="steps-bar">
+        <div class="step-col">
+          <div class="step-circle actif" id="sc1">1</div>
+          <div class="step-label actif" id="sl1">Votre école</div>
+        </div>
+        <div class="step-line" id="line1"></div>
+        <div class="step-col">
+          <div class="step-circle" id="sc2">2</div>
+          <div class="step-label" id="sl2">Votre compte</div>
+        </div>
+        <div class="step-line" id="line2"></div>
+        <div class="step-col">
+          <div class="step-circle" id="sc3">3</div>
+          <div class="step-label" id="sl3">Confirmé</div>
+        </div>
+      </div>
+
+      <div class="ins-err" id="ins-err"></div>
+
+      <!-- ÉTAPE 1 : École -->
+      <div class="panel actif" id="panel1">
+        <div style="margin-bottom:22px">
+          <div style="font-size:19px;font-weight:800;color:var(--g900)">Votre établissement</div>
+          <div style="font-size:12.5px;color:var(--g500);margin-top:4px">Renseignez les informations de votre école.</div>
+        </div>
+
+        <div class="fg">
+          <label class="fl">Nom de l'établissement <span style="color:var(--rouge)">*</span></label>
+          <input class="fi" id="etab-nom" type="text" placeholder="Ex : Lycée Blaise Diagne" required>
+        </div>
+
+        <div class="fg-2">
+          <div class="fg" style="margin-bottom:0">
+            <label class="fl">Code établissement <span style="color:var(--rouge)">*</span></label>
+            <input class="fi" id="etab-code" type="text" placeholder="Ex : LBD001" style="text-transform:uppercase"
+              pattern="[A-Z0-9_-]+" title="Majuscules, chiffres, tirets uniquement">
+            <div style="font-size:10.5px;color:var(--g400);margin-top:4px">Code unique pour la connexion</div>
+          </div>
+          <div class="fg" style="margin-bottom:0">
+            <label class="fl">Type d'établissement</label>
+            <select class="fi" id="etab-type">
+              <option value="lycee">Lycée</option>
+              <option value="college">Collège</option>
+              <option value="ecole_primaire">École primaire</option>
+              <option value="universite">Université / BTS</option>
+              <option value="formation_pro">Formation professionnelle</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="fg" style="margin-top:14px">
+          <label class="fl">Pays <span style="color:var(--rouge)">*</span></label>
+          <div class="pays-grid">
+            <button type="button" class="pays-btn sel" data-pays="SN" onclick="selectPays(this)">🇸🇳 Sénégal</button>
+            <button type="button" class="pays-btn" data-pays="CI" onclick="selectPays(this)">🇨🇮 Côte d'Ivoire</button>
+            <button type="button" class="pays-btn" data-pays="ML" onclick="selectPays(this)">🇲🇱 Mali</button>
+            <button type="button" class="pays-btn" data-pays="BF" onclick="selectPays(this)">🇧🇫 Burkina Faso</button>
+            <button type="button" class="pays-btn" data-pays="GN" onclick="selectPays(this)">🇬🇳 Guinée</button>
+            <button type="button" class="pays-btn" data-pays="autre" onclick="selectPays(this)">🌍 Autre pays</button>
+          </div>
+          <div class="pays-autre" id="pays-autre-wrap">
+            <input class="fi" id="etab-pays-autre" type="text" placeholder="Code pays (ex: CM, TG, BJ)..." maxlength="3" style="text-transform:uppercase">
+          </div>
+          <input type="hidden" id="etab-pays" value="SN">
+        </div>
+
+        <div class="fg-2">
+          <div class="fg" style="margin-bottom:0">
+            <label class="fl">Ville</label>
+            <input class="fi" id="etab-ville" type="text" placeholder="Ex : Dakar">
+          </div>
+          <div class="fg" style="margin-bottom:0">
+            <label class="fl">Téléphone école</label>
+            <input class="fi" id="etab-tel" type="tel" placeholder="+221 77 000 00 00">
+          </div>
+        </div>
+
+        <div class="fg" style="margin-top:14px">
+          <label class="fl">Email officiel</label>
+          <input class="fi" id="etab-email" type="email" placeholder="contact@mon-ecole.sn">
+        </div>
+
+        <button class="btn btn-p btn-full" type="button" onclick="etape2()" style="margin-top:8px">
+          Continuer &rarr;
+        </button>
+      </div>
+
+      <!-- ÉTAPE 2 : Directeur -->
+      <div class="panel" id="panel2">
+        <div style="margin-bottom:22px">
+          <div style="font-size:19px;font-weight:800;color:var(--g900)">Votre compte directeur</div>
+          <div style="font-size:12.5px;color:var(--g500);margin-top:4px">Ce compte aura tous les droits sur votre établissement.</div>
+        </div>
+
+        <div class="fg-2">
+          <div class="fg" style="margin-bottom:0">
+            <label class="fl">Nom <span style="color:var(--rouge)">*</span></label>
+            <input class="fi" id="dir-nom" type="text" placeholder="DIALLO">
+          </div>
+          <div class="fg" style="margin-bottom:0">
+            <label class="fl">Prénom <span style="color:var(--rouge)">*</span></label>
+            <input class="fi" id="dir-prenom" type="text" placeholder="Mamadou">
+          </div>
+        </div>
+
+        <div class="fg" style="margin-top:14px">
+          <label class="fl">Email (identifiant de connexion) <span style="color:var(--rouge)">*</span></label>
+          <input class="fi" id="dir-email" type="email" placeholder="directeur@mon-ecole.sn">
+        </div>
+
+        <div class="fg">
+          <label class="fl">Numéro de téléphone <span style="color:var(--rouge)">*</span></label>
+          <input class="fi" id="dir-tel" type="tel" placeholder="+221 77 000 00 00">
+          <div style="font-size:10.5px;color:var(--g400);margin-top:4px">Format international : +221, +225, +223...</div>
+        </div>
+
+        <div class="fg-2">
+          <div class="fg" style="margin-bottom:0">
+            <label class="fl">Mot de passe <span style="color:var(--rouge)">*</span></label>
+            <input class="fi" id="dir-mdp" type="password" placeholder="8 caractères min.">
+          </div>
+          <div class="fg" style="margin-bottom:0">
+            <label class="fl">Confirmer le mot de passe <span style="color:var(--rouge)">*</span></label>
+            <input class="fi" id="dir-mdp2" type="password" placeholder="Répétez le mot de passe">
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;margin-top:18px">
+          <button class="btn btn-l" type="button" onclick="allerEtape(1)" style="flex:0 0 auto">
+            &larr; Retour
+          </button>
+          <button class="btn btn-p btn-full" type="button" id="btn-inscrire" onclick="soumettre()">
+            Créer mon école
+          </button>
+        </div>
+      </div>
+
+      <!-- ÉTAPE 3 : Succès -->
+      <div class="panel" id="panel3">
+        <div class="success-icon">✅</div>
+        <div style="text-align:center;margin-bottom:24px">
+          <div style="font-size:20px;font-weight:800;color:var(--g900);margin-bottom:6px">École créée avec succès !</div>
+          <div style="font-size:13px;color:var(--g500)">Voici vos identifiants de connexion. Notez-les.</div>
+        </div>
+
+        <div class="cred-box">
+          <div style="font-size:11px;font-weight:700;color:var(--g400);letter-spacing:.8px;text-transform:uppercase;margin-bottom:10px">Identifiants de connexion</div>
+          <div class="cred-row">
+            <span class="cred-label">Code établissement</span>
+            <span class="cred-val" id="conf-code">—</span>
+          </div>
+          <div class="cred-row">
+            <span class="cred-label">Email</span>
+            <span class="cred-val" id="conf-email">—</span>
+          </div>
+          <div class="cred-row">
+            <span class="cred-label">Établissement</span>
+            <span class="cred-val" id="conf-nom">—</span>
+          </div>
+        </div>
+
+        <div style="background:var(--warning-lt);border:1.5px solid var(--warning);border-radius:var(--rs);padding:12px 14px;font-size:12px;color:var(--g700);margin-bottom:20px;line-height:1.5">
+          ⚠️ <strong>Prochaines étapes :</strong> connectez-vous, puis créez votre <strong>année scolaire</strong>, vos <strong>classes</strong>, ajoutez vos <strong>enseignants</strong> et vos <strong>élèves</strong>.
+        </div>
+
+        <a class="btn btn-p btn-full" href="login.html">
+          Se connecter maintenant &rarr;
+        </a>
+      </div>
+
+      <!-- Lien retour connexion -->
+      <div style="text-align:center;margin-top:20px;font-size:12.5px;color:var(--g500)" id="link-login">
+        Vous avez déjà un compte ? <a href="login.html" style="color:var(--vert);font-weight:600">Se connecter</a>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="tc" id="tc"></div>
+
+<script src="js/config.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script>
+'use strict';
+
+// Redirect if already logged in
+if (Auth.isAuthenticated()) window.location.href = 'index.html';
+
+// Show logo on mobile
+if (window.innerWidth <= 768) document.getElementById('logo-mobile').style.display = 'block';
+
+// ── Pays selection ───────────────────────────────────────────────
+var paysSelectionne = 'SN';
+
+function selectPays(btn) {
+  document.querySelectorAll('.pays-btn').forEach(function(b) { b.classList.remove('sel'); });
+  btn.classList.add('sel');
+  var val = btn.getAttribute('data-pays');
+  var autreWrap = document.getElementById('pays-autre-wrap');
+  if (val === 'autre') {
+    autreWrap.classList.add('show');
+    paysSelectionne = '';
+  } else {
+    autreWrap.classList.remove('show');
+    paysSelectionne = val;
+    document.getElementById('etab-pays').value = val;
+  }
+}
+
+function getPays() {
+  if (paysSelectionne && paysSelectionne !== 'autre') return paysSelectionne;
+  var autre = document.getElementById('etab-pays-autre').value.trim().toUpperCase();
+  return autre || null;
+}
+
+// ── Navigation entre étapes ──────────────────────────────────────
+function allerEtape(n) {
+  document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('actif'); });
+  document.getElementById('panel' + n).classList.add('actif');
+
+  for (var i = 1; i <= 3; i++) {
+    var sc = document.getElementById('sc' + i);
+    var sl = document.getElementById('sl' + i);
+    sc.classList.remove('actif', 'fait');
+    sl.classList.remove('actif', 'fait');
+    if (i < n) { sc.classList.add('fait'); sl.classList.add('fait'); sc.textContent = '✓'; }
+    else if (i === n) { sc.classList.add('actif'); sl.classList.add('actif'); sc.textContent = i; }
+    else { sc.textContent = i; }
+    if (i < 3) {
+      var line = document.getElementById('line' + i);
+      line.classList.toggle('fait', i < n);
+    }
+  }
+
+  if (n === 3) {
+    document.getElementById('steps-bar').style.display = 'none';
+    document.getElementById('link-login').style.display = 'none';
+    document.getElementById('ins-err').classList.remove('show');
+  }
+}
+
+function showErr(msg) {
+  var el = document.getElementById('ins-err');
+  el.textContent = msg;
+  el.classList.add('show');
+}
+
+// ── Validation étape 1 ───────────────────────────────────────────
+function etape2() {
+  document.getElementById('ins-err').classList.remove('show');
+
+  var nom  = document.getElementById('etab-nom').value.trim();
+  var code = document.getElementById('etab-code').value.trim().toUpperCase();
+  var pays = getPays();
+
+  if (!nom)  return showErr('Le nom de l\'établissement est obligatoire.');
+  if (!code) return showErr('Le code établissement est obligatoire.');
+  if (!/^[A-Z0-9_-]{2,20}$/.test(code)) return showErr('Code invalide : lettres majuscules, chiffres, tirets uniquement (2-20 caractères).');
+  if (!pays) return showErr('Veuillez sélectionner ou saisir le pays.');
+
+  document.getElementById('etab-code').value = code;
+  allerEtape(2);
+}
+
+// ── Soumission étape 2 ───────────────────────────────────────────
+async function soumettre() {
+  document.getElementById('ins-err').classList.remove('show');
+
+  var nom    = document.getElementById('etab-nom').value.trim();
+  var code   = document.getElementById('etab-code').value.trim().toUpperCase();
+  var type   = document.getElementById('etab-type').value;
+  var pays   = getPays();
+  var ville  = document.getElementById('etab-ville').value.trim();
+  var etabTel   = document.getElementById('etab-tel').value.trim();
+  var etabEmail = document.getElementById('etab-email').value.trim();
+
+  var dirNom    = document.getElementById('dir-nom').value.trim();
+  var dirPrenom = document.getElementById('dir-prenom').value.trim();
+  var dirEmail  = document.getElementById('dir-email').value.trim();
+  var dirTel    = document.getElementById('dir-tel').value.trim();
+  var mdp       = document.getElementById('dir-mdp').value;
+  var mdp2      = document.getElementById('dir-mdp2').value;
+
+  if (!dirNom)    return showErr('Le nom du directeur est obligatoire.');
+  if (!dirPrenom) return showErr('Le prénom du directeur est obligatoire.');
+  if (!dirEmail || !dirEmail.includes('@')) return showErr('Email invalide.');
+  if (!dirTel)    return showErr('Le numéro de téléphone est obligatoire.');
+  if (!/^\+?[0-9]{8,15}$/.test(dirTel.replace(/\s/g,''))) return showErr('Numéro de téléphone invalide (format : +221771234567).');
+  if (!mdp || mdp.length < 8) return showErr('Le mot de passe doit contenir au moins 8 caractères.');
+  if (mdp !== mdp2) return showErr('Les mots de passe ne correspondent pas.');
+
+  var btn = document.getElementById('btn-inscrire');
+  btn.disabled = true;
+  btn.textContent = 'Création en cours\u2026';
+
+  try {
+    var payload = {
+      etablissement: {
+        nom: nom,
+        code_officiel: code,
+        type: type,
+        pays: pays,
+      },
+      directeur: {
+        nom: dirNom,
+        prenom: dirPrenom,
+        email: dirEmail,
+        telephone: dirTel.replace(/\s/g,''),
+        mot_de_passe: mdp,
+      }
+    };
+    if (ville)     payload.etablissement.ville    = ville;
+    if (etabTel)   payload.etablissement.telephone = etabTel.replace(/\s/g,'');
+    if (etabEmail) payload.etablissement.email     = etabEmail;
+
+    var res = await fetch(CONFIG.API_BASE + '/inscription', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    var data = await res.json();
+
+    if (!data.succes) {
+      throw new Error(data.erreur || 'Erreur lors de la création.');
+    }
+
+    // Afficher confirmation
+    document.getElementById('conf-code').textContent  = data.data.connexion.etablissement_code;
+    document.getElementById('conf-email').textContent = data.data.connexion.identifiant;
+    document.getElementById('conf-nom').textContent   = data.data.etablissement.nom;
+
+    allerEtape(3);
+
+  } catch (err) {
+    showErr(err.message || 'Erreur serveur. Veuillez réessayer.');
+    btn.disabled = false;
+    btn.textContent = 'Créer mon école';
+  }
+}
+</script>
+</body>
+</html>

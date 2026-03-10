@@ -1,7 +1,7 @@
 'use strict';
 
 const { Queue, Worker, QueueEvents } = require('bullmq');
-const { getRedis } = require('../cache/redis');
+const { createBullMQConnection } = require('../cache/redis');
 const logger = require('../../utils/logger');
 
 // ── Noms des queues ──────────────────────────────────────────────
@@ -14,7 +14,7 @@ const QUEUES = {
 const queues = {};
 
 function getConnection() {
-  return getRedis();
+  return createBullMQConnection();
 }
 
 /**

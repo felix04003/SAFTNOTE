@@ -19,7 +19,19 @@ var PageAbsences = {
     }
   },
 
+  renderKpis: function(absences) {
+    function set(id, val) { var el = document.getElementById(id); if (el) el.textContent = val; }
+    var nb_absences = absences.filter(function(a) { return a.statut === 'absent'; }).length;
+    var nb_retards = absences.filter(function(a) { return a.statut === 'retard'; }).length;
+    var nb_justifiees = absences.filter(function(a) { return a.est_justifie; }).length;
+    set('abs-kpi-absences', nb_absences);
+    set('abs-kpi-retards', nb_retards);
+    set('abs-kpi-justifiees', nb_justifiees);
+    set('abs-kpi-notifies', absences.length ? Math.round((nb_justifiees / absences.length) * 100) + '%' : '—');
+  },
+
   renderTable: function(absences) {
+    this.renderKpis(absences);
     var tbody = document.getElementById('tb-abs');
     if (!tbody) return;
 

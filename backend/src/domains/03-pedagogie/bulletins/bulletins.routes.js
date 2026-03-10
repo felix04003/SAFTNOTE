@@ -18,6 +18,76 @@ const perm   = exigerPermission;
 const isoler = isolerEtablissement;
 
 // ═════════════════════════════════════════════════════════════════
+// GET /bulletins/classes — Résumé par classe (dashboard directeur)
+// ═════════════════════════════════════════════════════════════════
+router.get('/bulletins/classes', auth, isoler, perm('bulletins.voir'), async (req, res, next) => {
+  try {
+    const db = getDB();
+    const { periode_id } = req.query;
+
+    const annee = await db('annees_scolaires')
+      .where({ etablissement_id: req.etablissement_id, est_courante: true })
+      .first('id');
+    if (!annee) return liste(res, []);
+
+    // Période par défaut = dernière période avec des moyennes
+    let periodeId = periode_id;
+    if (!periodeId) {
+      const der = await db('periodes as p')
+        .join('moyennes_generales as mg', 'mg.periode_id', 'p.id')
+        .join('inscriptions as i', 'i.id', 'mg.inscription_id')
+        .join('classes as c', 'c.id', 'i.classe_id')
+        .where('c.annee_scolaire_id', annee.id)
+        .orderBy('p.numero', 'desc')
+        .first('p.id');
+      periodeId = der?.id || null;
+    }
+
+    if (!periodeId) return liste(res, []);
+
+    const classes = await db('classes as c')
+      .join('niveaux as n', 'n.id', 'c.niveau_id')
+      .where('c.annee_scolaire_id', annee.id)
+      .orderBy(['n.ordre', 'c.nom'])
+      .select(
+        'c.id',
+        db.raw("n.nom || ' ' || c.nom AS classe"),
+        // Effectif
+        db.raw(`(SELECT COUNT(*) FROM inscriptions i WHERE i.classe_id = c.id AND i.statut = 'actif') as effectif`),
+        // Bulletins générés
+        db.raw(`(SELECT COUNT(*) FROM moyennes_generales mg
+                 JOIN inscriptions i ON i.id = mg.inscription_id
+                 WHERE i.classe_id = c.id AND mg.periode_id = ? AND mg.bulletin_genere = TRUE) as generes`, [periodeId]),
+        // Bulletins validés
+        db.raw(`(SELECT COUNT(*) FROM moyennes_generales mg
+                 JOIN inscriptions i ON i.id = mg.inscription_id
+                 WHERE i.classe_id = c.id AND mg.periode_id = ? AND mg.valide_at IS NOT NULL) as valides`, [periodeId]),
+        // Moyenne classe
+        db.raw(`(SELECT ROUND(AVG(mg.moyenne_generale)::NUMERIC, 1) FROM moyennes_generales mg
+                 JOIN inscriptions i ON i.id = mg.inscription_id
+                 WHERE i.classe_id = c.id AND mg.periode_id = ? AND mg.moyenne_generale IS NOT NULL) as moyenne_classe`, [periodeId]),
+        // 1er de classe
+        db.raw(`(SELECT u.prenom || ' ' || u.nom FROM moyennes_generales mg
+                 JOIN inscriptions i ON i.id = mg.inscription_id
+                 JOIN eleves el ON el.id = i.eleve_id
+                 JOIN utilisateurs u ON u.id = el.utilisateur_id
+                 WHERE i.classe_id = c.id AND mg.periode_id = ? AND mg.rang = 1
+                 LIMIT 1) as premier_classe`, [periodeId]),
+        // Taux de réussite (>= 10/20)
+        db.raw(`CASE WHEN (SELECT COUNT(*) FROM inscriptions i WHERE i.classe_id = c.id AND i.statut = 'actif') > 0
+                THEN ROUND(
+                  (SELECT COUNT(*) FROM moyennes_generales mg JOIN inscriptions i ON i.id = mg.inscription_id
+                   WHERE i.classe_id = c.id AND mg.periode_id = ? AND mg.moyenne_generale >= 10)::NUMERIC
+                  / (SELECT COUNT(*) FROM inscriptions i WHERE i.classe_id = c.id AND i.statut = 'actif') * 100, 0
+                )::TEXT || '%'
+                ELSE '—' END as taux_reussite`, [periodeId])
+      );
+
+    return liste(res, classes);
+  } catch (err) { next(err); }
+});
+
+// ═════════════════════════════════════════════════════════════════
 // GET /bulletins — Liste des bulletins (filtre: classe, trimestre)
 // ═════════════════════════════════════════════════════════════════
 router.get('/bulletins', auth, isoler, perm('bulletins.voir'), async (req, res, next) => {

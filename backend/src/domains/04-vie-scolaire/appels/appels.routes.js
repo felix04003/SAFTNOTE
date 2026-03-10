@@ -161,6 +161,47 @@ router.put('/appels/:appel_id/presences', auth, isoler, perm('absences.faire_app
   }
 );
 
+// ── GET /presences/absences — Liste des absences (directeur) ────
+router.get('/presences/absences', auth, isoler, perm('absences.voir_classe'), async (req, res, next) => {
+  try {
+    const db = getDB();
+    const { classe_id, limite = 50, page = 1 } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limite);
+
+    const annee = await db('annees_scolaires')
+      .where({ etablissement_id: req.etablissement_id, est_courante: true })
+      .first('id');
+
+    if (!annee) return liste(res, []);
+
+    let query = db('presences as p')
+      .join('appels as a',                   'a.id',   'p.appel_id')
+      .join('inscriptions as i',             'i.id',   'p.inscription_id')
+      .join('classes as c',                  'c.id',   'i.classe_id')
+      .join('eleves as el',                  'el.id',  'i.eleve_id')
+      .join('utilisateurs as u',             'u.id',   'el.utilisateur_id')
+      .join('emplois_du_temps as edt',       'edt.id', 'a.emploi_du_temps_id')
+      .join('affectations_enseignants as ae','ae.id',  'edt.affectation_id')
+      .join('matieres as m',                 'm.id',   'ae.matiere_id')
+      .where({ 'c.annee_scolaire_id': annee.id })
+      .whereIn('p.statut', ['absent', 'retard'])
+      .orderBy('a.date_cours', 'desc')
+      .limit(parseInt(limite))
+      .offset(offset)
+      .select(
+        'u.nom', 'u.prenom', 'c.nom as classe',
+        'a.date_cours as date', 'm.nom as matiere',
+        'p.statut', 'p.est_justifie', 'p.justification',
+        'p.id as presence_id'
+      );
+
+    if (classe_id) query = query.where('c.id', classe_id);
+
+    const rows = await query;
+    return liste(res, rows);
+  } catch (err) { next(err); }
+});
+
 // ── PUT /presences/:presence_id/justifier ───────────────────────
 router.put('/presences/:presence_id/justifier', auth, isoler, perm('absences.justifier'),
   valider(z.object({

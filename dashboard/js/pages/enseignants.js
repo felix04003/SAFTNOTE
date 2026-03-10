@@ -35,11 +35,11 @@ var PageEnseignants = {
 
     tbody.innerHTML = enseignants.map(function(e) {
       var nom = (e.prenom || '') + ' ' + (e.nom || '');
-      var matiere = e.matiere || e.specialite || '—';
-      var classes = e.classes || '—';
-      var heures = e.heures_semaine || '—';
+      var matiere = e.matieres_assignees || e.matiere || e.specialite || '—';
+      var classes = e.classes || (e.nb_classes ? e.nb_classes + ' classe' + (e.nb_classes > 1 ? 's' : '') : '—');
+      var heures = e.heures_semaine != null ? e.heures_semaine : '—';
       var tauxNotes = e.taux_notes_saisies || '—';
-      var appels = e.appels || '—';
+      var appels = e.appels != null ? e.appels : '—';
       var derAcces = e.dernier_acces || '—';
 
       return '<tr>' +

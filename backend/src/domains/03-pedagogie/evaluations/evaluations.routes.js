@@ -40,13 +40,20 @@ router.get('/evaluations', auth, isoler, perm('notes.voir_classe'), async (req, 
     }
 
     const evals = await query
-      .orderBy(['ev.date_evaluation'])
+      .join('niveaux as n',     'n.id',  'c.niveau_id')
+      .join('enseignants as ens','ens.id','ae.enseignant_id')
+      .join('utilisateurs as u', 'u.id', 'ens.utilisateur_id')
+      .orderBy('ev.date_evaluation', 'desc')
       .select(
         'ev.id', 'ev.type', 'ev.numero', 'ev.titre', 'ev.date_evaluation',
-        'ev.note_max', 'ev.notes_publiees', 'ev.moyenne_classe',
-        'm.nom as matiere', db.raw("CONCAT(n.nom, ' ', c.nom) as classe")
-      )
-      .join('niveaux as n', 'n.id', 'c.niveau_id');
+        'ev.note_max', 'ev.moyenne_classe',
+        'm.nom as matiere',
+        db.raw("CONCAT(n.nom, ' ', c.nom) as classe"),
+        db.raw("u.prenom || ' ' || u.nom as enseignant"),
+        db.raw(`CASE WHEN ev.notes_publiees THEN 'publiee'
+                     WHEN ev.date_evaluation < CURRENT_DATE THEN 'non_saisie'
+                     ELSE 'brouillon' END as statut`)
+      );
 
     return liste(res, evals);
   } catch (err) { next(err); }

@@ -28,12 +28,7 @@ async function chargerPermissions(utilisateurId, etablissementId) {
     await redis.setex(cacheKey, 28800, JSON.stringify(codes)); // 8h TTL
     return new Set(codes);
   } catch {
-    // Redis down — fallback sur PostgreSQL direct
-    const result = await getDB().raw(
-      'SELECT verifier_permission(?, ?, ?) AS autorise',
-      [utilisateurId, 'dummy', etablissementId]
-    );
-    // Fallback: pas de cache, vérification unitaire
+    // Redis down — signaler au caller de faire la vérification unitaire via PostgreSQL
     return null;
   }
 }

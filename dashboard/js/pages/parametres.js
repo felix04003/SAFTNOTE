@@ -18,30 +18,27 @@ var PageParametres = {
   },
 
   remplirFormulaire: function(etab) {
-    // Remplir les champs du formulaire si on a des données API
-    var champs = document.querySelectorAll('#page-parametres .fi, #page-parametres .fs');
-    if (!champs.length) return;
-
-    // Nom établissement
-    var nomInput = champs[0];
-    if (nomInput && etab.nom) nomInput.value = etab.nom;
-
-    // Ville
-    var villeInputs = document.querySelectorAll('#page-parametres .fi');
-    villeInputs.forEach(function(input) {
-      var label = input.previousElementSibling || input.closest('.fg')?.querySelector('.fl');
-      if (label && label.textContent.trim() === 'Ville' && etab.ville) {
-        input.value = etab.ville;
-      }
-    });
+    function setVal(id, val) { var el = document.getElementById(id); if (el && val != null) el.value = val; }
+    setVal('param-etab-nom',   etab.nom);
+    setVal('param-etab-code',  etab.code_officiel);
+    setVal('param-etab-ville', etab.ville);
+    setVal('param-annee',      etab.annee_courante || (etab.annee_scolaire && etab.annee_scolaire.libelle));
+    // Clés API — ne pas afficher la vraie valeur, juste indiquer si configurée
+    if (etab.at_api_key_configured) {
+      var atEl = document.getElementById('param-at-key');
+      if (atEl) atEl.placeholder = 'Configurée ✓ (laissez vide pour conserver)';
+    }
+    if (etab.wa_token_configured) {
+      var waEl = document.getElementById('param-wa-token');
+      if (waEl) waEl.placeholder = 'Configuré ✓ (laissez vide pour conserver)';
+    }
   },
 
   sauvegarder: async function() {
     try {
-      var champs = document.querySelectorAll('#page-parametres .fi');
-      var nom = champs[0] ? champs[0].value : '';
-
-      await Api.put('/etablissement', { nom: nom });
+      var nom = (document.getElementById('param-etab-nom') || {}).value || '';
+      var ville = (document.getElementById('param-etab-ville') || {}).value || '';
+      await Api.put('/etablissement', { nom: nom, ville: ville });
       toast('Modifications sauvegard\u00E9es', 's');
     } catch (e) {
       toast('Erreur : ' + e.message, 'd');

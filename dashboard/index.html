@@ -15,12 +15,12 @@
   <div class="sb-logo">
     <div class="sb-mark">EM</div>
     <div class="sb-app">EcoleManager</div>
-    <div class="sb-etab">Lycée Blaise Diagne</div>
+    <div class="sb-etab" id="sb-etab-nom"></div>
   </div>
   <nav class="sb-nav">
     <div class="nav-sec">Général</div>
     <a class="nav-item actif" data-page="dashboard" onclick="goto('dashboard')"><span class="nav-ico">📊</span>Tableau de bord</a>
-    <a class="nav-item" data-page="alertes" onclick="goto('alertes')"><span class="nav-ico">🔔</span>Alertes<span class="nav-badge">4</span></a>
+    <a class="nav-item" data-page="alertes" onclick="goto('alertes')"><span class="nav-ico">🔔</span>Alertes<span class="nav-badge" id="nav-badge-alertes" style="display:none">0</span></a>
     <div class="nav-sec">Scolarité</div>
     <a class="nav-item" data-page="eleves" onclick="goto('eleves')"><span class="nav-ico">🎓</span>Élèves</a>
     <a class="nav-item" data-page="enseignants" onclick="goto('enseignants')"><span class="nav-ico">👨‍🏫</span>Enseignants</a>
@@ -35,8 +35,8 @@
     <a class="nav-item" data-page="parametres" onclick="goto('parametres')"><span class="nav-ico">⚙️</span>Paramètres</a>
   </nav>
   <div class="sb-user">
-    <div class="u-avatar">MD</div>
-    <div style="flex:1"><div class="u-name">Moussa Diallo</div><div class="u-role">Directeur</div></div>
+    <div class="u-avatar" id="sb-user-avatar">?</div>
+    <div style="flex:1"><div class="u-name" id="sb-user-nom"></div><div class="u-role" id="sb-user-role"></div></div>
     <a href="#" id="btn-logout" title="Déconnexion" style="color:rgba(255,255,255,.4);font-size:16px;text-decoration:none;padding:4px">🚪</a>
   </div>
 </aside>
@@ -44,7 +44,7 @@
 <main class="main">
   <header class="topbar">
     <span class="tb-titre" id="tb-titre">Tableau de bord</span>
-    <span class="tb-annee">📅 2024–2025</span>
+    <span class="tb-annee" id="tb-annee">📅 —</span>
     <button class="tb-sync" onclick="doSync()"><span id="sync-ico">🔄</span>Synchroniser</button>
     <div class="tb-notif" title="Notifications">🔔<span class="notif-dot"></span></div>
   </header>
@@ -54,15 +54,15 @@
     <!-- ═══ PAGE DASHBOARD ═══ -->
     <div class="page active" id="page-dashboard">
       <div class="ph">
-        <div><div class="ph-titre" id="greeting-name">Bonjour, Moussa 👋</div><div class="ph-sous">Lycée Blaise Diagne · Dakar · Jeudi 27 février 2025</div></div>
+        <div><div class="ph-titre" id="greeting-name">Bonjour 👋</div><div class="ph-sous" id="ph-sous-date"></div></div>
         <button class="btn btn-p" onclick="openModal('m-eleve')">+ Nouvel élève</button>
       </div>
 
       <div class="sg">
-        <div class="sc" style="--c:var(--vert)"><div class="sc-ico">🎓</div><div class="sc-val">1 248</div><div class="sc-lbl">Élèves inscrits</div><div class="sc-delta dp">▲ +23 vs an dernier</div><div class="spark" id="sp-el"></div></div>
-        <div class="sc" style="--c:var(--bleu)"><div class="sc-ico">👨‍🏫</div><div class="sc-val">64</div><div class="sc-lbl">Enseignants</div><div class="sc-delta dp">▲ +3 ce semestre</div><div class="spark" id="sp-en"></div></div>
-        <div class="sc" style="--c:var(--orange)"><div class="sc-ico">📊</div><div class="sc-val">12.4</div><div class="sc-lbl">Moyenne générale</div><div class="sc-delta dp">▲ +0.6 vs T1</div><div class="spark" id="sp-mo"></div></div>
-        <div class="sc" style="--c:var(--rouge)"><div class="sc-ico">⚠️</div><div class="sc-val">87</div><div class="sc-lbl">Absences ce mois</div><div class="sc-delta dm">▼ +12 vs mois préc.</div><div class="spark" id="sp-ab"></div></div>
+        <div class="sc" style="--c:var(--vert)"><div class="sc-ico">🎓</div><div class="sc-val" id="kpi-eleves">0</div><div class="sc-lbl">Élèves inscrits</div><div class="sc-delta dp" id="kpi-eleves-delta"></div><div class="spark" id="sp-el"></div></div>
+        <div class="sc" style="--c:var(--bleu)"><div class="sc-ico">👨‍🏫</div><div class="sc-val" id="kpi-enseignants">0</div><div class="sc-lbl">Enseignants</div><div class="sc-delta dp" id="kpi-enseignants-delta"></div><div class="spark" id="sp-en"></div></div>
+        <div class="sc" style="--c:var(--orange)"><div class="sc-ico">📊</div><div class="sc-val" id="kpi-moy">—</div><div class="sc-lbl">Moyenne générale</div><div class="sc-delta dp" id="kpi-moy-delta"></div><div class="spark" id="sp-mo"></div></div>
+        <div class="sc" style="--c:var(--rouge)"><div class="sc-ico">⚠️</div><div class="sc-val" id="kpi-absences">0</div><div class="sc-lbl">Absences ce mois</div><div class="sc-delta dm" id="kpi-absences-delta"></div><div class="spark" id="sp-ab"></div></div>
       </div>
 
       <div class="g2">
@@ -78,13 +78,7 @@
         </div>
         <div class="carte">
           <div class="ch"><span>🕐</span><span class="ct">Activité récente</span><a class="ca" onclick="goto('alertes')">Tout voir</a></div>
-          <div style="padding:8px 18px">
-            <div class="ai"><div class="ai-ico" style="background:var(--vert-bg);color:var(--vert)">📝</div><div class="ai-t" style="flex:1"><div class="ai-t">Notes publiées — Maths 3e B</div><div class="ai-s">M. Sow · 32 notes · Moy: 11.4/20</div></div><div class="ai-tm">8 min</div></div>
-            <div class="ai"><div class="ai-ico" style="background:var(--rouge-lt);color:var(--rouge)">🚫</div><div style="flex:1"><div class="ai-t">4 absences signalées</div><div class="ai-s">2de A · Parents notifiés SMS</div></div><div class="ai-tm">23 min</div></div>
-            <div class="ai"><div class="ai-ico" style="background:var(--orange-lt);color:var(--orange)">📋</div><div style="flex:1"><div class="ai-t">Bulletin généré — Aminata Traoré</div><div class="ai-s">Term S1 · Moy 14.2 · Rang 3/42</div></div><div class="ai-tm">1h</div></div>
-            <div class="ai"><div class="ai-ico" style="background:var(--success-lt);color:var(--success)">✅</div><div style="flex:1"><div class="ai-t">Inscription validée</div><div class="ai-s">Ibrahima Fall · 1re L1</div></div><div class="ai-tm">2h</div></div>
-            <div class="ai"><div class="ai-ico" style="background:var(--vert-bg);color:var(--vert)">🔄</div><div style="flex:1"><div class="ai-t">Synchronisation mobile</div><div class="ai-s">47 notes · 12 présences · 3 ens.</div></div><div class="ai-tm">3h</div></div>
-          </div>
+          <div id="activite-recente" style="padding:8px 18px"></div>
         </div>
       </div>
 
@@ -92,11 +86,11 @@
         <div class="carte">
           <div class="ch"><span>📊</span><span class="ct">Répartition des mentions</span></div>
           <div class="cb"><div class="dw"><canvas id="c-donut" width="110" height="110"></canvas><div class="dl">
-            <div class="di"><div class="dd" style="background:#27AE60"></div><span class="dlb">Très bien</span><span class="dp2">18%</span></div>
-            <div class="di"><div class="dd" style="background:#1A4731"></div><span class="dlb">Bien</span><span class="dp2">27%</span></div>
-            <div class="di"><div class="dd" style="background:#E07B39"></div><span class="dlb">Assez bien</span><span class="dp2">31%</span></div>
-            <div class="di"><div class="dd" style="background:#F39C12"></div><span class="dlb">Passable</span><span class="dp2">16%</span></div>
-            <div class="di"><div class="dd" style="background:#C0392B"></div><span class="dlb">Insuff.</span><span class="dp2">8%</span></div>
+            <div class="di"><div class="dd" style="background:#27AE60"></div><span class="dlb">Très bien</span><span class="dp2" id="donut-tresbien">—</span></div>
+            <div class="di"><div class="dd" style="background:#1A4731"></div><span class="dlb">Bien</span><span class="dp2" id="donut-bien">—</span></div>
+            <div class="di"><div class="dd" style="background:#E07B39"></div><span class="dlb">Assez bien</span><span class="dp2" id="donut-assezbien">—</span></div>
+            <div class="di"><div class="dd" style="background:#F39C12"></div><span class="dlb">Passable</span><span class="dp2" id="donut-passable">—</span></div>
+            <div class="di"><div class="dd" style="background:#C0392B"></div><span class="dlb">Insuff.</span><span class="dp2" id="donut-insuff">—</span></div>
           </div></div></div>
         </div>
         <div class="carte">
@@ -113,13 +107,11 @@
     <!-- ═══ PAGE ÉLÈVES ═══ -->
     <div class="page" id="page-eleves">
       <div class="ph">
-        <div><div class="ph-titre">Élèves</div><div class="ph-sous">1 248 élèves · Année 2024–2025</div></div>
+        <div><div class="ph-titre">Élèves</div><div class="ph-sous" id="ph-sous-eleves"></div></div>
         <div style="display:flex;gap:9px;align-items:center">
           <div class="si"><span>🔍</span><input type="text" placeholder="Rechercher…" oninput="PageEleves.filtrerRecherche(this.value)"></div>
           <select class="fs" style="width:130px" id="sel-classe-eleves" onchange="PageEleves.filtrerClasse(this.value)">
             <option value="">Toutes classes</option>
-            <option>6e A</option><option>6e B</option><option>3e A</option><option>3e B</option>
-            <option>2de A</option><option>2de B</option><option>1re S1</option><option>Term S1</option>
           </select>
           <button class="btn btn-p" onclick="openModal('m-eleve')">+ Inscrire</button>
         </div>
@@ -127,7 +119,7 @@
       <div class="carte">
         <div class="tw"><table><thead><tr><th>Élève</th><th>Matricule</th><th>Classe</th><th>Statut</th><th>Moy. T2</th><th>Absences</th><th>Parent</th><th>Actions</th></tr></thead><tbody id="tb-eleves"></tbody></table></div>
         <div id="pag-eleves" style="display:flex;align-items:center;justify-content:space-between;padding:11px 18px;border-top:1px solid var(--g100)">
-          <span style="font-size:12px;color:var(--g500)">Affichage <b>1–15</b> sur <b>1 248</b></span>
+          <span style="font-size:12px;color:var(--g500)" id="pag-eleves-info"></span>
           <div style="display:flex;gap:4px"><button class="btn btn-l btn-sm">← Préc.</button><button class="btn btn-p btn-sm">Suiv. →</button></div>
         </div>
       </div>
@@ -161,10 +153,10 @@
         </div>
       </div>
       <div class="sg" style="margin-bottom:18px">
-        <div class="sc" style="--c:var(--rouge)"><div class="sc-ico">❌</div><div class="sc-val">87</div><div class="sc-lbl">Absences ce mois</div></div>
-        <div class="sc" style="--c:var(--warning)"><div class="sc-ico">⏰</div><div class="sc-val">23</div><div class="sc-lbl">Retards</div></div>
-        <div class="sc" style="--c:var(--success)"><div class="sc-ico">✅</div><div class="sc-val">41</div><div class="sc-lbl">Justifiées</div></div>
-        <div class="sc" style="--c:var(--orange)"><div class="sc-ico">📱</div><div class="sc-val">92%</div><div class="sc-lbl">Parents notifiés</div></div>
+        <div class="sc" style="--c:var(--rouge)"><div class="sc-ico">❌</div><div class="sc-val" id="abs-kpi-absences">0</div><div class="sc-lbl">Absences ce mois</div></div>
+        <div class="sc" style="--c:var(--warning)"><div class="sc-ico">⏰</div><div class="sc-val" id="abs-kpi-retards">0</div><div class="sc-lbl">Retards</div></div>
+        <div class="sc" style="--c:var(--success)"><div class="sc-ico">✅</div><div class="sc-val" id="abs-kpi-justifiees">0</div><div class="sc-lbl">Justifiées</div></div>
+        <div class="sc" style="--c:var(--orange)"><div class="sc-ico">📱</div><div class="sc-val" id="abs-kpi-notifies">—</div><div class="sc-lbl">Parents notifiés</div></div>
       </div>
       <div class="g2" style="margin-bottom:18px">
         <div class="carte"><div class="ch"><span>📊</span><span class="ct">Absences par jour — Semaine</span></div><div class="cb"><canvas id="c-abs" height="175"></canvas></div></div>
@@ -180,7 +172,7 @@
       <div class="ph">
         <div><div class="ph-titre">Emploi du temps</div><div class="ph-sous">Semaine du 24 au 28 février 2025</div></div>
         <div style="display:flex;gap:9px;align-items:center">
-          <select class="fs" style="width:150px"><option>Term S1</option><option>1re S1</option><option>2de A</option><option>3e B</option><option>6e A</option></select>
+          <select class="fs" style="width:150px" id="sel-classe-edt"><option value="">Choisir classe…</option></select>
           <button class="btn btn-l">← Préc.</button><button class="btn btn-l">Suiv. →</button>
           <button class="btn btn-p">+ Ajouter cours</button>
         </div>
@@ -190,11 +182,8 @@
 
     <!-- ═══ PAGE ALERTES ═══ -->
     <div class="page" id="page-alertes">
-      <div class="ph"><div><div class="ph-titre">Alertes & Notifications</div><div class="ph-sous">4 alertes nécessitent votre attention</div></div><button class="btn btn-l btn-sm" onclick="toast('Toutes les alertes marquées comme lues','s')">✓ Tout marquer lu</button></div>
-      <div class="al al-d"><span class="al-ico">🚨</span><div style="flex:1"><div class="al-t">Élève en danger d'exclusion — Mamadou Kouyaté (3e B)</div><div class="al-s">23 absences injustifiées · Seuil : 20 · Convocation parents requise</div></div><button class="btn btn-d btn-sm" style="white-space:nowrap" onclick="toast('Convocation générée et envoyée','s')">Convoquer</button></div>
-      <div class="al al-w"><span class="al-ico">⚠️</span><div style="flex:1"><div class="al-t">Notes non saisies — Composition Français 2de A</div><div class="al-s">Mme Diaw · Délai dépassé de 3 jours · 38 élèves concernés</div></div><button class="btn btn-l btn-sm" style="white-space:nowrap" onclick="toast('Rappel envoyé à Mme Diaw','s')">Relancer</button></div>
-      <div class="al al-w"><span class="al-ico">📊</span><div style="flex:1"><div class="al-t">Moyenne en chute — Physique Term S1</div><div class="al-s">T2 : 8.1/20 vs T1 : 11.4/20 · 14 élèves en dessous de 5/20</div></div><button class="btn btn-l btn-sm">Analyser</button></div>
-      <div class="al al-i"><span class="al-ico">📋</span><div style="flex:1"><div class="al-t">Bulletins prêts à valider — Trimestre 2</div><div class="al-s">247 bulletins générés · En attente de signature directeur</div></div><button class="btn btn-p btn-sm" onclick="goto('bulletins')">Valider</button></div>
+      <div class="ph"><div><div class="ph-titre">Alertes & Notifications</div><div class="ph-sous" id="ph-sous-alertes">Aucune alerte</div></div><button class="btn btn-l btn-sm" onclick="toast('Toutes les alertes marquées comme lues','s')">✓ Tout marquer lu</button></div>
+      <div id="alertes-list"></div>
       <div style="margin-top:22px"><div style="font-size:13px;font-weight:700;margin-bottom:12px;color:var(--g900)">Historique des notifications</div>
         <div class="carte"><div class="tw"><table><thead><tr><th>Destinataire</th><th>Message</th><th>Canal</th><th>Date</th><th>Statut</th></tr></thead><tbody id="tb-notif"></tbody></table></div></div>
       </div>
@@ -203,7 +192,7 @@
     <!-- ═══ PAGE BULLETINS ═══ -->
     <div class="page" id="page-bulletins">
       <div class="ph">
-        <div><div class="ph-titre">Bulletins scolaires</div><div class="ph-sous">Trimestre 2 · 1 248 élèves</div></div>
+        <div><div class="ph-titre">Bulletins scolaires</div><div class="ph-sous" id="ph-sous-bulletins"></div></div>
         <div style="display:flex;gap:9px">
           <select class="fs" style="width:150px"><option>Trimestre 2</option><option>Trimestre 1</option></select>
           <button class="btn btn-o" onclick="toast('Génération lancée pour 247 bulletins…','s')">⚡ Générer tous</button>
@@ -211,10 +200,10 @@
         </div>
       </div>
       <div class="sg" style="margin-bottom:18px">
-        <div class="sc" style="--c:var(--success)"><div class="sc-ico">✅</div><div class="sc-val">1 001</div><div class="sc-lbl">Générés</div></div>
-        <div class="sc" style="--c:var(--warning)"><div class="sc-ico">⏳</div><div class="sc-val">247</div><div class="sc-lbl">En attente</div></div>
-        <div class="sc" style="--c:var(--vert)"><div class="sc-ico">🖊️</div><div class="sc-val">384</div><div class="sc-lbl">Validés directeur</div></div>
-        <div class="sc" style="--c:var(--orange)"><div class="sc-ico">📲</div><div class="sc-val">612</div><div class="sc-lbl">Téléchargés parents</div></div>
+        <div class="sc" style="--c:var(--success)"><div class="sc-ico">✅</div><div class="sc-val" id="bull-kpi-generes">0</div><div class="sc-lbl">Générés</div></div>
+        <div class="sc" style="--c:var(--warning)"><div class="sc-ico">⏳</div><div class="sc-val" id="bull-kpi-attente">0</div><div class="sc-lbl">En attente</div></div>
+        <div class="sc" style="--c:var(--vert)"><div class="sc-ico">🖊️</div><div class="sc-val" id="bull-kpi-valides">0</div><div class="sc-lbl">Validés directeur</div></div>
+        <div class="sc" style="--c:var(--orange)"><div class="sc-ico">📲</div><div class="sc-val" id="bull-kpi-telecharg">0</div><div class="sc-lbl">Téléchargés parents</div></div>
       </div>
       <div class="carte"><div class="ch"><span>📋</span><span class="ct">Bulletins par classe</span></div>
         <div class="tw"><table><thead><tr><th>Classe</th><th>Effectif</th><th>Générés</th><th>Validés</th><th>Moy. classe</th><th>1er de classe</th><th>Taux réussite</th><th>Actions</th></tr></thead><tbody id="tb-bull"></tbody></table></div>
@@ -224,7 +213,7 @@
     <!-- ═══ PAGE ENSEIGNANTS ═══ -->
     <div class="page" id="page-enseignants">
       <div class="ph">
-        <div><div class="ph-titre">Enseignants</div><div class="ph-sous">64 enseignants · 28 matières</div></div>
+        <div><div class="ph-titre">Enseignants</div><div class="ph-sous" id="ph-sous-enseignants"></div></div>
         <div style="display:flex;gap:9px"><div class="si"><span>🔍</span><input type="text" placeholder="Rechercher…"></div><button class="btn btn-p">+ Ajouter</button></div>
       </div>
       <div class="carte"><div class="tw"><table><thead><tr><th>Enseignant</th><th>Matière</th><th>Classes</th><th>H/sem</th><th>Notes saisies</th><th>Appels</th><th>Dernier accès</th><th>Statut</th></tr></thead><tbody id="tb-ens"></tbody></table></div></div>
@@ -232,7 +221,7 @@
 
     <!-- ═══ PAGE CLASSES ═══ -->
     <div class="page" id="page-classes">
-      <div class="ph"><div><div class="ph-titre">Classes</div><div class="ph-sous">22 classes · 1 248 élèves</div></div><button class="btn btn-p">+ Nouvelle classe</button></div>
+      <div class="ph"><div><div class="ph-titre">Classes</div><div class="ph-sous" id="ph-sous-classes"></div></div><button class="btn btn-p">+ Nouvelle classe</button></div>
       <div id="cls-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px"></div>
     </div>
 
@@ -244,16 +233,16 @@
           <div class="carte" style="margin-bottom:18px">
             <div class="ch"><span>🏫</span><span class="ct">Établissement</span></div>
             <div class="cb">
-              <div class="fg"><label class="fl">Nom</label><input class="fi" value="Lycée Blaise Diagne"></div>
-              <div class="fr"><div class="fg"><label class="fl">Code</label><input class="fi" value="LBD-DAKAR-01"></div><div class="fg"><label class="fl">Ville</label><input class="fi" value="Dakar"></div></div>
-              <div class="fr"><div class="fg"><label class="fl">Pays</label><select class="fs"><option>Sénégal</option><option>Côte d'Ivoire</option><option>Mali</option><option>Burkina Faso</option></select></div><div class="fg"><label class="fl">Année scolaire</label><input class="fi" value="2024-2025"></div></div>
+              <div class="fg"><label class="fl">Nom</label><input class="fi" id="param-etab-nom" value=""></div>
+              <div class="fr"><div class="fg"><label class="fl">Code</label><input class="fi" id="param-etab-code" value=""></div><div class="fg"><label class="fl">Ville</label><input class="fi" id="param-etab-ville" value=""></div></div>
+              <div class="fr"><div class="fg"><label class="fl">Pays</label><select class="fs"><option>Sénégal</option><option>Côte d'Ivoire</option><option>Mali</option><option>Burkina Faso</option></select></div><div class="fg"><label class="fl">Année scolaire</label><input class="fi" id="param-annee" value=""></div></div>
             </div>
           </div>
           <div class="carte">
             <div class="ch"><span>📱</span><span class="ct">Notifications</span></div>
             <div class="cb">
-              <div class="fg"><label class="fl">Clé API Africa's Talking</label><input class="fi" type="password" value="AT_LIVE_••••••••"></div>
-              <div class="fg"><label class="fl">Token WhatsApp Business</label><input class="fi" type="password" value="meta_wa_••••••••"></div>
+              <div class="fg"><label class="fl">Clé API Africa's Talking</label><input class="fi" type="password" id="param-at-key" placeholder="Clé Africa's Talking" value=""></div>
+              <div class="fg"><label class="fl">Token WhatsApp Business</label><input class="fi" type="password" id="param-wa-token" placeholder="Token WhatsApp Business" value=""></div>
               <div class="fr"><div class="fg"><label class="fl">Heure début</label><input class="fi" type="time" value="07:00"></div><div class="fg"><label class="fl">Heure fin</label><input class="fi" type="time" value="21:00"></div></div>
               <button class="btn btn-l btn-sm" onclick="toast('Test SMS envoyé → +221 77 000 00 00','s')">📤 Tester SMS</button>
             </div>
@@ -290,7 +279,7 @@
     <div class="mb">
       <div class="fr"><div class="fg"><label class="fl">Prénom *</label><input class="fi" placeholder="Aminata"></div><div class="fg"><label class="fl">Nom *</label><input class="fi" placeholder="Traoré"></div></div>
       <div class="fr"><div class="fg"><label class="fl">Date de naissance</label><input class="fi" type="date"></div><div class="fg"><label class="fl">Sexe</label><select class="fs"><option>Féminin</option><option>Masculin</option></select></div></div>
-      <div class="fr"><div class="fg"><label class="fl">Classe *</label><select class="fs"><option>6e A</option><option>3e B</option><option>2de A</option><option>1re S1</option><option>Term S1</option></select></div><div class="fg"><label class="fl">Matricule</label><input class="fi" placeholder="Auto-généré"></div></div>
+      <div class="fr"><div class="fg"><label class="fl">Classe *</label><select class="fs" id="modal-eleve-classe"><option value="">Choisir une classe…</option></select></div><div class="fg"><label class="fl">Matricule</label><input class="fi" placeholder="Auto-généré"></div></div>
       <hr style="border:none;border-top:1px solid var(--g200);margin:12px 0">
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--g500);margin-bottom:10px">Contact parent</div>
       <div class="fr"><div class="fg"><label class="fl">Téléphone *</label><input class="fi" placeholder="+221 77 000 00 00"></div><div class="fg"><label class="fl">Canal</label><select class="fs"><option>WhatsApp</option><option>SMS</option></select></div></div>

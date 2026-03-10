@@ -11,9 +11,9 @@
 require('dotenv').config();
 
 const { Worker } = require('bullmq');
-const { getRedis }   = require('../infrastructure/cache/redis');
-const { getDB, connectDB }  = require('../infrastructure/database/pool');
-const { connectRedis }      = require('../infrastructure/cache/redis');
+const { createBullMQConnection } = require('../infrastructure/cache/redis');
+const { getDB, connectDB }       = require('../infrastructure/database/pool');
+const { connectRedis }           = require('../infrastructure/cache/redis');
 const { envoyerSMS }        = require('../infrastructure/notifications/sms.service');
 const { envoyerTemplate }   = require('../infrastructure/notifications/whatsapp.service');
 const logger                = require('../utils/logger');
@@ -246,7 +246,7 @@ init().then(() => {
     'notifications',
     traiterNotification,
     {
-      connection: getRedis(),
+      connection: createBullMQConnection(),
       concurrency: parseInt(process.env.WORKER_NOTIF_CONCURRENCY) || 5,
     }
   );

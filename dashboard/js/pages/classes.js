@@ -12,11 +12,34 @@ var PageClasses = {
       var res = await Api.get('/classes');
       this.data = res.data;
       this.renderGrid(res.data);
+      this.peuplerDropdowns(res.data);
       return true;
     } catch (e) {
       console.warn('PageClasses: fallback mock —', e.message);
       return false;
     }
+  },
+
+  peuplerDropdowns: function(classes) {
+    // Peupler tous les selects de filtre par classe dans l'application
+    var selects = [
+      document.getElementById('sel-classe-eleves'),
+      document.getElementById('sel-classe-edt'),
+      document.getElementById('modal-eleve-classe'),
+    ];
+    selects.forEach(function(sel) {
+      if (!sel) return;
+      var valActuelle = sel.value;
+      // Conserver uniquement la 1re option (Toutes classes / Choisir...)
+      while (sel.options.length > 1) sel.remove(1);
+      classes.forEach(function(c) {
+        var opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.nom_classe || c.nom || c.id;
+        sel.appendChild(opt);
+      });
+      if (valActuelle) sel.value = valActuelle;
+    });
   },
 
   renderGrid: function(classes) {
