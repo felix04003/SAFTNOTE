@@ -46,6 +46,7 @@ ecolemanager/
 │   │   │   │   ├── eleves/         ✅ COMPLET
 │   │   │   │   ├── enseignants/    ✅ COMPLET (370 lignes — classes, EDT, affectations, profil)
 │   │   │   │   └── parents/        ✅ COMPLET (335 lignes — enfants, tableau de bord, notes, absences, bulletins)
+│   │   │   ├── setup/              ✅ COMPLET (création établissement + directeur)
 │   │   │   ├── 03-pedagogie/
 │   │   │   │   ├── evaluations/    ✅ COMPLET
 │   │   │   │   ├── notes/          ✅ COMPLET (dans evaluations)
@@ -116,6 +117,7 @@ ecolemanager/
 └── dashboard/              ← Dashboard admin (HTML/CSS/JS vanilla — zéro dépendance NPM)
     ├── index.html          ✅ Structure HTML + scripts externes
     ├── login.html          ✅ Page de connexion (identifiant, mdp, code établissement)
+    ├── inscription.html    ✅ Page de création d'un nouvel établissement (formulaire setup)
     ├── css/
     │   └── style.css       ✅ Toute la feuille de style
     └── js/
@@ -124,7 +126,7 @@ ecolemanager/
         ├── auth.js         ✅ login(), logout(), getUser(), requireAuth(), populateSidebar()
         ├── ui.js           ✅ toast(), openModal(), closeModal(), sparkline(), cn(), init2()
         ├── router.js       ✅ goto(), TITRES, PAGE_HOOKS, hash routing
-        ├── data-mock.js    ✅ Données statiques + renderAll() + initCharts() + initEDT()
+        ├── data-mock.js    ⚠️  Données fictives — en cours de retrait (remplacé par API réelle)
         ├── app.js          ✅ DOMContentLoaded init, auth check, sparklines, hash routing
         └── pages/
             ├── eleves.js       ✅ GET /eleves (paginé, recherche, filtre classe)
@@ -178,7 +180,7 @@ Tous les 9 domaines sont **implémentés et testés** (60/60 tests passent).
 - **Approche** : HTML/CSS/JS vanilla, zéro framework, zéro build step
 - **Auth** : JWT stocké dans `localStorage`, redirect vers `login.html` si 401
 - **API client** : `js/api.js` — fetch wrapper avec token automatique
-- **Fallback mock** : Chaque page tente l'API, fallback sur `data-mock.js` si le backend est down
+- **Fallback mock** : Les données fictives (`data-mock.js`) sont en cours de retrait — les pages appellent désormais l'API réelle
 - **Routing** : Hash-based (`#eleves`, `#notes`, etc.) via `js/router.js`
 - **Pages dynamiques** : Chaque `js/pages/*.js` s'enregistre dans `PAGE_HOOKS[nomPage]`
 - **Serveur dev** : `npx serve dashboard -l 3001` (ou via `preview_start dashboard`)
@@ -189,6 +191,9 @@ Tous les 9 domaines sont **implémentés et testés** (60/60 tests passent).
 - [x] Dashboard : extraction monolithe → fichiers modulaires
 - [x] Dashboard : authentification + login page
 - [x] Dashboard : connexion 10 pages aux endpoints API (avec fallback mock)
+- [x] Backend : domaine setup — création établissement + directeur (POST /setup, POST /inscription, GET /setup/status, GET /dashboard)
+- [x] Dashboard : page inscription.html — formulaire de création d'établissement
+- [x] Dashboard : retrait des données fictives (data-mock.js) — pages branchées sur API réelle
 - [ ] Build mobile EAS + déploiement serveur (PM2 + Nginx)
 - [ ] Tests d'intégration avec vraie base PostgreSQL
 - [ ] Optimisations performance (index SQL, cache Redis stratégique)
@@ -414,7 +419,9 @@ META_WA_TOKEN         → WhatsApp Business API
 | 11 | Tests unitaires (60/60 Jest) | ✅ |
 | 12 | Documentation API (Swagger OpenAPI 3.0) | ✅ |
 | 13 | CI/CD GitHub Actions (lint, tests, Docker build) | ✅ |
-| 14 | Build mobile EAS + déploiement serveur | 🔜 |
+| 14 | Domaine setup — création établissement + directeur | ✅ |
+| 15 | Dashboard : page inscription + retrait données fictives | ✅ |
+| 16 | Build mobile EAS + déploiement serveur | 🔜 |
 
 ---
 
