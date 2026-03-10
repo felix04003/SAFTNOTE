@@ -1,8 +1,8 @@
 'use strict';
 
 /**
- * Page Emploi du temps — charge depuis l'API,
- * fallback sur mock (initEDT) si backend indisponible.
+ * Page Emploi du temps — charge depuis l'API.
+ * Affiche un état vide si le backend est indisponible.
  */
 var PageEDT = {
   data: null,
@@ -14,8 +14,9 @@ var PageEDT = {
       this.renderGrid(res.data);
       return true;
     } catch (e) {
-      console.warn('PageEDT: fallback mock —', e.message);
-      // Le mock initEDT() est déjà appelé au chargement initial
+      console.warn('PageEDT: impossible de charger l\'EDT —', e.message);
+      var grid = document.getElementById('edt-grid');
+      if (grid) grid.innerHTML = '<div style="text-align:center;padding:40px;color:var(--g400);font-size:13px">Emploi du temps indisponible</div>';
       return false;
     }
   },

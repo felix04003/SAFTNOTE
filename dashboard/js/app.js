@@ -31,24 +31,10 @@ document.addEventListener('DOMContentLoaded', function() {
     Api.get('/dashboard').then(function(res) {
       var s = res.data || {};
       _patchStatHome(s);
-      // N'afficher les charts que si l'école a des données
-      if (s.nb_eleves_actifs > 0 || s.nb_classes > 0) {
-        initCharts();
-        initEDT();
-      }
     }).catch(function() {
-      // API indisponible — afficher dashboard vide (ne pas injecter données fictives)
+      // API indisponible — afficher dashboard vide
       _patchStatHome({});
     });
-  } else {
-    // Mode démo non connecté — données fictives acceptables
-    renderAll();
-    initCharts();
-    initEDT();
-    sparkline('sp-el', [920, 1050, 1100, 1180, 1200, 1248], 'var(--vert)');
-    sparkline('sp-en', [56, 58, 60, 61, 61, 64], 'var(--bleu)');
-    sparkline('sp-mo', [11.8, 12.1, 12.0, 12.2, 12.3, 12.4], 'var(--orange)');
-    sparkline('sp-ab', [64, 58, 72, 80, 75, 87], 'var(--rouge)');
   }
 
   // Handle initial hash route
