@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EcoleManager — Mot de passe oublié</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  .step { display: none; }
+  .step.active { display: block; }
+  .otp-inputs { display: flex; gap: 8px; justify-content: center; margin: 20px 0; }
+  .otp-inputs input {
+    width: 44px; height: 52px; text-align: center; font-size: 22px; font-weight: 700;
+    font-family: 'Space Mono', monospace; border: 2px solid var(--g200);
+    border-radius: 10px; outline: none; transition: border-color .2s;
+  }
+  .otp-inputs input:focus { border-color: var(--vert); }
+  .otp-inputs input.filled { border-color: var(--vert); background: var(--vert-lt, #f0f7f4); }
+  .success-box {
+    text-align: center; padding: 32px 16px;
+  }
+  .success-icon { font-size: 48px; margin-bottom: 12px; }
+  .timer { font-size: 12px; color: var(--g400); text-align: center; margin-top: 8px; }
+  .timer span { font-weight: 700; color: var(--g600); font-family: 'Space Mono', monospace; }
+</style>
+</head>
+<body>
+
+<div class="login-wrap">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="sb-mark" style="margin:0 auto 12px;width:52px;height:52px;font-size:22px;border-radius:13px">EM</div>
+      <div style="font-size:20px;font-weight:800;color:var(--g900)">Mot de passe oublié</div>
+      <div style="font-size:12.5px;color:var(--g500);margin-top:4px" id="sous-titre">Entrez votre identifiant pour recevoir un code</div>
+    </div>
+
+    <div class="login-err" id="err-box"></div>
+
+    <!-- ── Étape 1 : Demander le code ── -->
+    <div class="step active" id="step-1">
+      <form id="form-etape1" onsubmit="return demanderCode(event)">
+        <div class="fg">
+          <label class="fl">Email ou téléphone</label>
+          <input class="fi" id="input-identifiant" type="text" placeholder="Email ou +221..." required autocomplete="username">
+        </div>
+        <div class="fg">
+          <label class="fl">Code établissement</label>
+          <input class="fi" id="input-etab" type="text" placeholder="Ex: PMS001" required>
+        </div>
+        <button class="btn btn-p btn-full" type="submit" id="btn-etape1" style="margin-top:8px">
+          Envoyer le code
+        </button>
+      </form>
+    </div>
+
+    <!-- ── Étape 2 : Saisir le code + nouveau MDP ── -->
+    <div class="step" id="step-2">
+      <div class="timer" id="timer-txt">Code valable <span id="timer-val">15:00</span></div>
+      <form id="form-etape2" onsubmit="return reinitialiser(event)">
+        <div class="fg" style="margin-top:16px">
+          <label class="fl" style="text-align:center;display:block">Code reçu par SMS</label>
+          <div class="otp-inputs" id="otp-inputs">
+            <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]">
+            <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]">
+            <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]">
+            <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]">
+            <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]">
+            <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]">
+          </div>
+        </div>
+        <div class="fg">
+          <label class="fl">Nouveau mot de passe</label>
+          <input class="fi" id="input-mdp1" type="password" placeholder="Minimum 8 caractères" required minlength="8">
+        </div>
+        <div class="fg">
+          <label class="fl">Confirmer le mot de passe</label>
+          <input class="fi" id="input-mdp2" type="password" placeholder="Répétez le mot de passe" required minlength="8">
+        </div>
+        <button class="btn btn-p btn-full" type="submit" id="btn-etape2" style="margin-top:8px">
+          Réinitialiser
+        </button>
+      </form>
+      <div style="text-align:center;margin-top:12px">
+        <button class="btn btn-l btn-sm" onclick="retourEtape1()" style="font-size:12px">
+          &#8592; Renvoyer un code
+        </button>
+      </div>
+    </div>
+
+    <!-- ── Étape 3 : Succès ── -->
+    <div class="step" id="step-3">
+      <div class="success-box">
+        <div class="success-icon">✅</div>
+        <div style="font-size:16px;font-weight:700;color:var(--g900);margin-bottom:8px">Mot de passe modifié !</div>
+        <div style="font-size:13px;color:var(--g500);margin-bottom:24px">Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.</div>
+        <a href="login.html" class="btn btn-p btn-full">Se connecter</a>
+      </div>
+    </div>
+
+    <div style="text-align:center;margin-top:18px;padding-top:18px;border-top:1px solid var(--g200)">
+      <a href="login.html" style="font-size:12px;color:var(--g400);text-decoration:none">&#8592; Retour à la connexion</a>
+    </div>
+  </div>
+</div>
+
+<div class="tc" id="tc"></div>
+
+<script src="js/config.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/api.js"></script>
+<script>
+var _identifiant = '';
+var _etabCode = '';
+var _timerInterval = null;
+
+// ── Étape 1 : Demander le code OTP ──────────────────────────────
+async function demanderCode(e) {
+  e.preventDefault();
+  var btn = document.getElementById('btn-etape1');
+  var errEl = document.getElementById('err-box');
+
+  _identifiant = document.getElementById('input-identifiant').value.trim();
+  _etabCode    = document.getElementById('input-etab').value.trim();
+
+  btn.disabled = true;
+  btn.textContent = 'Envoi en cours…';
+  errEl.classList.remove('show');
+
+  try {
+    await Api.post('/auth/mot-de-passe-oublie', {
+      identifiant: _identifiant,
+      etablissement_code: _etabCode,
+    });
+
+    // Toujours passer à l'étape 2 (anti-énumération)
+    passerEtape(2);
+    demarrerTimer(15 * 60);
+
+  } catch (err) {
+    errEl.textContent = err.message || 'Erreur — réessayez.';
+    errEl.classList.add('show');
+    btn.disabled = false;
+    btn.textContent = 'Envoyer le code';
+  }
+}
+
+// ── Étape 2 : Réinitialiser ──────────────────────────────────────
+async function reinitialiser(e) {
+  e.preventDefault();
+  var btn = document.getElementById('btn-etape2');
+  var errEl = document.getElementById('err-box');
+
+  var code = Array.from(document.querySelectorAll('#otp-inputs input'))
+    .map(function(i) { return i.value; }).join('');
+
+  var mdp1 = document.getElementById('input-mdp1').value;
+  var mdp2 = document.getElementById('input-mdp2').value;
+
+  if (code.length !== 6) {
+    errEl.textContent = 'Veuillez saisir le code à 6 chiffres.';
+    errEl.classList.add('show'); return false;
+  }
+  if (mdp1 !== mdp2) {
+    errEl.textContent = 'Les mots de passe ne correspondent pas.';
+    errEl.classList.add('show'); return false;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Réinitialisation…';
+  errEl.classList.remove('show');
+
+  try {
+    await Api.post('/auth/reinitialiser-mot-de-passe', {
+      identifiant:          _identifiant,
+      etablissement_code:   _etabCode,
+      code:                 code,
+      nouveau_mot_de_passe: mdp1,
+    });
+
+    clearInterval(_timerInterval);
+    passerEtape(3);
+
+  } catch (err) {
+    errEl.textContent = err.message || 'Code invalide ou expiré.';
+    errEl.classList.add('show');
+    btn.disabled = false;
+    btn.textContent = 'Réinitialiser';
+  }
+}
+
+// ── Navigation ───────────────────────────────────────────────────
+function passerEtape(n) {
+  document.querySelectorAll('.step').forEach(function(el) { el.classList.remove('active'); });
+  document.getElementById('step-' + n).classList.add('active');
+  document.getElementById('err-box').classList.remove('show');
+
+  var sousTitres = {
+    1: 'Entrez votre identifiant pour recevoir un code',
+    2: 'Entrez le code reçu par SMS et votre nouveau mot de passe',
+    3: ''
+  };
+  document.getElementById('sous-titre').textContent = sousTitres[n] || '';
+}
+
+function retourEtape1() {
+  clearInterval(_timerInterval);
+  passerEtape(1);
+  document.getElementById('btn-etape1').disabled = false;
+  document.getElementById('btn-etape1').textContent = 'Envoyer le code';
+}
+
+// ── Timer ────────────────────────────────────────────────────────
+function demarrerTimer(secondes) {
+  clearInterval(_timerInterval);
+  var restant = secondes;
+  function maj() {
+    var m = Math.floor(restant / 60);
+    var s = restant % 60;
+    document.getElementById('timer-val').textContent = m + ':' + (s < 10 ? '0' : '') + s;
+    if (restant <= 0) {
+      clearInterval(_timerInterval);
+      document.getElementById('timer-txt').textContent = 'Code expiré — renvoyez un nouveau code.';
+    }
+    restant--;
+  }
+  maj();
+  _timerInterval = setInterval(maj, 1000);
+}
+
+// ── Saisie OTP (navigation auto entre cases) ─────────────────────
+document.addEventListener('DOMContentLoaded', function() {
+  var inputs = document.querySelectorAll('#otp-inputs input');
+  inputs.forEach(function(input, i) {
+    input.addEventListener('input', function() {
+      this.value = this.value.replace(/\D/g, '');
+      if (this.value) {
+        this.classList.add('filled');
+        if (i < inputs.length - 1) inputs[i + 1].focus();
+      } else {
+        this.classList.remove('filled');
+      }
+    });
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Backspace' && !this.value && i > 0) {
+        inputs[i - 1].focus();
+        inputs[i - 1].value = '';
+        inputs[i - 1].classList.remove('filled');
+      }
+    });
+    input.addEventListener('paste', function(e) {
+      var txt = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g, '').slice(0, 6);
+      inputs.forEach(function(inp, j) {
+        inp.value = txt[j] || '';
+        inp.classList.toggle('filled', !!txt[j]);
+      });
+      if (txt.length >= 6) inputs[5].focus();
+      e.preventDefault();
+    });
+  });
+});
+</script>
+</body>
+</html>

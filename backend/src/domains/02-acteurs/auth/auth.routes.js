@@ -28,6 +28,18 @@ const limiterAuth = rateLimit({
 });
 
 // ── Schémas de validation ────────────────────────────────────────
+const schemaMotDePasseOublie = z.object({
+  identifiant:        z.string().min(3), // email ou téléphone
+  etablissement_code: z.string().min(2),
+});
+
+const schemaReinitialiserMotDePasse = z.object({
+  identifiant:        z.string().min(3),
+  etablissement_code: z.string().min(2),
+  code:               z.string().length(6).regex(/^\d{6}$/),
+  nouveau_mot_de_passe: z.string().min(8, 'Minimum 8 caractères'),
+});
+
 const schemaConnexion = z.object({
   identifiant:     z.string().min(3),   // email ou téléphone
   mot_de_passe:    z.string().min(6),
@@ -312,6 +324,129 @@ router.delete('/auth/sessions/:id', authentifier, async (req, res, next) => {
 
     if (!updated) throw ApiError.nonTrouve('Session introuvable');
     return ok(res, { message: 'Session révoquée' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── POST /auth/mot-de-passe-oublie — Demander un OTP de reset ───
+router.post('/auth/mot-de-passe-oublie', limiterAuth, valider(schemaMotDePasseOublie), async (req, res, next) => {
+  const { identifiant, etablissement_code } = req.body;
+  const db = getDB();
+
+  try {
+    const etablissement = await db('etablissements')
+      .where({ code_officiel: etablissement_code, actif: true })
+      .first('id', 'nom');
+
+    if (!etablissement) {
+      await new Promise(r => setTimeout(r, 800));
+      return ok(res, { message: 'Si ce compte existe, un code vous a été envoyé.' });
+    }
+
+    const utilisateur = await db('utilisateurs')
+      .where({ etablissement_id: etablissement.id, actif: true })
+      .andWhere(function () {
+        this.where('email', identifiant).orWhere('telephone', identifiant);
+      })
+      .first('id', 'telephone', 'email');
+
+    if (!utilisateur) {
+      await new Promise(r => setTimeout(r, 800));
+      return ok(res, { message: 'Si ce compte existe, un code vous a été envoyé.' });
+    }
+
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+    const telephone = utilisateur.telephone;
+
+    await db('otp_verifications')
+      .where({ telephone, objectif: 'reset_mdp', utilise: false })
+      .update({ utilise: true });
+
+    await db('otp_verifications').insert({
+      id:             uuid(),
+      telephone,
+      code_hash:      codeHash,
+      objectif:       'reset_mdp',
+      utilisateur_id: utilisateur.id,
+      expire_at:      db.raw("NOW() + INTERVAL '15 minutes'"),
+    });
+
+    // En dev : log le code dans la console si SMS non configuré
+    if (process.env.NODE_ENV === 'development' && !process.env.AT_API_KEY) {
+      logger.info(`[DEV] Code reset mot de passe pour ${identifiant} : ${code}`);
+    } else {
+      await envoyerOTP(telephone, code, `Réinitialisation — ${etablissement.nom}`);
+    }
+
+    return ok(res, { message: 'Si ce compte existe, un code vous a été envoyé.' });
+
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── POST /auth/reinitialiser-mot-de-passe — Valider OTP + nouveau MDP ─
+router.post('/auth/reinitialiser-mot-de-passe', limiterAuth, valider(schemaReinitialiserMotDePasse), async (req, res, next) => {
+  const { identifiant, etablissement_code, code, nouveau_mot_de_passe } = req.body;
+  const db = getDB();
+
+  try {
+    const etablissement = await db('etablissements')
+      .where({ code_officiel: etablissement_code, actif: true })
+      .first('id');
+
+    if (!etablissement) throw ApiError.nonAutorise('Établissement inconnu');
+
+    const utilisateur = await db('utilisateurs')
+      .where({ etablissement_id: etablissement.id, actif: true })
+      .andWhere(function () {
+        this.where('email', identifiant).orWhere('telephone', identifiant);
+      })
+      .first('id', 'telephone');
+
+    if (!utilisateur) throw ApiError.otpInvalide('Code invalide ou expiré');
+
+    const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+
+    await db('otp_verifications')
+      .where({ telephone: utilisateur.telephone, objectif: 'reset_mdp', utilise: false })
+      .where('expire_at', '>', db.raw('NOW()'))
+      .increment('nb_tentatives', 1);
+
+    const otp = await db('otp_verifications')
+      .where({
+        telephone:       utilisateur.telephone,
+        code_hash:       codeHash,
+        objectif:        'reset_mdp',
+        utilise:         false,
+      })
+      .where('expire_at', '>', db.raw('NOW()'))
+      .where('nb_tentatives', '<=', 5)
+      .first();
+
+    if (!otp) throw ApiError.otpInvalide('Code invalide, expiré ou trop de tentatives');
+
+    const hash = await bcrypt.hash(nouveau_mot_de_passe, 12);
+
+    await db.transaction(async trx => {
+      await trx('utilisateurs')
+        .where({ id: utilisateur.id })
+        .update({ mot_de_passe_hash: hash, updated_at: trx.raw('NOW()') });
+
+      await trx('otp_verifications').where({ id: otp.id }).update({ utilise: true });
+
+      // Révoquer toutes les sessions actives (sécurité)
+      await trx('sessions')
+        .where({ utilisateur_id: utilisateur.id, revoquee: false })
+        .update({ revoquee: true, motif_revocation: 'reset_mot_de_passe' });
+    });
+
+    logger.info('Mot de passe réinitialisé', { utilisateur_id: utilisateur.id });
+
+    return ok(res, { message: 'Mot de passe modifié. Vous pouvez maintenant vous connecter.' });
+
   } catch (err) {
     next(err);
   }

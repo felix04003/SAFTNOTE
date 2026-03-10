@@ -80,6 +80,7 @@ services:
       STORAGE_ACCESS_KEY: minioadmin
       STORAGE_SECRET_KEY: minioadmin123
       JWT_SECRET: dev_jwt_secret_change_in_production_32chars
+      FRONTEND_URL: http://localhost:3003
     ports:
       - "3010:3000"
     volumes:
