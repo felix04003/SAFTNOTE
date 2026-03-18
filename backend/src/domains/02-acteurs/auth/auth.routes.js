@@ -485,4 +485,127 @@ function detecterAppareil(userAgent = '') {
   return 'desktop';
 }
 
+// ── POST /etablissements/register ────────────────────────────────
+// Endpoint PUBLIC — crée un nouvel établissement + compte directeur
+// Rate-limited comme les autres routes auth
+const limiterRegister = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 heure
+  max:      5,
+  message:  { succes: false, erreur: 'Trop de tentatives — réessayez dans 1 heure', code: 'RATE_LIMIT' },
+  standardHeaders: true,
+  legacyHeaders:   false,
+});
+
+router.post('/etablissements/register', limiterRegister,
+  valider(z.object({
+    // Infos école
+    nom:          z.string().min(3),
+    type:         z.enum(['primaire', 'college', 'lycee', 'primaire_college', 'college_lycee', 'complet', 'franco_arabe', 'professionnel']).default('lycee'),
+    pays:         z.string().min(2).default('Sénégal'),
+    ville:        z.string().min(2),
+    // Compte directeur
+    directeur_nom:       z.string().min(2),
+    directeur_prenom:    z.string().min(2),
+    directeur_telephone: z.string().regex(/^\+?[0-9]{8,15}$/, 'Numéro invalide'),
+    directeur_email:     z.string().email().optional().or(z.literal('')),
+    directeur_mdp:       z.string().min(6),
+    // Année scolaire initiale (optionnel — déduite si absent)
+    annee_libelle:  z.string().regex(/^\d{4}-\d{4}$/).optional(),
+  })),
+  async (req, res, next) => {
+    const db = getDB();
+    const { nom, type, pays, ville,
+            directeur_nom, directeur_prenom,
+            directeur_telephone, directeur_email, directeur_mdp,
+            annee_libelle } = req.body;
+
+    try {
+      // Générer un code officiel unique : initiales + ville + random 4 chiffres
+      const initiales = nom.trim().split(/\s+/).slice(0, 3).map(w => w[0].toUpperCase()).join('');
+      const villeSlug = ville.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 8);
+      const rand4     = String(Math.floor(1000 + Math.random() * 9000));
+      const codeOfficiel = `${initiales}-${villeSlug}-${rand4}`;
+
+      const mdpHash = await bcrypt.hash(directeur_mdp, 10);
+
+      // Calcul de l'année scolaire courante si non fournie
+      const now    = new Date();
+      const annee  = annee_libelle ||
+        (now.getMonth() >= 7
+          ? `${now.getFullYear()}-${now.getFullYear() + 1}`
+          : `${now.getFullYear() - 1}-${now.getFullYear()}`);
+      const [startYear] = annee.split('-').map(Number);
+      const dateDebut = `${startYear}-09-01`;
+      const dateFin   = `${startYear + 1}-07-31`;
+
+      const etablissementId = uuid();
+      const utilisateurId   = uuid();
+      const anneeId         = uuid();
+
+      await db.transaction(async trx => {
+        // 1. Créer l'établissement
+        await trx('etablissements').insert({
+          id:            etablissementId,
+          nom,
+          code_officiel: codeOfficiel,
+          type,
+          pays,
+          ville,
+          actif:         true,
+        });
+
+        // 2. Créer l'année scolaire courante
+        await trx('annees_scolaires').insert({
+          id:               anneeId,
+          etablissement_id: etablissementId,
+          libelle:          annee,
+          date_debut:       dateDebut,
+          date_fin:         dateFin,
+          nb_periodes:      3,
+          est_courante:     true,
+        });
+
+        // 3. Créer le compte directeur
+        await trx('utilisateurs').insert({
+          id:                utilisateurId,
+          etablissement_id:  etablissementId,
+          nom:               directeur_nom,
+          prenom:            directeur_prenom,
+          telephone:         directeur_telephone,
+          email:             directeur_email || null,
+          mot_de_passe_hash: mdpHash,
+          actif:             true,
+        });
+
+        // 4. Affecter le rôle directeur
+        const roleRow = await trx('roles').where({ code: 'directeur' }).first('id');
+        if (!roleRow) throw new Error('Rôle "directeur" introuvable — vérifiez les données de référence');
+
+        await trx('utilisateur_roles').insert({
+          id:               uuid(),
+          utilisateur_id:   utilisateurId,
+          role_id:          roleRow.id,
+          etablissement_id: etablissementId,
+        });
+
+        // 5. Initialiser la configuration du système de notes
+        await trx('configs_systeme_notes')
+          .insert({ etablissement_id: etablissementId })
+          .onConflict('etablissement_id').ignore();
+      });
+
+      logger.info('Nouvel établissement créé', { etablissement_id: etablissementId, nom, code_officiel: codeOfficiel });
+
+      return res.status(201).json({
+        succes: true,
+        data: {
+          etablissement:  { id: etablissementId, nom, code_officiel: codeOfficiel, pays, ville },
+          annee_scolaire: annee,
+          message: `Votre établissement "${nom}" est créé. Conservez précieusement votre code : ${codeOfficiel}`,
+        },
+      });
+    } catch (err) { next(err); }
+  }
+);
+
 module.exports = router;

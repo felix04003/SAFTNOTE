@@ -1,15 +1,13 @@
 'use strict';
 
 /**
- * Page Paramètres — charge les infos établissement depuis l'API,
- * fallback sur les valeurs statiques du HTML.
+ * Page Paramètres — charge et sauvegarde les infos établissement.
  */
 var PageParametres = {
   async charger() {
     try {
       var res = await Api.get('/etablissement');
-      var etab = res.data;
-      this.remplirFormulaire(etab);
+      this.remplirFormulaire(res.data);
       return true;
     } catch (e) {
       console.warn('PageParametres: fallback statique —', e.message);
@@ -18,11 +16,13 @@ var PageParametres = {
   },
 
   remplirFormulaire: function(etab) {
-    function setVal(id, val) { var el = document.getElementById(id); if (el && val != null) el.value = val; }
-    setVal('param-etab-nom',   etab.nom);
-    setVal('param-etab-code',  etab.code_officiel);
-    setVal('param-etab-ville', etab.ville);
-    setVal('param-annee',      etab.annee_courante || (etab.annee_scolaire && etab.annee_scolaire.libelle));
+    var set = function(id, val) { var el = document.getElementById(id); if (el && val != null) el.value = val; };
+    set('param-nom',   etab.nom);
+    set('param-code',  etab.code_officiel);
+    set('param-ville', etab.ville);
+    set('param-tel',   etab.telephone);
+    set('param-email', etab.email);
+    set('param-annee', etab.annee_courante || (etab.annee_scolaire && etab.annee_scolaire.libelle));
     // Clés API — ne pas afficher la vraie valeur, juste indiquer si configurée
     if (etab.at_api_key_configured) {
       var atEl = document.getElementById('param-at-key');
@@ -35,19 +35,34 @@ var PageParametres = {
   },
 
   sauvegarder: async function() {
+    var get = function(id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; };
+    var payload = {};
+    var nom   = get('param-nom');
+    var ville = get('param-ville');
+    var tel   = get('param-tel');
+    var email = get('param-email');
+
+    if (nom)   payload.nom   = nom;
+    if (ville) payload.ville = ville;
+    if (tel)   payload.telephone = tel;
+    if (email) payload.email = email;
+
+    if (!Object.keys(payload).length) return toast('Aucune modification détectée', 'w');
+
+    var btn = document.getElementById('btn-param-save');
+    if (btn) { btn.disabled = true; btn.textContent = 'Enregistrement…'; }
+
     try {
-      var nom = (document.getElementById('param-etab-nom') || {}).value || '';
-      var ville = (document.getElementById('param-etab-ville') || {}).value || '';
-      await Api.put('/etablissement', { nom: nom, ville: ville });
-      toast('Modifications sauvegard\u00E9es', 's');
+      await Api.put('/etablissement', payload);
+      toast('Paramètres enregistrés ✓', 's');
     } catch (e) {
-      toast('Erreur : ' + e.message, 'd');
+      toast('Erreur : ' + (e.message || 'Sauvegarde échouée'), 'd');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '💾 Enregistrer'; }
     }
   },
 
-  init: function() {
-    this.charger();
-  }
+  init: function() { this.charger(); }
 };
 
 PAGE_HOOKS.parametres = function() { PageParametres.init(); };

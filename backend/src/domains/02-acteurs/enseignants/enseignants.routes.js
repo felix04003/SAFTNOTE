@@ -2,12 +2,14 @@
 
 const express  = require('express');
 const { z }    = require('zod');
+const bcrypt   = require('bcryptjs');
+const { v4: uuid } = require('uuid');
 
 const { getDB }      = require('../../../infrastructure/database/pool');
 const { authentifier } = require('../../../middleware/auth.middleware');
 const { exigerPermission, isolerEtablissement } = require('../../../middleware/permission.middleware');
 const { valider }    = require('../../../middleware/validate.middleware');
-const { ok, liste }  = require('../../../utils/reponse');
+const { ok, cree, liste }  = require('../../../utils/reponse');
 const ApiError       = require('../../../utils/ApiError');
 const logger         = require('../../../utils/logger');
 
@@ -35,6 +37,107 @@ async function getAnneeCourante(db, etablissementId) {
   if (!annee) throw ApiError.nonTrouve('Aucune annee scolaire courante');
   return annee;
 }
+
+// ═════════════════════════════════════════════════════════════════
+// POST /enseignants
+// Créer un compte enseignant (directeur uniquement)
+// Mot de passe par défaut = numéro de téléphone (modifiable ensuite)
+// ═════════════════════════════════════════════════════════════════
+router.post('/enseignants', auth, isoler, perm('config.modifier'),
+  valider(z.object({
+    nom:          z.string().min(2),
+    prenom:       z.string().min(2),
+    telephone:    z.string().regex(/^\+?[0-9]{8,15}$/, 'Numéro invalide'),
+    email:        z.string().email().optional().or(z.literal('')),
+    genre:        z.enum(['M', 'F']).optional(),
+    specialite:   z.string().optional(),
+    type_contrat: z.enum(['titulaire', 'vacataire', 'contractuel', 'benevole']).default('titulaire'),
+    mot_de_passe: z.string().min(6).optional(),
+  })),
+  async (req, res, next) => {
+    const db = getDB();
+    try {
+      // Vérifier doublon téléphone dans cet établissement
+      const doublon = await db('utilisateurs')
+        .where({ etablissement_id: req.etablissement_id, telephone: req.body.telephone })
+        .first('id');
+      if (doublon) throw ApiError.validationEchouee('Un utilisateur avec ce numéro existe déjà');
+
+      const mdpBrut = req.body.mot_de_passe || req.body.telephone;
+      const mdpHash = await bcrypt.hash(mdpBrut, 10);
+
+      const result = await db.transaction(async trx => {
+        const utilisateurId = uuid();
+
+        await trx('utilisateurs').insert({
+          id:               utilisateurId,
+          etablissement_id: req.etablissement_id,
+          nom:              req.body.nom,
+          prenom:           req.body.prenom,
+          telephone:        req.body.telephone,
+          email:            req.body.email || null,
+          genre:            req.body.genre,
+          mot_de_passe_hash: mdpHash,
+          actif:            true,
+        });
+
+        const [enseignant] = await trx('enseignants').insert({
+          id:             uuid(),
+          utilisateur_id: utilisateurId,
+          specialite:     req.body.specialite,
+          type_contrat:   req.body.type_contrat || 'titulaire',
+        }).returning('id');
+
+        const roleRow = await trx('roles')
+          .where({ code: 'enseignant' })
+          .first('id');
+        if (!roleRow) throw new Error('Rôle "enseignant" introuvable — vérifiez les données de référence');
+
+        await trx('utilisateur_roles').insert({
+          id:               uuid(),
+          utilisateur_id:   utilisateurId,
+          role_id:          roleRow.id,
+          etablissement_id: req.etablissement_id,
+        });
+
+        return { enseignant_id: enseignant.id, utilisateur_id: utilisateurId };
+      });
+
+      logger.info('Enseignant créé', {
+        enseignant_id:   result.enseignant_id,
+        cree_par:        req.session.utilisateur_id,
+        etablissement_id: req.etablissement_id,
+      });
+
+      return cree(res, {
+        ...result,
+        message: `Compte créé. Mot de passe provisoire : ${mdpBrut}`,
+      });
+    } catch (err) { next(err); }
+  }
+);
+
+// ═════════════════════════════════════════════════════════════════
+// GET /enseignants
+// Liste de tous les enseignants de l'établissement (admin)
+// ═════════════════════════════════════════════════════════════════
+router.get('/enseignants', auth, isoler, perm('config.voir'), async (req, res, next) => {
+  try {
+    const db = getDB();
+    const enseignants = await db('enseignants as ens')
+      .join('utilisateurs as u', 'u.id', 'ens.utilisateur_id')
+      .where({ 'u.etablissement_id': req.etablissement_id, 'u.actif': true })
+      .orderBy(['u.nom', 'u.prenom'])
+      .select(
+        'ens.id',
+        'u.id as utilisateur_id',
+        'u.nom', 'u.prenom', 'u.telephone', 'u.email',
+        'ens.specialite', 'ens.type_contrat', 'ens.matricule_fonct',
+        'u.created_at as date_creation',
+      );
+    return liste(res, enseignants);
+  } catch (err) { next(err); }
+});
 
 // ═════════════════════════════════════════════════════════════════
 // GET /enseignants/moi/classes
