@@ -452,6 +452,11 @@ router.post('/etablissements/register', limiterRegister,
           role_id:          roleRow.id,
           etablissement_id: etablissementId,
         });
+
+        // 5. Initialiser la configuration du système de notes
+        await trx('configs_systeme_notes')
+          .insert({ etablissement_id: etablissementId })
+          .onConflict('etablissement_id').ignore();
       });
 
       logger.info('Nouvel établissement créé', { etablissement_id: etablissementId, nom, code_officiel: codeOfficiel });

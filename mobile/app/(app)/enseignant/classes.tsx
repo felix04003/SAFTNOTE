@@ -77,9 +77,12 @@ export default function ClassesEnseignantScreen() {
 
   async function handleRefresh() {
     setRefresh(true);
-    await syncService.syncComplete();
-    await charger();
-    setRefresh(false);
+    try {
+      await syncService.syncComplete();
+      await charger();
+    } finally {
+      setRefresh(false);
+    }
   }
 
   const filtrees = recherche.trim()
