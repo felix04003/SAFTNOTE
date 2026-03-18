@@ -23,7 +23,7 @@ var PageNotes = {
   async _chargerClasses() {
     try {
       var r = await Api.get('/classes');
-      this._classes = r.data || [];
+      this._classes = r.donnees || [];
     } catch (e) { this._classes = []; }
   },
 
@@ -54,7 +54,7 @@ var PageNotes = {
       if (periodeId) params += (params ? '&' : '?') + 'periode_id=' + periodeId;
 
       var res = await Api.get('/evaluations' + params);
-      this.data = res.data || [];
+      this.data = res.donnees || [];
       this.renderTable(this.data);
     } catch (e) {
       console.warn('PageNotes: erreur chargement —', e.message);
@@ -135,7 +135,7 @@ var PageNotes = {
     selAff.innerHTML = '<option value="">Chargement…</option>';
     try {
       var r = await Api.get('/classes/' + classeId + '/affectations');
-      var aff = r.data || [];
+      var aff = r.donnees || [];
       if (!aff.length) {
         selAff.innerHTML = '<option value="">Aucune affectation pour cette classe</option>';
         return;
@@ -205,7 +205,7 @@ var PageNotes = {
     try {
       // Charger les notes existantes et la liste des élèves en parallèle
       var evalRes  = await Api.get('/evaluations/' + evalId + '/notes');
-      var notesSaisies = evalRes.data || [];
+      var notesSaisies = evalRes.donnees || [];
 
       // Construire un map eleve_id → note existante
       var notesMap = {};
@@ -219,8 +219,8 @@ var PageNotes = {
 
       var elevesRes = evalInfo && evalInfo.classe_id
         ? await Api.get('/classes/' + evalInfo.classe_id + '/eleves')
-        : { data: [] };
-      var eleves = elevesRes.data || [];
+        : { donnees: [] };
+      var eleves = elevesRes.donnees || [];
 
       // Si pas d'élèves mais des notes saisies, utiliser les notes
       if (!eleves.length && notesSaisies.length) {
