@@ -15,8 +15,8 @@
     },
     {
       "name": "dashboard",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": ["serve", "dashboard", "-l", "3001"],
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "3001", "--directory", "dashboard"],
       "port": 3001
     }
   ]

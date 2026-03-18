@@ -231,7 +231,7 @@ async function handleInscription() {
         ville:               ville,
         directeur_prenom:    prenom,
         directeur_nom:       nomDir,
-        directeur_telephone: tel,
+        directeur_telephone: tel.replace(/\s/g, ''),
         directeur_email:     email || undefined,
         directeur_mdp:       mdp,
       }),

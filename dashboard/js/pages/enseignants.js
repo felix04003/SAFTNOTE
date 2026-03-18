@@ -33,7 +33,7 @@ var PageEnseignants = {
     var payload = {
       nom: nom,
       prenom: prenom,
-      telephone: telephone,
+      telephone: telephone.replace(/\s/g, ''),
       email: email || undefined,
       specialite: specialite || undefined,
       type_contrat: contrat || 'titulaire',
