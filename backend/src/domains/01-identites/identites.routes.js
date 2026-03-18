@@ -227,6 +227,45 @@ router.get('/classes', auth, isoler, perm('eleves.voir'), async (req, res, next)
   } catch (err) { next(err); }
 });
 
+// ── GET /annees-scolaires/courante ────────────────────────────────
+router.get('/annees-scolaires/courante', auth, isoler, perm('eleves.voir'), async (req, res, next) => {
+  try {
+    const db = getDB();
+    const annee = await db('annees_scolaires')
+      .where({ etablissement_id: req.etablissement_id, est_courante: true })
+      .first('id', 'libelle', 'date_debut', 'date_fin', 'nb_periodes');
+    if (!annee) throw ApiError.nonTrouve('Aucune année scolaire courante');
+    const periodes = await db('periodes')
+      .where({ annee_scolaire_id: annee.id })
+      .orderBy('numero')
+      .select('id', 'numero', 'libelle', 'date_debut', 'date_fin');
+    return ok(res, { ...annee, periodes });
+  } catch (err) { next(err); }
+});
+
+// ── GET /classes/:classe_id/affectations ──────────────────────────
+router.get('/classes/:classe_id/affectations', auth, isoler, perm('eleves.voir'), async (req, res, next) => {
+  try {
+    const db = getDB();
+    const annee = await db('annees_scolaires')
+      .where({ etablissement_id: req.etablissement_id, est_courante: true })
+      .first('id');
+    if (!annee) return liste(res, []);
+    const affectations = await db('affectations_enseignants as ae')
+      .join('matieres as m',     'm.id', 'ae.matiere_id')
+      .join('enseignants as e',  'e.id', 'ae.enseignant_id')
+      .join('utilisateurs as u', 'u.id', 'e.utilisateur_id')
+      .where({ 'ae.classe_id': req.params.classe_id, 'ae.annee_scolaire_id': annee.id })
+      .orderBy('m.nom')
+      .select(
+        'ae.id as affectation_id',
+        'm.id as matiere_id', 'm.nom as matiere', 'm.couleur_affichage',
+        'u.nom as enseignant_nom', 'u.prenom as enseignant_prenom'
+      );
+    return liste(res, affectations);
+  } catch (err) { next(err); }
+});
+
 // ── GET /classes/:classe_id/eleves ───────────────────────────────
 router.get('/classes/:classe_id/eleves', auth, isoler, perm('eleves.voir'), async (req, res, next) => {
   try {

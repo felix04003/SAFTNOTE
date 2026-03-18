@@ -128,18 +128,15 @@
     <!-- ═══ PAGE NOTES ═══ -->
     <div class="page" id="page-notes">
       <div class="ph">
-        <div><div class="ph-titre">Notes & Évaluations</div><div class="ph-sous">Trimestre 2 · Suivi par classe</div></div>
-        <div style="display:flex;gap:9px">
-          <div class="ft"><div class="ftab actif" onclick="ftSwitch(this)">Toutes</div><div class="ftab" onclick="ftSwitch(this)">Devoirs</div><div class="ftab" onclick="ftSwitch(this)">Compositions</div></div>
-          <button class="btn btn-p">+ Nouvelle évaluation</button>
+        <div><div class="ph-titre">Notes & Évaluations</div><div class="ph-sous" id="ph-sous-notes">Chargement…</div></div>
+        <div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap">
+          <select id="fil-notes-classe"  class="fs" style="min-width:140px" onchange="PageNotes.charger()"><option value="">Toutes les classes</option></select>
+          <select id="fil-notes-periode" class="fs" style="min-width:130px" onchange="PageNotes.charger()"><option value="">Toutes les périodes</option></select>
+          <button class="btn btn-p" onclick="PageNotes.ouvrirModalEval()">+ Nouvelle évaluation</button>
         </div>
       </div>
-      <div class="g2" style="margin-bottom:18px">
-        <div class="carte"><div class="ch"><span>📈</span><span class="ct">Distribution des notes</span></div><div class="cb"><canvas id="c-distrib" height="175"></canvas></div></div>
-        <div class="carte"><div class="ch"><span>📐</span><span class="ct">Moyennes par matière</span></div><div class="cb"><canvas id="c-mat" height="175"></canvas></div></div>
-      </div>
-      <div class="carte"><div class="ch"><span>📋</span><span class="ct">Dernières évaluations</span></div>
-        <div class="tw"><table><thead><tr><th>Matière</th><th>Classe</th><th>Type</th><th>Date</th><th>Enseignant</th><th>Moy. classe</th><th>Min</th><th>Max</th><th>Statut</th></tr></thead><tbody id="tb-eval"></tbody></table></div>
+      <div class="carte"><div class="ch"><span>📋</span><span class="ct">Évaluations</span></div>
+        <div class="tw"><table><thead><tr><th>Matière</th><th>Classe</th><th>Type</th><th>Date</th><th>Enseignant</th><th>Moy. classe</th><th>Min</th><th>Max</th><th>Statut</th><th></th></tr></thead><tbody id="tb-eval"></tbody></table></div>
       </div>
     </div>
 
@@ -367,6 +364,86 @@
     <div class="mf">
       <button class="btn btn-l" onclick="closeModal('m-classe')">Annuler</button>
       <button id="btn-creer-classe" class="btn btn-p" onclick="PageClasses.creer()">Créer la classe</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL NOUVELLE ÉVALUATION ═══ -->
+<div class="mo" id="m-evaluation">
+  <div class="modal">
+    <div class="mh"><span style="font-size:19px">📝</span><span class="mt">Nouvelle évaluation</span><button class="mc" onclick="closeModal('m-evaluation')">✕</button></div>
+    <div class="mb">
+      <div class="fg"><label class="fl">Classe *</label>
+        <select id="ev-classe" class="fs" onchange="PageNotes.onClasseChangeEval()"><option value="">— Choisir une classe —</option></select>
+      </div>
+      <div class="fg"><label class="fl">Matière / Enseignant *</label>
+        <select id="ev-affectation" class="fs"><option value="">— Sélectionnez d'abord une classe —</option></select>
+      </div>
+      <div class="fg"><label class="fl">Période *</label>
+        <select id="ev-periode" class="fs"></select>
+      </div>
+      <div class="g2">
+        <div class="fg"><label class="fl">Type *</label>
+          <select id="ev-type" class="fs">
+            <option value="devoir">Devoir</option>
+            <option value="composition">Composition</option>
+            <option value="interrogation">Interrogation</option>
+            <option value="tp">TP</option>
+            <option value="expose">Exposé</option>
+            <option value="oral">Oral</option>
+            <option value="projet">Projet</option>
+          </select>
+        </div>
+        <div class="fg"><label class="fl">Numéro</label>
+          <input id="ev-numero" class="fi" type="number" min="1" max="5" value="1" placeholder="1">
+        </div>
+      </div>
+      <div class="g2">
+        <div class="fg"><label class="fl">Note maximale</label>
+          <input id="ev-note-max" class="fi" type="number" min="1" max="100" value="20" placeholder="20">
+        </div>
+        <div class="fg"><label class="fl">Date</label>
+          <input id="ev-date" class="fi" type="date">
+        </div>
+      </div>
+      <div class="fg"><label class="fl">Titre (facultatif)</label>
+        <input id="ev-titre" class="fi" placeholder="Ex: Devoir 1 — Algèbre">
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-l" onclick="closeModal('m-evaluation')">Annuler</button>
+      <button id="btn-creer-eval" class="btn btn-p" onclick="PageNotes.creerEvaluation()">Créer l'évaluation</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL SAISIE DES NOTES ═══ -->
+<div class="mo" id="m-notes">
+  <div class="modal" style="max-width:820px;width:95vw">
+    <div class="mh">
+      <span style="font-size:19px">📊</span>
+      <span class="mt" id="notes-modal-titre">Saisie des notes</span>
+      <button class="mc" onclick="closeModal('m-notes')">✕</button>
+    </div>
+    <div class="mb" style="padding:0">
+      <div class="tw" style="max-height:55vh;overflow-y:auto">
+        <table>
+          <thead>
+            <tr>
+              <th style="min-width:180px">Élève</th>
+              <th style="width:70px;text-align:center">Absent</th>
+              <th style="width:110px">Note</th>
+              <th>Appréciation</th>
+            </tr>
+          </thead>
+          <tbody id="tb-notes-saisie"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-l" onclick="closeModal('m-notes')">Fermer</button>
+      <button id="btn-sauver-notes"  class="btn" style="background:var(--bleu);color:#fff" onclick="PageNotes.sauvegarderNotes()">Enregistrer</button>
+      <button id="btn-publier-notes" class="btn btn-p" onclick="PageNotes.publierNotes()">Publier 📱</button>
     </div>
   </div>
 </div>
