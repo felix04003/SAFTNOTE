@@ -221,7 +221,7 @@ async function handleInscription() {
   btn.textContent = 'Création en cours\u2026';
 
   try {
-    var res = await fetch(API_BASE + '/etablissements/register', {
+    var res = await fetch(CONFIG.API_BASE + '/etablissements/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

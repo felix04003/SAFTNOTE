@@ -79,7 +79,12 @@ router.post('/auth/connexion', limiterAuth, valider(schemaConnexion), async (req
       .first('id', 'nom');
 
     if (!etablissement) {
-      await db('tentatives_connexion').insert({ identifiant, ip_address: ip, succes: false, motif_echec: 'etablissement_inconnu' });
+      try {
+        await db('tentatives_connexion').insert({ identifiant, ip_address: ip, succes: false, motif_echec: 'etablissement_inconnu' });
+      } catch (logErr) {
+        // Log silently — ne pas bloquer la réponse
+        logger.warn('tentatives_connexion insert failed', { err: logErr.message });
+      }
       throw ApiError.nonAutorise('Établissement inconnu ou inactif');
     }
 
@@ -92,14 +97,24 @@ router.post('/auth/connexion', limiterAuth, valider(schemaConnexion), async (req
       .first('id', 'nom', 'prenom', 'mot_de_passe_hash', 'email');
 
     if (!utilisateur || !utilisateur.mot_de_passe_hash) {
-      await db('tentatives_connexion').insert({ identifiant, ip_address: ip, succes: false, motif_echec: 'compte_inexistant' });
+      try {
+        await db('tentatives_connexion').insert({ identifiant, ip_address: ip, succes: false, motif_echec: 'compte_inexistant' });
+      } catch (logErr) {
+        // Log silently — ne pas bloquer la réponse
+        logger.warn('tentatives_connexion insert failed', { err: logErr.message });
+      }
       throw ApiError.nonAutorise('Identifiants incorrects');
     }
 
     // 4. Vérifier le mot de passe
     const motDePasseValide = await bcrypt.compare(mot_de_passe, utilisateur.mot_de_passe_hash);
     if (!motDePasseValide) {
-      await db('tentatives_connexion').insert({ identifiant, ip_address: ip, succes: false, motif_echec: 'mot_de_passe_incorrect' });
+      try {
+        await db('tentatives_connexion').insert({ identifiant, ip_address: ip, succes: false, motif_echec: 'mot_de_passe_incorrect' });
+      } catch (logErr) {
+        // Log silently — ne pas bloquer la réponse
+        logger.warn('tentatives_connexion insert failed', { err: logErr.message });
+      }
       throw ApiError.nonAutorise('Identifiants incorrects');
     }
 
@@ -113,7 +128,12 @@ router.post('/auth/connexion', limiterAuth, valider(schemaConnexion), async (req
       .first('r.code', 'r.libelle');
 
     // 7. Logger la tentative réussie
-    await db('tentatives_connexion').insert({ identifiant, ip_address: ip, succes: true });
+    try {
+      await db('tentatives_connexion').insert({ identifiant, ip_address: ip, succes: true });
+    } catch (logErr) {
+      // Log silently — ne pas bloquer la réponse
+      logger.warn('tentatives_connexion insert failed', { err: logErr.message });
+    }
 
     logger.info('Connexion réussie', { utilisateur_id: utilisateur.id, etablissement_id: etablissement.id });
 
@@ -490,7 +510,7 @@ function detecterAppareil(userAgent = '') {
 // Rate-limited comme les autres routes auth
 const limiterRegister = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 heure
-  max:      5,
+  max:      parseInt(process.env.RATE_LIMIT_REGISTER_MAX) || 5,
   message:  { succes: false, erreur: 'Trop de tentatives — réessayez dans 1 heure', code: 'RATE_LIMIT' },
   standardHeaders: true,
   legacyHeaders:   false,
@@ -592,6 +612,20 @@ router.post('/etablissements/register', limiterRegister,
         await trx('configs_systeme_notes')
           .insert({ etablissement_id: etablissementId })
           .onConflict('etablissement_id').ignore();
+
+        // 6. Créer les niveaux par défaut
+        const niveauxDefaut = [
+          { nom: '6ème',      nom_court: '6e',   ordre: 1, cycle: 'college' },
+          { nom: '5ème',      nom_court: '5e',   ordre: 2, cycle: 'college' },
+          { nom: '4ème',      nom_court: '4e',   ordre: 3, cycle: 'college' },
+          { nom: '3ème',      nom_court: '3e',   ordre: 4, cycle: 'college' },
+          { nom: '2nde',      nom_court: '2nde', ordre: 5, cycle: 'lycee'   },
+          { nom: '1ère',      nom_court: '1ere', ordre: 6, cycle: 'lycee'   },
+          { nom: 'Terminale', nom_court: 'Tle',  ordre: 7, cycle: 'lycee'   },
+        ];
+        await trx('niveaux').insert(
+          niveauxDefaut.map(n => ({ id: uuid(), etablissement_id: etablissementId, actif: true, ...n }))
+        );
       });
 
       logger.info('Nouvel établissement créé', { etablissement_id: etablissementId, nom, code_officiel: codeOfficiel });

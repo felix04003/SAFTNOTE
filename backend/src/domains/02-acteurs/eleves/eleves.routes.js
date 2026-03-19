@@ -103,7 +103,7 @@ router.post('/eleves', auth, isoler, perm('eleves.creer'),
       nom:       z.string(),
       prenom:    z.string(),
       telephone: z.string(),
-      lien:      z.enum(['père', 'mère', 'tuteur', 'grand-parent']).default('tuteur'),
+      lien:      z.enum(['pere', 'mere', 'tuteur', 'grand_parent', 'oncle_tante', 'autre']).default('tuteur'),
     }).optional(),
   })),
   async (req, res, next) => {

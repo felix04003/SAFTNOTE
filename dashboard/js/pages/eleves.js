@@ -144,7 +144,33 @@ var PageEleves = {
   },
 
   filtrerClasse: function(classeId) { this.classeId = classeId; this.page = 1; this.charger(); },
-  voirFiche:     function(id) { toast('Fiche élève — fonctionnalité à venir'); },
+  voirFiche: async function(id) {
+    try {
+      var res = await Api.get('/eleves/' + id);
+      var e = res.data;
+      // Récupère les infos supplémentaires depuis le cache local (liste)
+      var cache = (PageEleves.data || []).find(function(x) { return x.id === id; }) || {};
+
+      var set = function(sel, val) {
+        var el = document.getElementById(sel);
+        if (el) el.textContent = val || '—';
+      };
+      var nomComplet = (e.prenom || '') + ' ' + (e.nom || '');
+      var avatarEl = document.getElementById('fiche-avatar');
+      if (avatarEl) { avatarEl.textContent = init2(nomComplet); }
+      set('fiche-nom',       nomComplet);
+      set('fiche-matricule', e.matricule);
+      set('fiche-ddn',       e.date_naissance || '—');
+      set('fiche-genre',     e.genre === 'M' ? 'Masculin' : e.genre === 'F' ? 'Féminin' : '—');
+      set('fiche-classe',    cache.classe || cache.niveau || '—');
+      set('fiche-parent',    cache.parent_nom || '—');
+      set('fiche-parent-tel', cache.telephone || '—');
+
+      openModal('m-fiche-eleve');
+    } catch (e) {
+      toast('Impossible de charger la fiche élève', 'e');
+    }
+  },
 
   ouvrirModal: function() {
     this.chargerClasses();

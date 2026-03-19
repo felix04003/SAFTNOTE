@@ -10,11 +10,12 @@ var PageClasses = {
   async charger() {
     try {
       var res = await Api.get('/classes');
-      this.data = res.data;
-      this.renderGrid(res.data);
-      this.peuplerDropdowns(res.data);
+      var classes = res.data || [];
+      this.data = classes;
+      this.renderGrid(classes);
+      this.peuplerDropdowns(classes);
       var sous = document.getElementById('ph-sous-classes');
-      if (sous) sous.textContent = res.data.length + ' classe' + (res.data.length > 1 ? 's' : '') + ' · Année en cours';
+      if (sous) sous.textContent = classes.length + ' classe' + (classes.length > 1 ? 's' : '') + ' · Année en cours';
       return true;
     } catch (e) {
       console.warn('PageClasses: fallback mock —', e.message);
@@ -136,7 +137,74 @@ var PageClasses = {
     }).join('');
   },
 
-  voirClasse: function(id) { toast('Détail classe — fonctionnalité à venir'); },
+  voirClasse: async function(id) {
+    var classe = this.data.find(function(c) { return c.id === id; });
+    var nom = classe ? (classe.nom_classe || classe.nom || 'Classe') : 'Classe';
+
+    // Remplir le titre et les stats de base
+    document.getElementById('m-detail-classe-titre').textContent = nom;
+    document.getElementById('dc-salle').textContent = (classe && classe.salle_principale) || '—';
+    document.getElementById('dc-nb-eleves').textContent = '…';
+    document.getElementById('dc-nb-matieres').textContent = '…';
+    document.getElementById('dc-affectations').innerHTML = '<span style="color:var(--g400);font-size:13px">Chargement…</span>';
+    document.getElementById('dc-eleves').innerHTML = '<span style="color:var(--g400);font-size:13px">Chargement…</span>';
+
+    openModal('m-detail-classe');
+
+    // Charger élèves et affectations en parallèle
+    try {
+      var results = await Promise.all([
+        Api.get('/classes/' + id + '/eleves'),
+        Api.get('/classes/' + id + '/affectations'),
+      ]);
+      var eleves      = results[0].data || [];
+      var affectations = results[1].data || [];
+
+      // Stats
+      document.getElementById('dc-nb-eleves').textContent  = eleves.length;
+      document.getElementById('dc-nb-matieres').textContent = affectations.length;
+
+      // Affectations
+      var affDiv = document.getElementById('dc-affectations');
+      if (!affectations.length) {
+        affDiv.innerHTML = '<span style="color:var(--g400);font-size:13px">Aucun enseignant affecté</span>';
+      } else {
+        affDiv.innerHTML = affectations.map(function(a) {
+          return '<span style="display:inline-flex;align-items:center;gap:5px;background:var(--g100);border-radius:20px;padding:4px 10px;font-size:12px">' +
+            '<span style="width:8px;height:8px;border-radius:50%;background:' + (a.couleur_affichage || 'var(--vert)') + ';display:inline-block"></span>' +
+            '<b>' + a.matiere + '</b>' +
+            '<span style="color:var(--g500)">— ' + (a.enseignant_prenom || '') + ' ' + (a.enseignant_nom || '') + '</span>' +
+          '</span>';
+        }).join('');
+      }
+
+      // Liste élèves
+      var elvDiv = document.getElementById('dc-eleves');
+      if (!eleves.length) {
+        elvDiv.innerHTML = '<div style="text-align:center;color:var(--g400);padding:20px">Aucun élève inscrit dans cette classe</div>';
+      } else {
+        elvDiv.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
+          '<thead><tr style="border-bottom:1px solid var(--g200)">' +
+            '<th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--g600)">#</th>' +
+            '<th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--g600)">Nom</th>' +
+            '<th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--g600)">Prénom</th>' +
+            '<th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--g600)">Matricule</th>' +
+          '</tr></thead>' +
+          '<tbody>' +
+          eleves.map(function(e, i) {
+            return '<tr style="border-bottom:1px solid var(--g100)">' +
+              '<td style="padding:7px 8px;color:var(--g400)">' + (i + 1) + '</td>' +
+              '<td style="padding:7px 8px;font-weight:600">' + (e.nom || '—') + '</td>' +
+              '<td style="padding:7px 8px">' + (e.prenom || '—') + '</td>' +
+              '<td style="padding:7px 8px;font-family:monospace;font-size:11px;color:var(--g500)">' + (e.matricule || '—') + '</td>' +
+            '</tr>';
+          }).join('') +
+          '</tbody></table>';
+      }
+    } catch (err) {
+      document.getElementById('dc-eleves').innerHTML = '<span style="color:var(--rouge);font-size:13px">Erreur : ' + err.message + '</span>';
+    }
+  },
   init: function() { this.charger(); }
 };
 

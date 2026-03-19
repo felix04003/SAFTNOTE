@@ -252,14 +252,16 @@ router.get('/classes/:classe_id/affectations', auth, isoler, perm('eleves.voir')
       .first('id');
     if (!annee) return liste(res, []);
     const affectations = await db('affectations_enseignants as ae')
-      .join('matieres as m',     'm.id', 'ae.matiere_id')
-      .join('enseignants as e',  'e.id', 'ae.enseignant_id')
-      .join('utilisateurs as u', 'u.id', 'e.utilisateur_id')
+      .join('matieres as m',              'm.id',  'ae.matiere_id')
+      .leftJoin('disciplines_matieres as d', 'd.id', 'm.discipline_id')
+      .join('enseignants as e',           'e.id',  'ae.enseignant_id')
+      .join('utilisateurs as u',          'u.id',  'e.utilisateur_id')
       .where({ 'ae.classe_id': req.params.classe_id, 'ae.annee_scolaire_id': annee.id })
       .orderBy('m.nom')
       .select(
         'ae.id as affectation_id',
-        'm.id as matiere_id', 'm.nom as matiere', 'm.couleur_affichage',
+        'm.id as matiere_id', 'm.nom as matiere',
+        'd.couleur_affichage',
         'u.nom as enseignant_nom', 'u.prenom as enseignant_prenom'
       );
     return liste(res, affectations);

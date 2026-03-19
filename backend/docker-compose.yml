@@ -81,6 +81,8 @@ services:
       STORAGE_SECRET_KEY: minioadmin123
       JWT_SECRET: dev_jwt_secret_change_in_production_32chars
       FRONTEND_URL: http://localhost:3003
+      RATE_LIMIT_AUTH_MAX: "100"
+      RATE_LIMIT_REGISTER_MAX: "50"
     ports:
       - "3010:3000"
     volumes:

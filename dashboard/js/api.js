@@ -30,10 +30,21 @@ var Api = {
 
     // 401 — token expired or invalid
     if (response.status === 401) {
-      localStorage.removeItem(CONFIG.TOKEN_KEY);
-      localStorage.removeItem(CONFIG.USER_KEY);
-      window.location.href = 'login.html';
-      return;
+      // Si on est déjà sur la page login, laisser l'erreur remonter normalement
+      if (!window.location.pathname.includes('login')) {
+        localStorage.removeItem(CONFIG.TOKEN_KEY);
+        localStorage.removeItem(CONFIG.USER_KEY);
+        window.location.href = 'login.html';
+        return;
+      }
+      // On login.html: parse the error and throw (don't redirect/reload)
+      var errJson401;
+      try { errJson401 = await response.json(); } catch(e) { /* ignore */ }
+      throw new ApiError(
+        (errJson401 && errJson401.erreur) || 'Identifiants incorrects',
+        (errJson401 && errJson401.code)   || 'AUTH_FAILED',
+        401
+      );
     }
 
     // 204 No Content

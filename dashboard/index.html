@@ -298,8 +298,12 @@
         <div class="fg"><label class="fl">Téléphone parent</label><input id="m-eleve-parent-tel" class="fi" placeholder="+221 77 000 00 00"></div>
         <div class="fg"><label class="fl">Lien</label>
           <select id="m-eleve-parent-lien" class="fs">
-            <option value="mère">Mère</option><option value="père">Père</option>
-            <option value="tuteur">Tuteur/Tutrice</option><option value="grand-parent">Grand-parent</option>
+            <option value="mere">Mère</option>
+            <option value="pere">Père</option>
+            <option value="tuteur">Tuteur/Tutrice</option>
+            <option value="grand_parent">Grand-parent</option>
+            <option value="oncle_tante">Oncle/Tante</option>
+            <option value="autre">Autre</option>
           </select>
         </div>
       </div>
@@ -307,6 +311,30 @@
     <div class="mf">
       <button class="btn btn-l" onclick="closeModal('m-eleve')">Annuler</button>
       <button id="btn-inscrire-eleve" class="btn btn-p" onclick="PageEleves.inscrire()">Inscrire l'élève</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL FICHE ELEVE -->
+<div class="mo" id="m-fiche-eleve">
+  <div class="modal" style="max-width:480px">
+    <div class="mh"><span style="font-size:19px">🎓</span><span class="mt">Fiche élève</span><button class="mc" onclick="closeModal('m-fiche-eleve')">✕</button></div>
+    <div class="mb">
+      <div style="text-align:center;margin-bottom:18px">
+        <div class="av" style="width:56px;height:56px;font-size:22px;margin:0 auto 8px" id="fiche-avatar">—</div>
+        <div style="font-size:18px;font-weight:700" id="fiche-nom">—</div>
+        <div style="font-size:12px;color:var(--g400);margin-top:3px" id="fiche-matricule">—</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--g400);margin-bottom:3px">Date de naissance</div><div style="font-size:13px" id="fiche-ddn">—</div></div>
+        <div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--g400);margin-bottom:3px">Sexe</div><div style="font-size:13px" id="fiche-genre">—</div></div>
+        <div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--g400);margin-bottom:3px">Classe actuelle</div><div style="font-size:13px" id="fiche-classe">—</div></div>
+        <div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--g400);margin-bottom:3px">Parent / Tuteur</div><div style="font-size:13px" id="fiche-parent">—</div></div>
+        <div style="grid-column:1/-1"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--g400);margin-bottom:3px">Téléphone parent</div><div style="font-size:13px" id="fiche-parent-tel">—</div></div>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-l" onclick="closeModal('m-fiche-eleve')">Fermer</button>
     </div>
   </div>
 </div>
@@ -347,6 +375,51 @@
 </div>
 
 <!-- MODAL CLASSE -->
+<!-- MODAL DETAIL CLASSE -->
+<div class="mo" id="m-detail-classe">
+  <div class="modal" style="max-width:640px">
+    <div class="mh">
+      <span style="font-size:19px">🏫</span>
+      <span class="mt" id="m-detail-classe-titre">Détail classe</span>
+      <button class="mc" onclick="closeModal('m-detail-classe')">✕</button>
+    </div>
+    <div class="mb" style="padding:0">
+      <!-- Stats -->
+      <div style="display:flex;gap:0;border-bottom:1px solid var(--g200)">
+        <div style="flex:1;text-align:center;padding:14px 8px;border-right:1px solid var(--g200)">
+          <div style="font-size:22px;font-weight:800;color:var(--vert)" id="dc-nb-eleves">—</div>
+          <div style="font-size:11px;color:var(--g500);margin-top:2px">Élèves</div>
+        </div>
+        <div style="flex:1;text-align:center;padding:14px 8px;border-right:1px solid var(--g200)">
+          <div style="font-size:22px;font-weight:800;color:var(--bleu)" id="dc-nb-matieres">—</div>
+          <div style="font-size:11px;color:var(--g500);margin-top:2px">Matières</div>
+        </div>
+        <div style="flex:1;text-align:center;padding:14px 8px">
+          <div style="font-size:22px;font-weight:800;color:var(--g600)" id="dc-salle">—</div>
+          <div style="font-size:11px;color:var(--g500);margin-top:2px">Salle</div>
+        </div>
+      </div>
+      <!-- Enseignants affectés -->
+      <div style="padding:14px 18px;border-bottom:1px solid var(--g200)">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--g500);margin-bottom:10px">Enseignants affectés</div>
+        <div id="dc-affectations" style="display:flex;flex-wrap:wrap;gap:6px">
+          <span style="color:var(--g400);font-size:13px">Chargement…</span>
+        </div>
+      </div>
+      <!-- Liste élèves -->
+      <div style="padding:14px 18px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--g500);margin-bottom:10px">Liste des élèves</div>
+        <div id="dc-eleves" style="max-height:280px;overflow-y:auto">
+          <span style="color:var(--g400);font-size:13px">Chargement…</span>
+        </div>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-l" onclick="closeModal('m-detail-classe')">Fermer</button>
+    </div>
+  </div>
+</div>
+
 <div class="mo" id="m-classe">
   <div class="modal" style="max-width:440px">
     <div class="mh"><span style="font-size:19px">🏫</span><span class="mt">Nouvelle classe</span><button class="mc" onclick="closeModal('m-classe')">✕</button></div>
@@ -448,12 +521,51 @@
   </div>
 </div>
 
+<!-- MODAL DETAIL BULLETIN -->
+<div class="mo" id="m-detail-bulletin">
+  <div class="modal" style="max-width:860px;width:96vw">
+    <div class="mh">
+      <span style="font-size:19px">📋</span>
+      <span class="mt" id="bull-modal-titre">Bulletins</span>
+      <button class="mc" onclick="closeModal('m-detail-bulletin')">✕</button>
+    </div>
+    <div class="mb" style="padding:0" id="bull-modal-corps">
+      <p style="text-align:center;padding:30px;color:var(--g400)">Chargement…</p>
+    </div>
+    <div class="mf">
+      <button class="btn btn-l" onclick="closeModal('m-detail-bulletin')">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL JUSTIFIER ABSENCE -->
+<div class="mo" id="m-justifier-absence">
+  <div class="modal" style="max-width:420px">
+    <div class="mh">
+      <span style="font-size:19px">✅</span>
+      <span class="mt">Justifier l'absence</span>
+      <button class="mc" onclick="closeModal('m-justifier-absence')">✕</button>
+    </div>
+    <div class="mb">
+      <div class="fg">
+        <label class="fl">Motif de justification *</label>
+        <textarea id="just-motif" class="fi" rows="3" placeholder="Ex : Certificat médical, convocation, voyage familial…" style="resize:vertical;height:80px"></textarea>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-l" onclick="closeModal('m-justifier-absence')">Annuler</button>
+      <button id="btn-justifier-abs" class="btn btn-p" onclick="PageAbsences.confirmerJustification()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
 <div class="tc" id="tc"></div>
 
 <!-- JS — ordre important -->
 <script src="js/config.js"></script>
 <script src="js/api.js"></script>
 <script src="js/auth.js"></script>
+<script>if (!Auth.isAuthenticated()) { window.location.href = 'login.html'; }</script>
 <script src="js/ui.js"></script>
 <script src="js/router.js"></script>
 <script src="js/data-mock.js"></script>
