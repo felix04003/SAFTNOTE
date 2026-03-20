@@ -193,6 +193,7 @@ var PageAffectations = {
       toast('Affectation ajoutée ✓', 's');
       document.getElementById('m-aff-classe').value = '';
       document.getElementById('m-aff-matiere').value = '';
+      var cb = document.getElementById('m-aff-titulaire'); if (cb) cb.checked = true;
       await this.chargerAffectations();
     } catch (e) {
       toast('Erreur : ' + (e.message || 'Ajout échoué'), 'd');
