@@ -263,6 +263,19 @@
               <button class="btn btn-d btn-sm" onclick="toast('Journal exporté','s')">📥 Journal d'audit</button>
             </div>
           </div>
+          <!-- Matières -->
+          <div class="carte" style="margin-top:18px">
+            <div class="ch">
+              <span>📚</span>
+              <span class="ct">Matières</span>
+              <button class="btn btn-p btn-sm" onclick="openModal('m-matiere')" style="margin-left:auto">+ Nouvelle matière</button>
+            </div>
+            <div class="cb">
+              <div id="param-matieres-liste" style="min-height:40px">
+                <div style="color:var(--g400);font-size:13px;padding:10px">Chargement…</div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -559,13 +572,84 @@
   </div>
 </div>
 
+<!-- MODAL AFFECTATIONS ENSEIGNANT -->
+<div class="mo" id="m-affectations">
+  <div class="modal" style="max-width:560px">
+    <div class="mh">
+      <span style="font-size:19px">📋</span>
+      <span class="mt" id="m-aff-titre">Affectations</span>
+      <button class="mc" onclick="closeModal('m-affectations')">✕</button>
+    </div>
+    <div class="mb">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--g500);margin-bottom:10px">Ajouter une affectation</div>
+      <div class="fr">
+        <div class="fg">
+          <label class="fl">Classe *</label>
+          <select id="m-aff-classe" class="fs"><option value="">Chargement…</option></select>
+        </div>
+        <div class="fg">
+          <label class="fl">Matière *</label>
+          <select id="m-aff-matiere" class="fs"><option value="">Chargement…</option></select>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+          <input type="checkbox" id="m-aff-titulaire" checked> Titulaire de classe
+        </label>
+        <button id="btn-ajouter-aff" class="btn btn-p btn-sm" onclick="PageAffectations.ajouter()">+ Ajouter l'affectation</button>
+      </div>
+      <hr style="border:none;border-top:1px solid var(--g200);margin-bottom:14px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--g500);margin-bottom:10px" id="m-aff-annee-label">Affectations actuelles</div>
+      <div id="m-aff-liste" style="min-height:40px">
+        <div style="color:var(--g400);font-size:13px;text-align:center;padding:16px">Chargement…</div>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-l" onclick="closeModal('m-affectations')">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL NOUVELLE MATIÈRE -->
+<div class="mo" id="m-matiere">
+  <div class="modal" style="max-width:460px">
+    <div class="mh">
+      <span style="font-size:19px">📚</span>
+      <span class="mt">Nouvelle matière</span>
+      <button class="mc" onclick="closeModal('m-matiere')">✕</button>
+    </div>
+    <div class="mb">
+      <div class="fr">
+        <div class="fg"><label class="fl">Nom *</label><input id="m-mat-nom" class="fi" placeholder="Mathématiques"></div>
+        <div class="fg"><label class="fl">Nom court</label><input id="m-mat-court" class="fi" placeholder="Maths"></div>
+      </div>
+      <div class="fr">
+        <div class="fg"><label class="fl">Code *</label><input id="m-mat-code" class="fi" placeholder="MATH" style="text-transform:uppercase"></div>
+        <div class="fg">
+          <label class="fl">Compte dans moyenne</label>
+          <select id="m-mat-moyenne" class="fs"><option value="true">Oui</option><option value="false">Non</option></select>
+        </div>
+      </div>
+      <div class="fg">
+        <label class="fl">Discipline parente <span style="color:var(--g400)">(optionnel)</span></label>
+        <select id="m-mat-discipline" class="fs">
+          <option value="">— Aucune discipline —</option>
+        </select>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-l" onclick="closeModal('m-matiere')">Annuler</button>
+      <button id="btn-creer-matiere" class="btn btn-p" onclick="PageParametres.creerMatiere()">Créer la matière</button>
+    </div>
+  </div>
+</div>
+
 <div class="tc" id="tc"></div>
 
 <!-- JS — ordre important -->
 <script src="js/config.js"></script>
 <script src="js/api.js"></script>
 <script src="js/auth.js"></script>
-<script>if (!Auth.isAuthenticated()) { window.location.href = 'login.html'; }</script>
 <script src="js/ui.js"></script>
 <script src="js/router.js"></script>
 <script src="js/data-mock.js"></script>

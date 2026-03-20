@@ -285,4 +285,114 @@ router.get('/classes/:classe_id/eleves', auth, isoler, perm('eleves.voir'), asyn
   } catch (err) { next(err); }
 });
 
+// ── GET /enseignants/:enseignant_id/affectations ──────────────────
+router.get('/enseignants/:enseignant_id/affectations', auth, isoler, perm('config.voir'), async (req, res, next) => {
+  try {
+    const db = getDB();
+    const annee = await db('annees_scolaires')
+      .where({ etablissement_id: req.etablissement_id, est_courante: true })
+      .first('id', 'libelle');
+    if (!annee) throw ApiError.nonTrouve('Aucune année scolaire courante');
+
+    const affectations = await db('affectations_enseignants as ae')
+      .join('matieres as m',  'm.id',  'ae.matiere_id')
+      .join('classes as c',   'c.id',  'ae.classe_id')
+      .join('niveaux as n',   'n.id',  'c.niveau_id')
+      .where({
+        'ae.enseignant_id':     req.params.enseignant_id,
+        'ae.annee_scolaire_id': annee.id,
+        'm.etablissement_id':   req.etablissement_id,
+      })
+      .select(
+        'ae.id', 'ae.est_titulaire',
+        'm.id as matiere_id', 'm.nom as matiere',
+        'c.id as classe_id',  'c.nom as classe',
+        'n.nom as niveau', 'n.ordre'
+      )
+      .orderBy(['n.ordre', 'm.nom']);
+
+    return ok(res, { annee: annee.libelle, affectations });
+  } catch (err) { next(err); }
+});
+
+// ── POST /affectations ────────────────────────────────────────────
+router.post('/affectations', auth, isoler, perm('config.modifier'),
+  valider(z.object({
+    enseignant_id: z.string().uuid('enseignant_id doit être un UUID'),
+    classe_id:     z.string().uuid('classe_id doit être un UUID'),
+    matiere_id:    z.string().uuid('matiere_id doit être un UUID'),
+    est_titulaire: z.boolean().default(true),
+  })),
+  async (req, res, next) => {
+    try {
+      const db = getDB();
+
+      const annee = await db('annees_scolaires')
+        .where({ etablissement_id: req.etablissement_id, est_courante: true })
+        .first('id');
+      if (!annee) throw ApiError.nonTrouve('Aucune année scolaire courante');
+
+      const enseignant = await db('enseignants as e')
+        .join('utilisateurs as u', 'u.id', 'e.utilisateur_id')
+        .where({ 'e.id': req.body.enseignant_id, 'u.etablissement_id': req.etablissement_id })
+        .first('e.id');
+      if (!enseignant) throw ApiError.nonTrouve('Enseignant introuvable');
+
+      const classe = await db('classes as c')
+        .join('annees_scolaires as a', 'a.id', 'c.annee_scolaire_id')
+        .where({ 'c.id': req.body.classe_id, 'a.etablissement_id': req.etablissement_id })
+        .first('c.id');
+      if (!classe) throw ApiError.nonTrouve('Classe introuvable');
+
+      const matiere = await db('matieres')
+        .where({ id: req.body.matiere_id, etablissement_id: req.etablissement_id })
+        .first('id');
+      if (!matiere) throw ApiError.nonTrouve('Matière introuvable');
+
+      const existant = await db('affectations_enseignants')
+        .where({
+          classe_id:          req.body.classe_id,
+          matiere_id:         req.body.matiere_id,
+          annee_scolaire_id:  annee.id,
+        })
+        .first('id');
+      if (existant) throw ApiError.conflit('Cette matière est déjà assignée dans cette classe pour cette année');
+
+      const [affectation] = await db('affectations_enseignants')
+        .insert({
+          id:                 uuid(),
+          enseignant_id:      req.body.enseignant_id,
+          classe_id:          req.body.classe_id,
+          matiere_id:         req.body.matiere_id,
+          annee_scolaire_id:  annee.id,
+          est_titulaire:      req.body.est_titulaire,
+        })
+        .returning('*');
+
+      return cree(res, affectation);
+    } catch (err) { next(err); }
+  }
+);
+
+// ── DELETE /affectations/:id ──────────────────────────────────────
+router.delete('/affectations/:id', auth, isoler, perm('config.modifier'), async (req, res, next) => {
+  try {
+    const db = getDB();
+
+    const affectation = await db('affectations_enseignants as ae')
+      .join('matieres as m', 'm.id', 'ae.matiere_id')
+      .where({ 'ae.id': req.params.id, 'm.etablissement_id': req.etablissement_id })
+      .first('ae.id');
+    if (!affectation) throw ApiError.nonTrouve('Affectation introuvable');
+
+    const evalExist = await db('evaluations')
+      .where({ affectation_id: req.params.id })
+      .first('id');
+    if (evalExist) throw ApiError.conflit('Impossible de supprimer : des évaluations existent pour cette affectation');
+
+    await db('affectations_enseignants').where({ id: req.params.id }).del();
+    return vide(res);
+  } catch (err) { next(err); }
+});
+
 module.exports = router;
