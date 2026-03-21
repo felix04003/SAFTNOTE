@@ -9,7 +9,15 @@ var Auth = {
     });
     localStorage.setItem(CONFIG.TOKEN_KEY, res.data.token);
     localStorage.setItem(CONFIG.USER_KEY, JSON.stringify(res.data.utilisateur));
-    window.location.href = 'index.html';
+    var role = (res.data.utilisateur && res.data.utilisateur.role) ? res.data.utilisateur.role.toLowerCase() : '';
+    var rolesAdmin = ['directeur', 'censeur', 'admin', 'super_admin'];
+    var estAdminSeul = rolesAdmin.some(function(r) { return role === r; });
+    var estEnseignant = role === 'enseignant';
+    if (estEnseignant && !estAdminSeul) {
+      window.location.href = 'enseignant.html';
+    } else {
+      window.location.href = 'index.html';
+    }
   },
 
   async logout() {
