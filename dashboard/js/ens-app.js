@@ -4,6 +4,14 @@ document.addEventListener('DOMContentLoaded', function() {
   // Vérifier l'authentification
   if (!Auth.requireAuth()) return;
 
+  // Vérifier que l'utilisateur est bien un enseignant
+  var user = Auth.getUser();
+  var role = (user && user.role) ? user.role.toLowerCase() : '';
+  if (role !== 'enseignant') {
+    window.location.href = 'index.html';
+    return;
+  }
+
   // Peupler la sidebar avec le nom/rôle de l'enseignant
   Auth.populateSidebar();
 
