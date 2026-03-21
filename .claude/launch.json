@@ -5,7 +5,9 @@
       "name": "backend-api",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
-      "port": 3010
+      "cwd": "backend",
+      "port": 3010,
+      "autoPort": false
     },
     {
       "name": "mobile-expo",

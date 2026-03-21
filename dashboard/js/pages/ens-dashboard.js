@@ -44,6 +44,8 @@ var PageEnsDashboard = {
     try {
       var res = await Api.get('/enseignants/moi/edt');
       var edt = (res.data && res.data.emploi_du_temps) || [];
+      // JS getDay(): 0=Dim, 1=Lun, ..., 6=Sam — Backend jour: 1=Lun, ..., 6=Sam
+      // Values match directly for Mon-Sat; Sunday (0) returns no match (correct — no classes)
       var jourJS = new Date().getDay();
       var jourAuj = edt.find(function(j) { return j.jour === jourJS; });
       var creneaux = (jourAuj && jourAuj.creneaux) || [];

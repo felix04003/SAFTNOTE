@@ -30,8 +30,8 @@ var PageEnsEdt = {
 
     // Mettre à jour l'année scolaire
     var anneeEl = document.getElementById('ens-edt-annee');
-    if (anneeEl && data.annee_scolaire) {
-      anneeEl.textContent = data.annee_scolaire;
+    if (anneeEl && data.annee) {
+      anneeEl.textContent = data.annee;
     }
 
     var jours = [''].concat(data.emploi_du_temps.map(function(j) { return j.nom; }));
