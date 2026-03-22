@@ -31,7 +31,7 @@ var PageEnsDiscipline = {
     if (sel) {
       sel.innerHTML = '<option value="">Toutes mes classes</option>' +
         this._classes.map(function(c) {
-          return '<option value="' + c.classe_id + '">' + c.classe + '</option>';
+          return '<option value="' + c.classe_id + '">' + _esc(c.classe) + '</option>';
         }).join('');
     }
   },
@@ -108,7 +108,7 @@ var PageEnsDiscipline = {
     if (sel) {
       sel.innerHTML = '<option value="">\u2014 Choisir une classe \u2014</option>' +
         this._classes.map(function(c) {
-          return '<option value="' + c.classe_id + '">' + c.classe + '</option>';
+          return '<option value="' + c.classe_id + '">' + _esc(c.classe) + '</option>';
         }).join('');
     }
     // Reset élève
@@ -151,7 +151,7 @@ var PageEnsDiscipline = {
         eleves.map(function(el) {
           // inscription_id est requis par POST /discipline/sanctions
           var val = el.inscription_id || el.id || '';
-          return '<option value="' + val + '">' + (el.nom || '') + ' ' + (el.prenom || '') + '</option>';
+          return '<option value="' + val + '">' + _esc(el.nom) + ' ' + _esc(el.prenom) + '</option>';
         }).join('');
       selEl.disabled = false;
     } catch (e) {
@@ -192,5 +192,9 @@ var PageEnsDiscipline = {
     }
   },
 };
+
+function _esc(s) {
+  return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 
 PAGE_HOOKS['ens-discipline'] = function() { PageEnsDiscipline.init(); };
