@@ -10,6 +10,7 @@ const { exigerPermission, isolerEtablissement } = require('../../../middleware/p
 const { valider }    = require('../../../middleware/validate.middleware');
 const { ok, cree, liste, paginee, getPagination } = require('../../../utils/reponse');
 const ApiError       = require('../../../utils/ApiError');
+const { invalidatePattern } = require('../../../infrastructure/cache/redis');
 
 const router = express.Router();
 const auth   = authentifier;
@@ -197,6 +198,7 @@ router.post('/eleves', auth, isoler, perm('eleves.creer'),
         return { utilisateur_id: utilisateurId, inscription_id: inscriptionId };
       });
 
+      await invalidatePattern(`classe_eleves:${req.body.classe_id}`).catch(() => {});
       return cree(res, result);
     } catch (err) { next(err); }
   }
