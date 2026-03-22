@@ -45,7 +45,8 @@ var PageEnsNotes = {
     if (PageEnsNotes._filtreClasseId) sel.value = PageEnsNotes._filtreClasseId;
   },
 
-  // Appelé depuis ens-classes (raccourci)
+  // Appelé depuis ens-classes (raccourci) — DOIT être suivi d'une navigation goto('ens-notes')
+  // Le filtre est appliqué lors du prochain init() (charger() + _peuplerFiltreClasses())
   filtrerParClasse: function(classeId) {
     this._filtreClasseId = classeId;
   },
@@ -90,7 +91,7 @@ var PageEnsNotes = {
           : '<span class="badge bd">\u00c0 saisir</span>';
 
       var titre = (ev.titre || (ev.type + ' ' + (ev.numero || ''))) + ' \u2014 ' + (ev.classe || '');
-      var titreEsc = titre.replace(/'/g, "\\'");
+      var titreEsc = (titre || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
 
       return '<tr style="cursor:pointer" onclick="PageEnsNotes.ouvrirSaisie(\'' + ev.id + '\',\'' + titreEsc + '\')">' +
         '<td class="nc">' + (ev.matiere || '\u2014') + '</td>' +
@@ -321,6 +322,7 @@ var PageEnsNotes = {
       await PageEnsNotes.charger();
     } catch (e) {
       toast(e.message || 'Erreur d\'enregistrement', 'e');
+      throw e;
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = 'Enregistrer'; }
     }
