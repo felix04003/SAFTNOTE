@@ -30,6 +30,8 @@ var PageEnsClasses = {
       var groupes = {};
       this._data.forEach(function(c) {
         if (!groupes[c.classe_id]) {
+          // NOTE: effectif, salle_principale, est_titulaire pris du premier enregistrement
+          // Suppose que ces champs sont au niveau classe (pas par affectation)
           groupes[c.classe_id] = { classe_id: c.classe_id, classe: c.classe, niveau: c.niveau, cycle: c.cycle, salle_principale: c.salle_principale, effectif: c.effectif, est_titulaire: c.est_titulaire, matieres: [] };
         }
         groupes[c.classe_id].matieres.push(c.matiere);

@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EcoleManager — Espace Enseignant</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sb-logo">
+    <div class="sb-mark">EM</div>
+    <div class="sb-app">EcoleManager</div>
+    <div class="sb-etab" id="sb-etab-nom"></div>
+  </div>
+  <nav class="sb-nav">
+    <div class="nav-sec">Général</div>
+    <a class="nav-item actif" data-page="ens-dashboard" onclick="goto('ens-dashboard')"><span class="nav-ico">📊</span>Tableau de bord</a>
+    <div class="nav-sec">Mes activités</div>
+    <a class="nav-item" data-page="ens-classes" onclick="goto('ens-classes')"><span class="nav-ico">🏫</span>Mes classes</a>
+    <a class="nav-item" data-page="ens-notes" onclick="goto('ens-notes')"><span class="nav-ico">📝</span>Mes notes</a>
+    <a class="nav-item" data-page="ens-appel" onclick="goto('ens-appel')"><span class="nav-ico">✅</span>Faire l'appel</a>
+    <a class="nav-item" data-page="ens-edt" onclick="goto('ens-edt')"><span class="nav-ico">🗓️</span>Mon EDT</a>
+    <div class="nav-sec">Vie scolaire</div>
+    <a class="nav-item" data-page="ens-discipline" onclick="goto('ens-discipline')"><span class="nav-ico">⚠️</span>Discipline</a>
+  </nav>
+  <div class="sb-user">
+    <div class="u-avatar" id="sb-user-avatar">?</div>
+    <div style="flex:1"><div class="u-name" id="sb-user-nom"></div><div class="u-role" id="sb-user-role"></div></div>
+    <a href="#" id="btn-logout" title="Déconnexion" style="color:rgba(255,255,255,.4);font-size:16px;text-decoration:none;padding:4px">🚪</a>
+  </div>
+</aside>
+
+<main class="main">
+  <header class="topbar">
+    <span class="tb-titre" id="tb-titre">Tableau de bord</span>
+    <span class="tb-annee" id="tb-annee">📅 —</span>
+    <div class="tb-notif" title="Notifications">🔔<span class="notif-dot"></span></div>
+  </header>
+
+  <div class="content">
+
+    <!-- ═══ PAGE DASHBOARD ENSEIGNANT ═══ -->
+    <div class="page active" id="page-ens-dashboard">
+      <div class="ph">
+        <div>
+          <div class="ph-titre" id="ens-greeting">Bonjour 👋</div>
+          <div class="ph-sous" id="ph-sous-date"></div>
+        </div>
+        <button class="btn btn-p" onclick="goto('ens-appel')">✅ Faire l'appel</button>
+      </div>
+
+      <!-- 3 KPI cards -->
+      <div class="sg" style="grid-template-columns:repeat(3,1fr)">
+        <div class="sc" style="--c:var(--vert)">
+          <div class="sc-ico">🏫</div>
+          <div class="sc-val" id="ens-kpi-classes">—</div>
+          <div class="sc-lbl">Classes affectées</div>
+        </div>
+        <div class="sc" style="--c:var(--bleu)">
+          <div class="sc-ico">🎓</div>
+          <div class="sc-val" id="ens-kpi-eleves">—</div>
+          <div class="sc-lbl">Élèves au total</div>
+        </div>
+        <div class="sc" style="--c:var(--orange)">
+          <div class="sc-ico">📝</div>
+          <div class="sc-val" id="ens-kpi-saisir">—</div>
+          <div class="sc-lbl">Évals à saisir</div>
+        </div>
+      </div>
+
+      <!-- 2-column urgent actions -->
+      <div class="g2">
+        <div class="carte">
+          <div class="ch"><span>⏰</span><span class="ct">Appels à faire aujourd'hui</span></div>
+          <div id="ens-appels-jour" style="padding:12px 18px"></div>
+        </div>
+        <div class="carte">
+          <div class="ch"><span>⚠️</span><span class="ct">Notes en attente</span><a class="ca" onclick="goto('ens-notes')">Tout voir →</a></div>
+          <div id="ens-notes-attente" style="padding:12px 18px"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ PAGE MES CLASSES ═══ -->
+    <div class="page" id="page-ens-classes">
+      <div class="ph">
+        <div><div class="ph-titre">Mes classes</div><div class="ph-sous" id="ens-classes-sous">—</div></div>
+      </div>
+      <div id="ens-classes-grid" class="g3"></div>
+    </div>
+
+    <!-- ═══ PAGE MES NOTES ═══ -->
+    <div class="page" id="page-ens-notes">
+      <div class="ph">
+        <div><div class="ph-titre">Mes notes & évaluations</div></div>
+        <button class="btn btn-p" onclick="PageEnsNotes.ouvrirModalEval()">+ Nouvelle évaluation</button>
+      </div>
+      <div style="display:flex;gap:10px;margin-bottom:16px">
+        <select class="fi" id="ens-fil-classe" onchange="PageEnsNotes.filtrerClasse(this.value)" style="flex:1">
+          <option value="">Toutes mes classes</option>
+        </select>
+        <select class="fi" id="ens-fil-statut" onchange="PageEnsNotes.filtrerStatut(this.value)" style="width:180px">
+          <option value="">Tous les statuts</option>
+          <option value="non_saisie">À saisir</option>
+          <option value="brouillon">Brouillon</option>
+          <option value="publiee">Publiées</option>
+        </select>
+      </div>
+      <div class="carte">
+        <div class="tw">
+          <table>
+            <thead><tr>
+              <th>Matière</th><th>Classe</th><th>Type</th><th>Date</th>
+              <th>Moy. classe</th><th>Statut</th><th>Action</th>
+            </tr></thead>
+            <tbody id="tb-ens-eval"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ PAGE FAIRE L'APPEL ═══ -->
+    <div class="page" id="page-ens-appel">
+      <div class="ph">
+        <div><div class="ph-titre">Faire l'appel</div><div class="ph-sous" id="appel-date-aujourd-hui"></div></div>
+      </div>
+
+      <!-- Étape 1 : liste des créneaux du jour -->
+      <div id="appel-etape-creneaux">
+        <div class="carte">
+          <div class="ch"><span>🗓️</span><span class="ct">Créneaux d'aujourd'hui</span></div>
+          <div id="appel-creneaux-liste" style="padding:16px 18px"></div>
+        </div>
+      </div>
+
+      <!-- Étape 2 : grille d'appel (masquée par défaut) -->
+      <div id="appel-etape-grille" style="display:none">
+        <div class="ph" style="margin-bottom:14px">
+          <div>
+            <div class="ph-titre" id="appel-grille-titre">—</div>
+            <div class="ph-sous" id="appel-grille-sous">—</div>
+          </div>
+          <button class="btn btn-l" onclick="PageEnsAppel.retourCreneaux()">← Retour</button>
+        </div>
+        <div class="carte">
+          <div class="ch">
+            <span>✅</span>
+            <span class="ct" id="appel-grille-nb">— élèves</span>
+            <button class="btn btn-p btn-sm" onclick="PageEnsAppel.marquerTousPresents()" style="margin-left:auto">Tous présents</button>
+          </div>
+          <div class="tw">
+            <table>
+              <thead><tr>
+                <th>Élève</th>
+                <th style="text-align:center">Présent</th>
+                <th style="text-align:center">Absent</th>
+                <th style="text-align:center">Retard</th>
+                <th>Min. retard</th>
+              </tr></thead>
+              <tbody id="tb-appel-grille"></tbody>
+            </table>
+          </div>
+          <div style="padding:14px 18px;border-top:1px solid var(--g100);display:flex;justify-content:flex-end;gap:10px">
+            <button class="btn btn-p" id="btn-appel-soumettre" onclick="PageEnsAppel.soumettre()">Soumettre l'appel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ PAGE MON EDT ═══ -->
+    <div class="page" id="page-ens-edt">
+      <div class="ph">
+        <div><div class="ph-titre">Mon emploi du temps</div><div class="ph-sous" id="ens-edt-annee"></div></div>
+      </div>
+      <div class="carte">
+        <div id="ens-edt-grid" style="padding:16px"></div>
+      </div>
+    </div>
+
+    <!-- ═══ PAGE DISCIPLINE ═══ -->
+    <div class="page" id="page-ens-discipline">
+      <div class="ph">
+        <div><div class="ph-titre">Discipline</div></div>
+        <button class="btn btn-p" onclick="PageEnsDiscipline.ouvrirModal()">+ Signaler une sanction</button>
+      </div>
+      <div style="display:flex;gap:10px;margin-bottom:16px">
+        <select class="fi" id="ens-disc-fil-classe" onchange="PageEnsDiscipline.filtrerClasse(this.value)" style="flex:1">
+          <option value="">Toutes mes classes</option>
+        </select>
+        <select class="fi" id="ens-disc-fil-type" onchange="PageEnsDiscipline.filtrerType(this.value)" style="width:200px">
+          <option value="">Tous les types</option>
+          <option value="avertissement_oral">Avertissement oral</option>
+          <option value="avertissement_ecrit">Avertissement écrit</option>
+          <option value="retenue">Retenue</option>
+          <option value="renvoi_temporaire">Renvoi temporaire</option>
+        </select>
+      </div>
+      <div class="carte">
+        <div class="tw">
+          <table>
+            <thead><tr>
+              <th>Élève</th><th>Classe</th><th>Type</th><th>Date</th><th>Motif</th><th>Parent notifié</th>
+            </tr></thead>
+            <tbody id="tb-ens-sanctions"></tbody>
+          </table>
+        </div>
+        <div id="pag-ens-disc" style="display:flex;justify-content:space-between;align-items:center;padding:12px 18px;border-top:1px solid var(--g100)"></div>
+      </div>
+    </div>
+
+  </div><!-- /.content -->
+
+</main>
+
+<!-- ═══ MODAL NOUVELLE ÉVALUATION ═══ -->
+<div class="mo" id="m-ens-evaluation">
+  <div class="modal">
+    <div class="mh"><span style="font-size:19px">📝</span><span class="mt">Nouvelle évaluation</span><button class="mc" onclick="closeModal('m-ens-evaluation')">✕</button></div>
+    <div class="mb">
+      <div class="fg">
+        <label class="fl">Classe *</label>
+        <select class="fs" id="ens-ev-classe" onchange="PageEnsNotes.onClasseChangeEval()">
+          <option value="">Choisir une classe…</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label class="fl">Matière *</label>
+        <select class="fs" id="ens-ev-affectation">
+          <option value="">Sélectionner d'abord une classe</option>
+        </select>
+      </div>
+      <div class="fr">
+        <div class="fg">
+          <label class="fl">Type *</label>
+          <select class="fs" id="ens-ev-type">
+            <option value="devoir">Devoir</option>
+            <option value="interro">Interrogation</option>
+            <option value="examen">Examen</option>
+            <option value="tp">TP</option>
+            <option value="oral">Oral</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label class="fl">Numéro</label>
+          <input class="fi" id="ens-ev-numero" type="number" min="1" placeholder="1">
+        </div>
+      </div>
+      <div class="fg">
+        <label class="fl">Titre (optionnel)</label>
+        <input class="fi" id="ens-ev-titre" placeholder="Ex : Devoir sur le chapitre 3">
+      </div>
+      <div class="fr">
+        <div class="fg">
+          <label class="fl">Note maximale *</label>
+          <input class="fi" id="ens-ev-note-max" type="number" min="1" max="100" value="20">
+        </div>
+        <div class="fg">
+          <label class="fl">Date *</label>
+          <input class="fi" id="ens-ev-date" type="date">
+        </div>
+      </div>
+      <div class="fg">
+        <label class="fl">Période *</label>
+        <select class="fs" id="ens-ev-periode">
+          <option value="trimestre_1">Trimestre 1</option>
+          <option value="trimestre_2">Trimestre 2</option>
+          <option value="trimestre_3">Trimestre 3</option>
+        </select>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-l" onclick="closeModal('m-ens-evaluation')">Annuler</button>
+      <button id="btn-ens-creer-eval" class="btn btn-p" onclick="PageEnsNotes.creerEvaluation()">Créer l'évaluation</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL SAISIE DES NOTES ═══ -->
+<div class="mo" id="m-ens-notes">
+  <div class="modal" style="max-width:700px;width:95vw">
+    <div class="mh"><span style="font-size:19px">📋</span><span class="mt" id="ens-notes-modal-titre">Saisie des notes</span><button class="mc" onclick="closeModal('m-ens-notes')">✕</button></div>
+    <div class="mb" style="padding:0;max-height:80vh;overflow-y:auto">
+      <div class="tw">
+        <table>
+          <thead><tr>
+            <th>Élève</th>
+            <th style="text-align:center">Absent</th>
+            <th style="text-align:center">Note</th>
+            <th>Appréciation</th>
+          </tr></thead>
+          <tbody id="tb-ens-notes-saisie"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-l" onclick="closeModal('m-ens-notes')">Fermer</button>
+      <button id="btn-ens-sauver-notes" class="btn btn-l" onclick="PageEnsNotes.sauvegarderNotes()">Enregistrer</button>
+      <button id="btn-ens-publier-notes" class="btn btn-p" onclick="PageEnsNotes.publierNotes()">📱 Publier (notif parents)</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL SIGNALER UNE SANCTION ═══ -->
+<div class="mo" id="m-ens-discipline">
+  <div class="modal" style="max-width:480px">
+    <div class="mh"><span style="font-size:19px">⚠️</span><span class="mt">Signaler une sanction</span><button class="mc" onclick="closeModal('m-ens-discipline')">✕</button></div>
+    <div class="mb">
+      <div class="fg">
+        <label class="fl">Classe *</label>
+        <select class="fs" id="disc-classe" onchange="PageEnsDiscipline.chargerElevesClasse(this.value)">
+          <option value="">Choisir une classe…</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label class="fl">Élève *</label>
+        <select class="fs" id="disc-eleve" disabled>
+          <option value="">Sélectionner d'abord une classe</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label class="fl">Type de sanction *</label>
+        <select class="fs" id="disc-type">
+          <option value="">— Type —</option>
+          <option value="avertissement_oral">Avertissement oral</option>
+          <option value="avertissement_ecrit">Avertissement écrit</option>
+          <option value="retenue">Retenue</option>
+          <option value="renvoi_temporaire">Renvoi temporaire</option>
+          <option value="conseil_discipline">Conseil de discipline</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label class="fl">Motif * (5 caractères minimum)</label>
+        <textarea class="fi" id="disc-motif" rows="3" placeholder="Décrire le comportement sanctionné…" style="resize:vertical"></textarea>
+      </div>
+      <div class="fg">
+        <label class="fl">Date (optionnelle)</label>
+        <input class="fi" id="disc-date" type="date">
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-l" onclick="closeModal('m-ens-discipline')">Annuler</button>
+      <button id="btn-disc-creer" class="btn btn-p" onclick="PageEnsDiscipline.creerSanction()">Enregistrer la sanction</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="tc" style="position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px"></div>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/ens-router.js"></script>
+<script src="js/pages/ens-dashboard.js"></script>
+<script src="js/pages/ens-classes.js"></script>
+<script src="js/pages/ens-notes.js"></script>
+<script src="js/pages/ens-appel.js"></script>
+<script src="js/pages/ens-edt.js"></script>
+<script src="js/pages/ens-discipline.js"></script>
+<script src="js/ens-app.js"></script>
+</body>
+</html>

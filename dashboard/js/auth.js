@@ -9,7 +9,8 @@ var Auth = {
     });
     localStorage.setItem(CONFIG.TOKEN_KEY, res.data.token);
     localStorage.setItem(CONFIG.USER_KEY, JSON.stringify(res.data.utilisateur));
-    window.location.href = 'index.html';
+    var role = (res.data.utilisateur && res.data.utilisateur.role) ? res.data.utilisateur.role.toLowerCase() : '';
+    window.location.href = (role === 'enseignant') ? 'enseignant.html' : 'index.html';
   },
 
   async logout() {
