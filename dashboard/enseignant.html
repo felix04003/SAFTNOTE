@@ -223,7 +223,7 @@
     <div class="mb">
       <div class="fg">
         <label class="fl">Classe *</label>
-        <select class="fs" id="ens-ev-classe" onchange="PageEnsNotes.chargerAffectationsClasse(this.value)">
+        <select class="fs" id="ens-ev-classe" onchange="PageEnsNotes.onClasseChangeEval()">
           <option value="">Choisir une classe…</option>
         </select>
       </div>
@@ -298,8 +298,8 @@
     </div>
     <div class="mf">
       <button class="btn btn-l" onclick="closeModal('m-ens-notes')">Fermer</button>
-      <button id="btn-ens-sauver-notes" class="btn btn-l">Enregistrer</button>
-      <button id="btn-ens-publier-notes" class="btn btn-p">📱 Publier (notif parents)</button>
+      <button id="btn-ens-sauver-notes" class="btn btn-l" onclick="PageEnsNotes.sauvegarderNotes()">Enregistrer</button>
+      <button id="btn-ens-publier-notes" class="btn btn-p" onclick="PageEnsNotes.publierNotes()">📱 Publier (notif parents)</button>
     </div>
   </div>
 </div>
@@ -324,6 +324,7 @@
       <div class="fg">
         <label class="fl">Type de sanction *</label>
         <select class="fs" id="disc-type">
+          <option value="">— Type —</option>
           <option value="avertissement_oral">Avertissement oral</option>
           <option value="avertissement_ecrit">Avertissement écrit</option>
           <option value="retenue">Retenue</option>

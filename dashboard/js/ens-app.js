@@ -22,7 +22,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var opts = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
     var dateStr = now.toLocaleDateString('fr-FR', opts);
     dateStr = dateStr.charAt(0).toUpperCase() + dateStr.slice(1);
-    var user = Auth.getUser();
+    user = Auth.getUser();
     var etab = (user && user.etablissement_nom) ? user.etablissement_nom : 'EcoleManager';
     dateEl.textContent = etab + ' · ' + dateStr;
   }
