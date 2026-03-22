@@ -26,6 +26,7 @@ var PageEnsAppel = {
   },
 
   retourCreneaux() {
+    this._appelId = null;
     var etapeCreneaux = document.getElementById('appel-etape-creneaux');
     var etapeGrille = document.getElementById('appel-etape-grille');
     if (etapeCreneaux) etapeCreneaux.style.display = '';
@@ -41,10 +42,11 @@ var PageEnsAppel = {
       var res = await Api.get('/enseignants/moi/edt');
       var edt = (res.data && res.data.emploi_du_temps) || [];
 
-      // Jour de la semaine : JS 0=Dim,1=Lun... backend 1=Lun,6=Sam
-      var jourJS = new Date().getDay(); // 0-6
-      // Backend utilise 1=Lun,2=Mar,...,6=Sam (Dim=0 pas de cours)
-      var jourEDT = jourJS;  // coïncide directement
+      // Mapping jour : JS getDay() → 0=Dim, 1=Lun ... 6=Sam
+      // Backend jour_semaine → 1=Lun ... 6=Sam (pas de 0 — pas de cours le dimanche)
+      // La valeur numérique coïncide pour Lun-Sam. Dimanche (JS=0) → aucun créneau trouvé → liste vide (correct).
+      var jourJS = new Date().getDay();
+      var jourEDT = jourJS;
 
       var jourAuj = edt.find(function(j) { return j.jour === jourEDT; });
       var creneaux = (jourAuj && jourAuj.creneaux) || [];
@@ -76,7 +78,7 @@ var PageEnsAppel = {
             '</div>' +
           '</div>' +
           '<button class="btn btn-p" ' +
-            'onclick="PageEnsAppel.selectionnerCreneau(\'' + c.creneau_id + '\',\'' + (c.matiere || '') + '\',\'' + (c.classe || '') + '\',\'' + (c.classe_id || '') + '\')">' +
+            'onclick="PageEnsAppel.selectionnerCreneau(\'' + c.creneau_id + '\',\'' + (c.matiere || '').replace(/\'/g, "\\'") + '\',\'' + (c.classe || '').replace(/\'/g, "\\'") + '\',\'' + (c.classe_id || '') + '\')">' +
             'Faire l\'appel \u2192' +
           '</button>' +
         '</div>';
@@ -177,7 +179,8 @@ var PageEnsAppel = {
   },
 
   marquerTousPresents() {
-    document.querySelectorAll('#tb-appel-grille tr').forEach(function(row, i) {
+    document.querySelectorAll('#tb-appel-grille tr[id^="ar-"]').forEach(function(row) {
+      var i = parseInt(row.id.replace('ar-', ''), 10);
       var radio = row.querySelector('input[value="present"]');
       if (radio) { radio.checked = true; PageEnsAppel._onStatChange(i); }
     });
@@ -204,6 +207,8 @@ var PageEnsAppel = {
       }
     });
 
+    var nbIgnores = rows.length - presences.length;
+    if (nbIgnores > 0) toast(nbIgnores + ' \u00E9l\u00E8ve(s) sans identifiant ignor\u00E9(s)', 'w');
     if (!presences.length) return toast('Aucune pr\u00E9sence \u00E0 enregistrer', 'w');
 
     var btn = document.getElementById('btn-appel-soumettre');
