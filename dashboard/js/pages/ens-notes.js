@@ -215,6 +215,10 @@ var PageEnsNotes = {
       var notesMap = {};
       notesSaisies.forEach(function(n) { notesMap[n.eleve_id] = n; });
 
+      // Si _data est vide (navigation directe depuis le dashboard), charger les évals d'abord
+      if (!PageEnsNotes._data || !PageEnsNotes._data.length) {
+        await PageEnsNotes.charger();
+      }
       var evalInfo = null;
       for (var i = 0; i < (PageEnsNotes._data || []).length; i++) {
         if (PageEnsNotes._data[i].id === evalId) { evalInfo = PageEnsNotes._data[i]; break; }
