@@ -37,6 +37,8 @@ export JWT_SECRET="test_jwt_secret_for_integration_tests_32c"
 export NODE_ENV="test"
 export PG_CONTAINER="ecole_postgres"
 export POSTGRES_USER="ecole_user"
+export POSTGRES_PORT="5433"
+export POSTGRES_PASSWORD="ecole_password_dev"
 
 # ── 4. Lancer les tests ──────────────────────────────────────
 echo ""
