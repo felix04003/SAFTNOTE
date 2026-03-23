@@ -11,6 +11,7 @@ const { valider }    = require('../../../middleware/validate.middleware');
 const { ok, liste }  = require('../../../utils/reponse');
 const ApiError       = require('../../../utils/ApiError');
 const logger         = require('../../../utils/logger');
+const { getOrSet, invalidatePattern } = require('../../../infrastructure/cache/redis');
 
 const router = express.Router();
 const auth   = authentifier;
@@ -30,72 +31,86 @@ async function getAnneeCourante(db, etablissementId) {
 // GET /moyennes/classe/:classeId
 // Moyennes par matière pour une classe entière
 // ═════════════════════════════════════════════════════════════════
+async function fetchMoyennesClasse(db, classeId, etablissementId, periodeIdParam) {
+  const annee = await getAnneeCourante(db, etablissementId);
+
+  const classe = await db('classes as c')
+    .join('niveaux as n', 'n.id', 'c.niveau_id')
+    .join('annees_scolaires as a', 'a.id', 'c.annee_scolaire_id')
+    .where({ 'c.id': classeId, 'a.etablissement_id': etablissementId, 'a.est_courante': true })
+    .first('c.id', db.raw("CONCAT(n.nom, ' ', c.nom) as classe"), 'n.nom as niveau');
+
+  if (!classe) return null;
+
+  let periodeId = periodeIdParam;
+  if (!periodeId) {
+    const periode = await db('periodes')
+      .where({ annee_scolaire_id: annee.id })
+      .orderBy('numero', 'desc')
+      .first('id');
+    if (periode) periodeId = periode.id;
+  }
+
+  const moyennes = await db('moyennes_matieres as mm')
+    .join('inscriptions as i', 'i.id', 'mm.inscription_id')
+    .join('matieres as m',     'm.id', 'mm.matiere_id')
+    .join('eleves as el',      'el.id', 'i.eleve_id')
+    .join('utilisateurs as u', 'u.id',  'el.utilisateur_id')
+    .where({ 'i.classe_id': classeId, 'mm.periode_id': periodeId, 'i.statut': 'actif' })
+    .orderBy(['m.nom', 'u.nom', 'u.prenom'])
+    .select(
+      'u.id as eleve_id', 'u.nom', 'u.prenom',
+      'm.id as matiere_id', 'm.nom as matiere', 'm.code as matiere_code',
+      'mm.moyenne', 'mm.coefficient', 'mm.rang_dans_classe',
+      'mm.appreciation_enseignant', 'mm.est_complete'
+    );
+
+  const parMatiere = {};
+  for (const m of moyennes) {
+    if (!parMatiere[m.matiere_id]) {
+      parMatiere[m.matiere_id] = {
+        matiere_id: m.matiere_id, matiere: m.matiere, code: m.matiere_code,
+        coefficient: m.coefficient, eleves: [],
+      };
+    }
+    parMatiere[m.matiere_id].eleves.push({
+      eleve_id: m.eleve_id, nom: m.nom, prenom: m.prenom,
+      moyenne: m.moyenne, rang: m.rang_dans_classe, appreciation: m.appreciation_enseignant,
+    });
+  }
+
+  const resultats = Object.values(parMatiere).map(mat => {
+    const notes = mat.eleves.filter(e => e.moyenne !== null).map(e => parseFloat(e.moyenne));
+    return {
+      ...mat,
+      stats: {
+        moyenne_classe: notes.length > 0 ? (notes.reduce((a, b) => a + b, 0) / notes.length).toFixed(2) : null,
+        note_min: notes.length > 0 ? Math.min(...notes) : null,
+        note_max: notes.length > 0 ? Math.max(...notes) : null,
+        nb_eleves: mat.eleves.length,
+      },
+    };
+  });
+
+  return { classe: classe.classe, niveau: classe.niveau, annee: annee.libelle, matieres: resultats };
+}
+
 router.get('/moyennes/classe/:classeId', auth, isoler, perm('notes.voir_classe'), async (req, res, next) => {
   try {
     const db = getDB();
     const { periode_id } = req.query;
-    const annee = await getAnneeCourante(db, req.etablissement_id);
+    const periodeKey = periode_id || 'courante';
+    const cle = `moyennes_classe:${req.params.classeId}:${periodeKey}`;
 
-    const classe = await db('classes as c')
-      .join('niveaux as n', 'n.id', 'c.niveau_id')
-      .join('annees_scolaires as a', 'a.id', 'c.annee_scolaire_id')
-      .where({ 'c.id': req.params.classeId, 'a.etablissement_id': req.etablissement_id, 'a.est_courante': true })
-      .first('c.id', db.raw("CONCAT(n.nom, ' ', c.nom) as classe"), 'n.nom as niveau');
-
-    if (!classe) throw ApiError.nonTrouve('Classe introuvable');
-
-    let periodeId = periode_id;
-    if (!periodeId) {
-      const periode = await db('periodes')
-        .where({ annee_scolaire_id: annee.id })
-        .orderBy('numero', 'desc')
-        .first('id');
-      if (periode) periodeId = periode.id;
+    let data;
+    try {
+      data = await getOrSet(cle, () => fetchMoyennesClasse(db, req.params.classeId, req.etablissement_id, periode_id), 300);
+    } catch {
+      data = await fetchMoyennesClasse(db, req.params.classeId, req.etablissement_id, periode_id);
     }
 
-    const moyennes = await db('moyennes_matieres as mm')
-      .join('inscriptions as i', 'i.id', 'mm.inscription_id')
-      .join('matieres as m',     'm.id', 'mm.matiere_id')
-      .join('eleves as el',      'el.id', 'i.eleve_id')
-      .join('utilisateurs as u', 'u.id',  'el.utilisateur_id')
-      .where({ 'i.classe_id': req.params.classeId, 'mm.periode_id': periodeId, 'i.statut': 'actif' })
-      .orderBy(['m.nom', 'u.nom', 'u.prenom'])
-      .select(
-        'u.id as eleve_id', 'u.nom', 'u.prenom',
-        'm.id as matiere_id', 'm.nom as matiere', 'm.code as matiere_code',
-        'mm.moyenne', 'mm.coefficient', 'mm.rang_dans_classe',
-        'mm.appreciation_enseignant', 'mm.est_complete'
-      );
-
-    // Regrouper par matière avec stats
-    const parMatiere = {};
-    for (const m of moyennes) {
-      if (!parMatiere[m.matiere_id]) {
-        parMatiere[m.matiere_id] = {
-          matiere_id: m.matiere_id, matiere: m.matiere, code: m.matiere_code,
-          coefficient: m.coefficient, eleves: [],
-        };
-      }
-      parMatiere[m.matiere_id].eleves.push({
-        eleve_id: m.eleve_id, nom: m.nom, prenom: m.prenom,
-        moyenne: m.moyenne, rang: m.rang_dans_classe, appreciation: m.appreciation_enseignant,
-      });
-    }
-
-    const resultats = Object.values(parMatiere).map(mat => {
-      const notes = mat.eleves.filter(e => e.moyenne !== null).map(e => parseFloat(e.moyenne));
-      return {
-        ...mat,
-        stats: {
-          moyenne_classe: notes.length > 0 ? (notes.reduce((a, b) => a + b, 0) / notes.length).toFixed(2) : null,
-          note_min: notes.length > 0 ? Math.min(...notes) : null,
-          note_max: notes.length > 0 ? Math.max(...notes) : null,
-          nb_eleves: mat.eleves.length,
-        },
-      };
-    });
-
-    return ok(res, { classe: classe.classe, niveau: classe.niveau, annee: annee.libelle, matieres: resultats });
+    if (!data) throw ApiError.nonTrouve('Classe introuvable');
+    return ok(res, data);
   } catch (err) { next(err); }
 });
 
@@ -259,6 +274,8 @@ router.post('/moyennes/calculer', auth, isoler, perm('moyennes.calculer'),
       });
 
       logger.info('Moyennes recalculées', { classe_id, periode_id, nb: nbCalculees, par: req.session.utilisateur_id });
+
+      try { await invalidatePattern(`moyennes_classe:${classe_id}`); } catch { /* Redis down */ }
 
       return ok(res, {
         message: `${nbCalculees} moyennes recalculées`,

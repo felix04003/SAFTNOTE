@@ -15,6 +15,7 @@ const { authentifier }  = require('../../../middleware/auth.middleware');
 const ApiError          = require('../../../utils/ApiError');
 const { ok }            = require('../../../utils/reponse');
 const logger            = require('../../../utils/logger');
+const { getOrSet, invalidatePattern } = require('../../../infrastructure/cache/redis');
 
 const router = express.Router();
 
@@ -271,25 +272,37 @@ router.post('/auth/otp/valider', limiterAuth, valider(schemaOtpValider), async (
 });
 
 // ── GET /auth/profil — Profil de l'utilisateur connecté ─────────
+async function fetchProfil(db, utilisateurId, etablissementId, session) {
+  const utilisateur = await db('utilisateurs')
+    .where({ id: utilisateurId, actif: true })
+    .first('id', 'nom', 'prenom', 'email', 'telephone');
+
+  const etablissement = await db('etablissements')
+    .where({ id: etablissementId })
+    .first('id', 'nom', 'code_officiel');
+
+  return {
+    ...utilisateur,
+    role:              session.role,
+    roles:             session.roles,
+    etablissement_id:  etablissement.id,
+    etablissement_nom: etablissement.nom,
+  };
+}
+
 router.get('/auth/profil', authentifier, async (req, res, next) => {
   try {
     const db = getDB();
+    const cle = `profil:${req.session.utilisateur_id}`;
 
-    const utilisateur = await db('utilisateurs')
-      .where({ id: req.session.utilisateur_id, actif: true })
-      .first('id', 'nom', 'prenom', 'email', 'telephone');
+    let profil;
+    try {
+      profil = await getOrSet(cle, () => fetchProfil(db, req.session.utilisateur_id, req.session.etablissement_id, req.session), 3600);
+    } catch {
+      profil = await fetchProfil(db, req.session.utilisateur_id, req.session.etablissement_id, req.session);
+    }
 
-    const etablissement = await db('etablissements')
-      .where({ id: req.session.etablissement_id })
-      .first('id', 'nom', 'code_officiel');
-
-    return ok(res, {
-      ...utilisateur,
-      role:              req.session.role,
-      roles:             req.session.roles,
-      etablissement_id:  etablissement.id,
-      etablissement_nom: etablissement.nom,
-    });
+    return ok(res, profil);
   } catch (err) {
     next(err);
   }
@@ -310,6 +323,7 @@ router.post('/auth/deconnexion', authentifier, async (req, res, next) => {
         .update(req.headers.authorization.slice(7)).digest('hex');
       await redis.del(`sess:${tokenHash}`);
       await redis.del(`user:${req.session.utilisateur_id}:perms:${req.session.etablissement_id}`);
+      await redis.del(`profil:${req.session.utilisateur_id}`);
     } catch { /* Redis down, pas critique */ }
 
     return ok(res, { message: 'Déconnecté avec succès' });

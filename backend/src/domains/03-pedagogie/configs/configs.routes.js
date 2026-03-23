@@ -11,6 +11,7 @@ const { valider }    = require('../../../middleware/validate.middleware');
 const { ok, cree, liste } = require('../../../utils/reponse');
 const ApiError       = require('../../../utils/ApiError');
 const logger         = require('../../../utils/logger');
+const { getOrSet, invalidatePattern } = require('../../../infrastructure/cache/redis');
 
 const router = express.Router();
 const auth   = authentifier;
@@ -20,50 +21,63 @@ const isoler = isolerEtablissement;
 // ═════════════════════════════════════════════════════════════════
 // GET /configs/coefficients — Coefficients par matière et niveau
 // ═════════════════════════════════════════════════════════════════
+async function fetchCoefficients(db, etablissementId, query) {
+  const { niveau_id, serie_id } = query;
+
+  const annee = await db('annees_scolaires')
+    .where({ etablissement_id: etablissementId, est_courante: true })
+    .first('id', 'libelle');
+  if (!annee) throw ApiError.nonTrouve('Aucune année scolaire courante');
+
+  let q = db('configs_matieres_niveau as cmn')
+    .join('matieres as m',    'm.id', 'cmn.matiere_id')
+    .join('niveaux as n',     'n.id', 'cmn.niveau_id')
+    .leftJoin('series as s',  's.id', 'cmn.serie_id')
+    .where({ 'cmn.annee_scolaire_id': annee.id, 'm.etablissement_id': etablissementId })
+    .orderBy(['n.ordre', 'm.nom']);
+
+  if (niveau_id) q = q.where('cmn.niveau_id', niveau_id);
+  if (serie_id)  q = q.where('cmn.serie_id', serie_id);
+
+  const coefficients = await q.select(
+    'cmn.id', 'n.id as niveau_id', 'n.nom as niveau', 'n.cycle',
+    'm.id as matiere_id', 'm.nom as matiere', 'm.code as matiere_code',
+    's.id as serie_id', 's.code as serie_code', 's.libelle as serie',
+    'cmn.coefficient', 'cmn.est_eliminatoire', 'cmn.seuil_eliminatoire',
+    'cmn.nb_devoirs_periode', 'cmn.nb_compos_periode', 'cmn.est_obligatoire'
+  );
+
+  const parNiveau = {};
+  for (const c of coefficients) {
+    if (!parNiveau[c.niveau_id]) {
+      parNiveau[c.niveau_id] = { niveau_id: c.niveau_id, niveau: c.niveau, cycle: c.cycle, matieres: [] };
+    }
+    parNiveau[c.niveau_id].matieres.push({
+      config_id: c.id, matiere_id: c.matiere_id, matiere: c.matiere, matiere_code: c.matiere_code,
+      serie_id: c.serie_id, serie: c.serie, coefficient: c.coefficient,
+      est_eliminatoire: c.est_eliminatoire, seuil_eliminatoire: c.seuil_eliminatoire,
+      nb_devoirs_periode: c.nb_devoirs_periode, nb_compos_periode: c.nb_compos_periode,
+      est_obligatoire: c.est_obligatoire,
+    });
+  }
+
+  return { annee: annee.libelle, niveaux: Object.values(parNiveau) };
+}
+
 router.get('/configs/coefficients', auth, isoler, perm('config.voir'), async (req, res, next) => {
   try {
     const db = getDB();
-    const { niveau_id, serie_id } = req.query;
+    const niveau = req.query.niveau_id || 'all';
+    const serie  = req.query.serie_id  || 'all';
+    const cle    = `coefficients:${req.etablissement_id}:${niveau}:${serie}`;
 
-    const annee = await db('annees_scolaires')
-      .where({ etablissement_id: req.etablissement_id, est_courante: true })
-      .first('id', 'libelle');
-    if (!annee) throw ApiError.nonTrouve('Aucune année scolaire courante');
-
-    let query = db('configs_matieres_niveau as cmn')
-      .join('matieres as m',    'm.id', 'cmn.matiere_id')
-      .join('niveaux as n',     'n.id', 'cmn.niveau_id')
-      .leftJoin('series as s',  's.id', 'cmn.serie_id')
-      .where({ 'cmn.annee_scolaire_id': annee.id, 'm.etablissement_id': req.etablissement_id })
-      .orderBy(['n.ordre', 'm.nom']);
-
-    if (niveau_id) query = query.where('cmn.niveau_id', niveau_id);
-    if (serie_id)  query = query.where('cmn.serie_id', serie_id);
-
-    const coefficients = await query.select(
-      'cmn.id', 'n.id as niveau_id', 'n.nom as niveau', 'n.cycle',
-      'm.id as matiere_id', 'm.nom as matiere', 'm.code as matiere_code',
-      's.id as serie_id', 's.code as serie_code', 's.libelle as serie',
-      'cmn.coefficient', 'cmn.est_eliminatoire', 'cmn.seuil_eliminatoire',
-      'cmn.nb_devoirs_periode', 'cmn.nb_compos_periode', 'cmn.est_obligatoire'
-    );
-
-    // Regrouper par niveau
-    const parNiveau = {};
-    for (const c of coefficients) {
-      if (!parNiveau[c.niveau_id]) {
-        parNiveau[c.niveau_id] = { niveau_id: c.niveau_id, niveau: c.niveau, cycle: c.cycle, matieres: [] };
-      }
-      parNiveau[c.niveau_id].matieres.push({
-        config_id: c.id, matiere_id: c.matiere_id, matiere: c.matiere, matiere_code: c.matiere_code,
-        serie_id: c.serie_id, serie: c.serie, coefficient: c.coefficient,
-        est_eliminatoire: c.est_eliminatoire, seuil_eliminatoire: c.seuil_eliminatoire,
-        nb_devoirs_periode: c.nb_devoirs_periode, nb_compos_periode: c.nb_compos_periode,
-        est_obligatoire: c.est_obligatoire,
-      });
+    let data;
+    try {
+      data = await getOrSet(cle, () => fetchCoefficients(db, req.etablissement_id, req.query), 1800);
+    } catch {
+      data = await fetchCoefficients(db, req.etablissement_id, req.query);
     }
-
-    return ok(res, { annee: annee.libelle, niveaux: Object.values(parNiveau) });
+    return ok(res, data);
   } catch (err) { next(err); }
 });
 
@@ -108,6 +122,9 @@ router.put('/configs/coefficients', auth, isoler, perm('config.coefficients'),
       });
 
       logger.info('Coefficients modifiés', { nb: req.body.modifications.length, par: req.session.utilisateur_id });
+
+      try { await invalidatePattern(`coefficients:${req.etablissement_id}`); } catch { /* Redis down */ }
+
       return ok(res, { message: `${req.body.modifications.length} coefficients modifiés` });
     } catch (err) { next(err); }
   }
@@ -116,25 +133,33 @@ router.put('/configs/coefficients', auth, isoler, perm('config.coefficients'),
 // ═════════════════════════════════════════════════════════════════
 // GET /configs/matieres — Liste des matières de l'établissement
 // ═════════════════════════════════════════════════════════════════
+async function fetchMatieres(db, etablissementId, actifSeulement) {
+  let query = db('matieres as m')
+    .leftJoin('disciplines_matieres as dm', 'dm.id', 'm.discipline_id')
+    .where({ 'm.etablissement_id': etablissementId })
+    .orderBy(['dm.ordre', 'm.nom']);
+
+  if (actifSeulement === 'true') query = query.where('m.actif', true);
+
+  return query.select(
+    'm.id', 'm.nom', 'm.nom_court', 'm.code',
+    'm.compte_dans_moyenne', 'm.est_eliminatoire',
+    'm.seuil_eliminatoire', 'm.est_optionnelle', 'm.actif',
+    'dm.id as discipline_id', 'dm.nom as discipline', 'dm.couleur_affichage'
+  );
+}
+
 router.get('/configs/matieres', auth, isoler, perm('config.voir'), async (req, res, next) => {
   try {
     const db = getDB();
-    const { actif_seulement } = req.query;
+    const cle = `matieres:${req.etablissement_id}`;
 
-    let query = db('matieres as m')
-      .leftJoin('disciplines_matieres as dm', 'dm.id', 'm.discipline_id')
-      .where({ 'm.etablissement_id': req.etablissement_id })
-      .orderBy(['dm.ordre', 'm.nom']);
-
-    if (actif_seulement === 'true') query = query.where('m.actif', true);
-
-    const matieres = await query.select(
-      'm.id', 'm.nom', 'm.nom_court', 'm.code',
-      'm.compte_dans_moyenne', 'm.est_eliminatoire',
-      'm.seuil_eliminatoire', 'm.est_optionnelle', 'm.actif',
-      'dm.id as discipline_id', 'dm.nom as discipline', 'dm.couleur_affichage'
-    );
-
+    let matieres;
+    try {
+      matieres = await getOrSet(cle, () => fetchMatieres(db, req.etablissement_id, req.query.actif_seulement), 1800);
+    } catch {
+      matieres = await fetchMatieres(db, req.etablissement_id, req.query.actif_seulement);
+    }
     return liste(res, matieres);
   } catch (err) { next(err); }
 });
@@ -182,6 +207,7 @@ router.post('/configs/matieres', auth, isoler, perm('config.modifier'),
         .returning('*');
 
       logger.info('Matière créée', { id: matiere.id, code: matiere.code });
+      try { await invalidatePattern(`matieres:${req.etablissement_id}`); } catch { /* Redis down */ }
       return cree(res, matiere);
     } catch (err) { next(err); }
   }
