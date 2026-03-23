@@ -200,6 +200,17 @@ router.post('/sync/operations', authentifier, isolerEtablissement,
       }
     }
 
+    const nbEchecs = resultats.filter(r => r.statut === 'erreur').length;
+    if (nbEchecs > 0) {
+      logger.error('Sync mobile — opérations en échec', {
+        etablissement_id: req.etablissement_id,
+        utilisateur_id:   req.session?.utilisateur_id,
+        nb_operations:    req.body.operations.length,
+        nb_echecs:        nbEchecs,
+        timestamp:        new Date().toISOString(),
+      });
+    }
+
     return ok(res, { resultats });
   }
 );
