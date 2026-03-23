@@ -10,4 +10,9 @@ module.exports = {
   clearMocks: true,
   // Exécution séquentielle — les tests partagent la même base
   maxWorkers: 1,
+  // Variables d'environnement pour les workers Jest
+  testEnvironmentOptions: {},
+  globals: {},
+  // Passage des vars de connexion aux workers
+  setupFiles: ['./tests/integration/setEnv.js'],
 };
