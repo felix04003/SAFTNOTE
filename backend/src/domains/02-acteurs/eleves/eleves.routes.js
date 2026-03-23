@@ -198,7 +198,7 @@ router.post('/eleves', auth, isoler, perm('eleves.creer'),
         return { utilisateur_id: utilisateurId, inscription_id: inscriptionId };
       });
 
-      await invalidatePattern(`classe_eleves:${req.body.classe_id}`).catch(() => {});
+      try { await invalidatePattern(`classe_eleves:${req.body.classe_id}`); } catch { /* Redis indisponible — ignoré */ }
       return cree(res, result);
     } catch (err) { next(err); }
   }

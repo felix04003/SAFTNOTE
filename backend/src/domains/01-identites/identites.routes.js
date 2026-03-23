@@ -168,7 +168,7 @@ router.post('/classes', auth, isoler, perm('config.modifier'),
         effectif_max:     req.body.effectif_max,
       }).returning('*');
 
-      await invalidatePattern(`classes:${req.etablissement_id}`).catch(() => {});
+      try { await invalidatePattern(`classes:${req.etablissement_id}`); } catch { /* Redis indisponible — ignoré */ }
       return cree(res, { ...classe, niveau: niveau.nom });
     } catch (err) { next(err); }
   }
