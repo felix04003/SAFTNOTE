@@ -62,6 +62,10 @@ INSERT INTO schema_migrations VALUES ('006', 'Données de référence') ON CONFL
 \i migrations/007_vues_et_fonctions.sql
 INSERT INTO schema_migrations VALUES ('007', 'Vues & Fonctions') ON CONFLICT DO NOTHING;
 
+\echo '== 008 Index performance'
+\i migrations/008_index_performance.sql
+INSERT INTO schema_migrations VALUES ('008', 'Index de performance') ON CONFLICT DO NOTHING;
+
 -- ── Rapport ──────────────────────────────────────────────────
 DO $$
 DECLARE nb_tables INT; nb_fonctions INT; nb_triggers INT; nb_vues INT;
