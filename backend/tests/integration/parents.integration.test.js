@@ -37,13 +37,9 @@ beforeAll(async () => {
     actif: true,
   });
 
-  const [parentRecord] = await db('parents').insert({
-    utilisateur_id: parentUser.id,
-  }).returning('*');
-
   // Lier le parent à l'élève[0]
   await db('parents_eleves').insert({
-    parent_id: parentRecord.id,
+    parent_id: parentUser.id,
     eleve_id:  seed.eleves[0].eleve.id,
     lien:      'mere',
     peut_voir_notes: true,
@@ -89,7 +85,7 @@ describe('GET /api/v1/parents/moi/enfants', () => {
       utilisateur_id: u.id, role_id: roleParent.id,
       etablissement_id: seed.etablissement.id, actif: true,
     });
-    await db('parents').insert({ utilisateur_id: u.id });
+    // parents_eleves.parent_id references utilisateurs.id directly (no separate parents table)
     const tok = await creerSession(u.id, seed.etablissement.id);
 
     const res = await request

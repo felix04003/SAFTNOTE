@@ -32,7 +32,7 @@ describe('POST /api/v1/discipline/sanctions', () => {
       .set('Authorization', `Bearer ${tokenDir}`)
       .send({
         inscription_id:  inscription.id,
-        type:            'avertissement',
+        type:            'avertissement_oral',
         motif:           'Perturbation en classe',
         date_prononcee:  '2024-11-15',
       })

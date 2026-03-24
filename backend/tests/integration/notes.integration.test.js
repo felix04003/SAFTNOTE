@@ -62,13 +62,13 @@ describe('POST /api/v1/evaluations', () => {
       .post('/api/v1/evaluations')
       .set('Authorization', `Bearer ${tokenEns}`)
       .send({
-        affectation_id: affectationId,
-        periode_id:     seed.periodes[0].id,
-        titre:          'Devoir 1',
-        type:           'devoir',
-        date_eval:      '2024-11-15',
-        note_max:       20,
-        coefficient:    1,
+        affectation_id:  affectationId,
+        periode_id:      seed.periodes[0].id,
+        titre:           'Devoir 1',
+        type:            'devoir',
+        numero:          1,
+        date_evaluation: '2024-11-15',
+        note_max:        20,
       })
       .expect(201);
 
@@ -114,13 +114,13 @@ describe('POST /api/v1/evaluations/:id/notes (saisie)', () => {
       .post('/api/v1/evaluations')
       .set('Authorization', `Bearer ${tokenEns}`)
       .send({
-        affectation_id: affectationId,
-        periode_id:     seed.periodes[0].id,
-        titre:          'Devoir pour saisie',
-        type:           'devoir',
-        date_eval:      '2024-11-20',
-        note_max:       20,
-        coefficient:    1,
+        affectation_id:  affectationId,
+        periode_id:      seed.periodes[0].id,
+        titre:           'Devoir pour saisie',
+        type:            'devoir',
+        numero:          2,
+        date_evaluation: '2024-11-20',
+        note_max:        20,
       });
     evalId = res.body.data?.id;
   });

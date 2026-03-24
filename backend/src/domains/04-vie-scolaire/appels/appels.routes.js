@@ -191,7 +191,7 @@ router.get('/presences/absences', auth, isoler, perm('absences.voir_classe'), as
       .select(
         'u.nom', 'u.prenom', 'c.nom as classe',
         'a.date_cours as date', 'm.nom as matiere',
-        'p.statut', 'p.est_justifie', 'p.justification',
+        'p.statut', 'p.est_justifie', 'p.motif_justification as justification',
         'p.id as presence_id'
       );
 

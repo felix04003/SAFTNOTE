@@ -41,7 +41,7 @@ beforeAll(async () => {
     matiere_id: matId,
     classe_id: seed.classe.id,
     annee_scolaire_id: seed.annee.id,
-  }).onConflict().merge().returning('*');
+  }).onConflict(['classe_id', 'matiere_id', 'annee_scolaire_id']).merge().returning('*');
 
   const plage = await db('plages_horaires').first('id');
   if (!plage) return; // Skip si pas de plages

@@ -180,15 +180,15 @@ router.put('/discipline/sanctions/:id', auth, isoler, perm('discipline.prononcer
 // ═════════════════════════════════════════════════════════════════
 // GET /discipline/eleve/:eleveId — Dossier disciplinaire d'un élève
 // ═════════════════════════════════════════════════════════════════
-router.get('/discipline/eleve/:eleveId', auth, isoler, perm('discipline.voir'), async (req, res, next) => {
+router.get('/discipline/eleves/:id/dossier', auth, isoler, perm('discipline.voir'), async (req, res, next) => {
   try {
     const db = getDB();
 
     // Vérifier l'élève
-    const eleve = await db('utilisateurs').where({ id: req.params.eleveId, etablissement_id: req.etablissement_id }).first('id', 'nom', 'prenom');
+    const eleve = await db('utilisateurs').where({ id: req.params.id, etablissement_id: req.etablissement_id }).first('id', 'nom', 'prenom');
     if (!eleve) throw ApiError.nonTrouve('Élève introuvable');
 
-    const eleveObj = await db('eleves').where({ utilisateur_id: req.params.eleveId }).first('id');
+    const eleveObj = await db('eleves').where({ utilisateur_id: req.params.id }).first('id');
     if (!eleveObj) throw ApiError.nonTrouve('Profil élève introuvable');
 
     // Incidents
