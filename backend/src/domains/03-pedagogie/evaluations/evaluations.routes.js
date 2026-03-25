@@ -103,6 +103,50 @@ router.get('/evaluations/:evaluation_id/notes', auth, isoler, perm('notes.voir_c
   } catch (err) { next(err); }
 });
 
+// ── POST /evaluations/:evaluation_id/notes — Saisie simplifiée ──
+router.post('/evaluations/:evaluation_id/notes', auth, isoler, perm('notes.saisir'),
+  valider(z.object({
+    notes: z.array(z.object({
+      eleve_id: z.string().uuid(),
+      note:     z.number().min(0).max(20).nullable().optional(),
+    })).min(1),
+  })),
+  async (req, res, next) => {
+    const db = getDB();
+    try {
+      const evaluation = await db('evaluations as ev')
+        .join('affectations_enseignants as ae', 'ae.id', 'ev.affectation_id')
+        .join('classes as c', 'c.id', 'ae.classe_id')
+        .join('annees_scolaires as a', 'a.id', 'c.annee_scolaire_id')
+        .where({ 'ev.id': req.params.evaluation_id, 'a.etablissement_id': req.etablissement_id })
+        .first('ev.id', 'ae.classe_id');
+
+      if (!evaluation) throw ApiError.nonTrouve('Évaluation introuvable');
+
+      await db.transaction(async trx => {
+        for (const n of req.body.notes) {
+          const eleveRow = await trx('eleves').where({ utilisateur_id: n.eleve_id }).first('id');
+          if (!eleveRow) continue;
+
+          const insc = await trx('inscriptions')
+            .where({ eleve_id: eleveRow.id, classe_id: evaluation.classe_id })
+            .first('id');
+
+          await trx.raw(
+            `INSERT INTO notes (id, evaluation_id, eleve_id, inscription_id, valeur, saisie_par)
+             VALUES (?, ?, ?, ?, ?, ?)
+             ON CONFLICT (evaluation_id, eleve_id)
+             DO UPDATE SET valeur = EXCLUDED.valeur, saisie_par = EXCLUDED.saisie_par, saisie_at = NOW()`,
+            [uuid(), req.params.evaluation_id, eleveRow.id, insc?.id ?? null, n.note ?? null, req.session.utilisateur_id]
+          );
+        }
+      });
+
+      return ok(res, { message: `${req.body.notes.length} notes enregistrées` });
+    } catch (err) { next(err); }
+  }
+);
+
 // ── PUT /evaluations/:evaluation_id/notes — Saisie en masse ─────
 router.put('/evaluations/:evaluation_id/notes', auth, isoler, perm('notes.saisir'),
   valider(z.object({

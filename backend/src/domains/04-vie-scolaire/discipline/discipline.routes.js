@@ -128,8 +128,9 @@ router.post('/discipline/sanctions', auth, isoler, perm('discipline.prononcer'),
         logger.warn('Notification sanction non envoyée', { error: notifErr.message });
       }
 
+      const typeNormalise = sanction.type.startsWith('avertissement') ? 'avertissement' : sanction.type;
       logger.info('Sanction créée', { id: sanction.id, type: sanction.type, par: req.session.utilisateur_id });
-      return cree(res, sanction);
+      return cree(res, { ...sanction, type: typeNormalise });
     } catch (err) { next(err); }
   }
 );

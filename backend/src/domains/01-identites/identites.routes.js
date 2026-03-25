@@ -314,6 +314,9 @@ router.get('/classes/:classe_id/eleves', auth, isoler, perm('eleves.voir'), asyn
   } catch (err) { next(err); }
 });
 
+// ── GET /enseignants/moi/affectations — passe au router enseignants
+router.get('/enseignants/moi/affectations', (req, res, next) => next('router'));
+
 // ── GET /enseignants/:enseignant_id/affectations ──────────────────
 router.get('/enseignants/:enseignant_id/affectations', auth, isoler, perm('config.voir'), async (req, res, next) => {
   try {

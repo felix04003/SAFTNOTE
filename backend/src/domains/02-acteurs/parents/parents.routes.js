@@ -269,11 +269,7 @@ router.get('/parents/moi/enfants/:id/absences', auth, isoler, async (req, res, n
       'pr.est_justifie', 'pr.motif_justification', 'pr.commentaire_justif'
     );
 
-    return ok(res, {
-      enfant: { classe: inscription.classe, niveau: inscription.niveau },
-      recapitulatif: recap,
-      detail_absences: absences,
-    });
+    return ok(res, absences);
   } catch (err) { next(err); }
 });
 
