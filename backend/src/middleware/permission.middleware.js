@@ -122,7 +122,15 @@ async function isolerEtablissement(req, res, next) {
           .first('c.id');
         appartient = !!row;
 
-      } else if (table === 'utilisateurs' || table === 'enseignants' || table === 'eleves') {
+      } else if (table === 'enseignants') {
+        const row = await db('enseignants as e')
+          .join('utilisateurs as u', 'u.id', 'e.utilisateur_id')
+          .where('e.id', resourceId)
+          .where('u.etablissement_id', etablissement_id)
+          .first('e.id');
+        appartient = !!row;
+
+      } else if (table === 'utilisateurs' || table === 'eleves') {
         const row = await db('utilisateurs')
           .where({ id: resourceId, etablissement_id })
           .first('id');

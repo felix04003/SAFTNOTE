@@ -207,9 +207,10 @@ var PageNotes = {
       var evalRes  = await Api.get('/evaluations/' + evalId + '/notes');
       var notesSaisies = evalRes.data || [];
 
-      // Construire un map eleve_id → note existante
+      // Construire un map utilisateur_id → note existante
+      // (utilisateur_id est l'id retourné par /classes/:id/eleves)
       var notesMap = {};
-      notesSaisies.forEach(function(n) { notesMap[n.eleve_id] = n; });
+      notesSaisies.forEach(function(n) { notesMap[n.utilisateur_id || n.eleve_id] = n; });
 
       // Récupérer la classe depuis la data locale
       var evalInfo = (PageNotes.data || []).find(function(e) { return e.id === evalId; });

@@ -48,6 +48,7 @@ router.get('/evaluations', auth, isoler, perm('notes.voir_classe'), async (req, 
         'ev.id', 'ev.type', 'ev.numero', 'ev.titre', 'ev.date_evaluation',
         'ev.note_max', 'ev.moyenne_classe',
         'm.nom as matiere',
+        'c.id as classe_id',
         db.raw("CONCAT(n.nom, ' ', c.nom) as classe"),
         db.raw("u.prenom || ' ' || u.nom as enseignant"),
         db.raw(`CASE WHEN ev.notes_publiees THEN 'publiee'
@@ -90,11 +91,12 @@ router.post('/evaluations', auth, isoler, perm('evaluations.creer'),
 router.get('/evaluations/:evaluation_id/notes', auth, isoler, perm('notes.voir_classe'), async (req, res, next) => {
   try {
     const notes = await getDB()('notes as n')
-      .join('utilisateurs as u', 'u.id', 'n.eleve_id')
+      .join('eleves as el', 'el.id', 'n.eleve_id')
+      .join('utilisateurs as u', 'u.id', 'el.utilisateur_id')
       .where({ 'n.evaluation_id': req.params.evaluation_id })
       .orderBy(['u.nom', 'u.prenom'])
       .select(
-        'n.id', 'n.eleve_id', 'u.nom', 'u.prenom',
+        'n.id', 'n.eleve_id', 'u.id as utilisateur_id', 'u.nom', 'u.prenom',
         'n.valeur', 'n.est_absent', 'n.absence_justifiee',
         'n.appreciation', 'n.saisie_at'
       );
