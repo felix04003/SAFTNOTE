@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EcoleManager — Espace Parents</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<style>
+.login-wrap { min-height:100vh; display:flex; align-items:center; justify-content:center; background:var(--g50,#f8fafc); }
+.login-box  { width:360px; background:white; border-radius:12px; box-shadow:0 4px 24px rgba(0,0,0,.1); overflow:hidden; }
+.login-head { background:#2d6a4f; padding:28px; text-align:center; color:white; }
+.login-head .lh-app  { font-size:20px; font-weight:800; }
+.login-head .lh-sub  { font-size:12px; opacity:.7; margin-top:4px; }
+.login-body { padding:24px; }
+.otp-inputs { display:flex; gap:8px; justify-content:center; margin:16px 0; }
+.otp-inputs input { width:42px; height:52px; text-align:center; font-size:22px; font-weight:800; border:2px solid var(--g200,#e2e8f0); border-radius:8px; color:#2d6a4f; outline:none; }
+.otp-inputs input:focus { border-color:#2d6a4f; }
+.btn-otp { background:#2d6a4f; color:white; border:none; width:100%; padding:12px; border-radius:8px; font-size:14px; font-weight:700; cursor:pointer; font-family:inherit; }
+.btn-otp:disabled { opacity:.6; cursor:not-allowed; }
+.login-link { text-align:center; margin-top:14px; font-size:12px; color:var(--g400,#94a3b8); }
+.login-link a { color:#2d6a4f; text-decoration:none; }
+.login-error { background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; border-radius:6px; padding:10px 12px; font-size:12px; margin-bottom:12px; display:none; }
+.resend-wrap { text-align:center; margin-top:12px; font-size:12px; color:var(--g400,#94a3b8); }
+.resend-wrap a { color:#2d6a4f; cursor:pointer; }
+</style>
+</head>
+<body>
+
+<div class="login-wrap">
+  <div class="login-box">
+    <div class="login-head">
+      <div class="lh-app">EcoleManager</div>
+      <div class="lh-sub">Espace Parents</div>
+    </div>
+    <div class="login-body">
+
+      <!-- ÉTAPE 1 : téléphone + code établissement -->
+      <div id="etape1">
+        <div style="font-size:14px;font-weight:700;color:#2d6a4f;margin-bottom:16px;text-align:center">Connexion par SMS</div>
+        <div class="login-error" id="err1"></div>
+        <div class="fg" style="margin-bottom:12px">
+          <label class="fl" style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Numéro de téléphone *</label>
+          <input class="fi" type="tel" id="inp-telephone" placeholder="+221 77 XXX XX XX" autocomplete="tel" style="width:100%;box-sizing:border-box">
+        </div>
+        <div class="fg" style="margin-bottom:20px">
+          <label class="fl" style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Code établissement *</label>
+          <input class="fi" type="text" id="inp-etab-code" placeholder="ex : PMS001" autocomplete="off" style="width:100%;box-sizing:border-box;text-transform:uppercase">
+        </div>
+        <button class="btn-otp" id="btn-demander" onclick="demanderOTP()">📱 Recevoir le code SMS</button>
+        <div class="login-link">Personnel de l'école ? <a href="login.html">Connexion normale →</a></div>
+      </div>
+
+      <!-- ÉTAPE 2 : saisie OTP -->
+      <div id="etape2" style="display:none">
+        <div style="font-size:14px;font-weight:700;color:#2d6a4f;margin-bottom:6px;text-align:center">Code envoyé ✓</div>
+        <div id="otp-hint" style="font-size:12px;color:#64748b;text-align:center;margin-bottom:4px"></div>
+        <div class="login-error" id="err2"></div>
+        <div class="otp-inputs" id="otp-inputs">
+          <input type="number" maxlength="1" min="0" max="9" oninput="avancerOTP(this,0)" onkeydown="reculerOTP(event,0)">
+          <input type="number" maxlength="1" min="0" max="9" oninput="avancerOTP(this,1)" onkeydown="reculerOTP(event,1)">
+          <input type="number" maxlength="1" min="0" max="9" oninput="avancerOTP(this,2)" onkeydown="reculerOTP(event,2)">
+          <input type="number" maxlength="1" min="0" max="9" oninput="avancerOTP(this,3)" onkeydown="reculerOTP(event,3)">
+          <input type="number" maxlength="1" min="0" max="9" oninput="avancerOTP(this,4)" onkeydown="reculerOTP(event,4)">
+          <input type="number" maxlength="1" min="0" max="9" oninput="avancerOTP(this,5)" onkeydown="reculerOTP(event,5)">
+        </div>
+        <button class="btn-otp" id="btn-valider" onclick="validerOTP()">Connexion →</button>
+        <div class="resend-wrap"><span id="resend-msg">Pas reçu ? <a onclick="renvoyerOTP()">Renvoyer</a></span></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script>
+'use strict';
+
+var _telephone = '';
+var _etabCode = '';
+var _resendTimer = null;
+
+async function demanderOTP() {
+  var tel     = document.getElementById('inp-telephone').value.trim();
+  var etab    = document.getElementById('inp-etab-code').value.trim().toUpperCase();
+  var errEl   = document.getElementById('err1');
+  errEl.style.display = 'none';
+
+  if (!tel)  { afficherErreur('err1', 'Numéro de téléphone requis'); return; }
+  if (!etab) { afficherErreur('err1', 'Code établissement requis'); return; }
+
+  var btn = document.getElementById('btn-demander');
+  btn.disabled = true; btn.textContent = 'Envoi en cours…';
+
+  try {
+    await Api.post('/auth/otp/demander', { telephone: tel, etablissement_code: etab });
+    _telephone = tel;
+    _etabCode  = etab;
+
+    // Passer à l'étape 2
+    document.getElementById('etape1').style.display = 'none';
+    document.getElementById('etape2').style.display = '';
+    document.getElementById('otp-hint').textContent = 'Code à 6 chiffres envoyé au ' + tel;
+    document.getElementById('otp-inputs').querySelectorAll('input')[0].focus();
+    demarrerCooldown();
+  } catch (e) {
+    afficherErreur('err1', e.message || 'Erreur lors de l\'envoi du code');
+  } finally {
+    btn.disabled = false; btn.textContent = '📱 Recevoir le code SMS';
+  }
+}
+
+async function validerOTP() {
+  var inputs = document.getElementById('otp-inputs').querySelectorAll('input');
+  var code   = Array.from(inputs).map(function(i) { return i.value; }).join('');
+  if (code.length < 6) { afficherErreur('err2', 'Saisissez les 6 chiffres du code'); return; }
+
+  var btn = document.getElementById('btn-valider');
+  btn.disabled = true; btn.textContent = 'Connexion…';
+
+  try {
+    var res = await Api.post('/auth/otp/valider', {
+      telephone: _telephone,
+      code: code,
+      etablissement_code: _etabCode,
+    });
+    localStorage.setItem(CONFIG.TOKEN_KEY, res.data.token);
+    localStorage.setItem(CONFIG.USER_KEY, JSON.stringify(res.data.utilisateur));
+    window.location.href = 'parent.html';
+  } catch (e) {
+    afficherErreur('err2', e.message || 'Code incorrect ou expiré');
+    inputs.forEach(function(i) { i.value = ''; });
+    inputs[0].focus();
+  } finally {
+    btn.disabled = false; btn.textContent = 'Connexion →';
+  }
+}
+
+function avancerOTP(input, idx) {
+  // Garder uniquement le dernier chiffre saisi
+  if (input.value.length > 1) input.value = input.value.slice(-1);
+  var inputs = document.getElementById('otp-inputs').querySelectorAll('input');
+  if (input.value && idx < 5) inputs[idx + 1].focus();
+}
+
+function reculerOTP(e, idx) {
+  if (e.key === 'Backspace') {
+    var inputs = document.getElementById('otp-inputs').querySelectorAll('input');
+    if (!inputs[idx].value && idx > 0) { inputs[idx - 1].value = ''; inputs[idx - 1].focus(); }
+  }
+}
+
+async function renvoyerOTP() {
+  if (_resendTimer) return;
+  document.getElementById('err2').style.display = 'none';
+  try {
+    await Api.post('/auth/otp/demander', { telephone: _telephone, etablissement_code: _etabCode });
+    demarrerCooldown();
+    document.getElementById('otp-inputs').querySelectorAll('input').forEach(function(i) { i.value = ''; });
+    document.getElementById('otp-inputs').querySelectorAll('input')[0].focus();
+  } catch (e) {
+    afficherErreur('err2', 'Erreur lors du renvoi');
+  }
+}
+
+function demarrerCooldown() {
+  var secs = 60;
+  var el   = document.getElementById('resend-msg');
+  _resendTimer = setInterval(function() {
+    secs--;
+    if (secs <= 0) {
+      clearInterval(_resendTimer); _resendTimer = null;
+      el.innerHTML = 'Pas reçu ? <a onclick="renvoyerOTP()">Renvoyer</a>';
+    } else {
+      el.textContent = 'Renvoyer dans ' + secs + 's…';
+    }
+  }, 1000);
+}
+
+function afficherErreur(id, msg) {
+  var el = document.getElementById(id);
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+</script>
+</body>
+</html>
