@@ -200,8 +200,12 @@ router.post('/auth/otp/demander', limiterAuth, valider(schemaOtpDemander), async
       expire_at:     db.raw("NOW() + INTERVAL '10 minutes'"),
     });
 
-    // Envoyer le SMS
-    await envoyerOTP(telephone, code, etablissement.nom);
+    // Envoyer le SMS (en dev : log du code en clair si SMS non configuré)
+    if (process.env.NODE_ENV !== 'production' && !process.env.AT_API_KEY) {
+      logger.warn('⚠️  SMS non configuré — CODE OTP (dev uniquement) : ' + code, { telephone });
+    } else {
+      await envoyerOTP(telephone, code, etablissement.nom);
+    }
 
     logger.info('OTP envoyé', { telephone, etablissement_id: etablissement.id });
 
@@ -252,15 +256,22 @@ router.post('/auth/otp/valider', limiterAuth, valider(schemaOtpValider), async (
       .where({ id: otp.utilisateur_id, actif: true })
       .first('id', 'nom', 'prenom', 'telephone');
 
+    // Récupérer le rôle pour ce couple utilisateur/établissement
+    const roleRow = await db('utilisateur_roles as ur')
+      .join('roles as r', 'r.id', 'ur.role_id')
+      .where({ 'ur.utilisateur_id': utilisateur.id, 'ur.etablissement_id': etablissement.id, 'ur.actif': true })
+      .first('r.code as role');
+
     const { token } = await creerSession(db, utilisateur.id, etablissement.id, req);
 
     return ok(res, {
       token,
       utilisateur: {
-        id:              utilisateur.id,
-        nom:             utilisateur.nom,
-        prenom:          utilisateur.prenom,
-        telephone:       utilisateur.telephone,
+        id:               utilisateur.id,
+        nom:              utilisateur.nom,
+        prenom:           utilisateur.prenom,
+        telephone:        utilisateur.telephone,
+        role:             roleRow ? roleRow.role : 'parent',
         etablissement_id: etablissement.id,
         etablissement_nom: etablissement.nom,
       },

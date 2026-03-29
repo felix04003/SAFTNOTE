@@ -188,6 +188,7 @@ router.get('/parents/moi/enfants/:id/notes', auth, isoler, async (req, res, next
       .join('evaluations as ev',              'ev.id', 'n.evaluation_id')
       .join('affectations_enseignants as ae', 'ae.id', 'ev.affectation_id')
       .join('matieres as m',                  'm.id',  'ae.matiere_id')
+      .leftJoin('disciplines_matieres as dm', 'dm.id', 'm.discipline_id')
       .join('periodes as p',                  'p.id',  'ev.periode_id')
       .join('annees_scolaires as a',          'a.id',  'p.annee_scolaire_id')
       .where({
@@ -206,7 +207,7 @@ router.get('/parents/moi/enfants/:id/notes', auth, isoler, async (req, res, next
       'n.id', 'n.valeur', 'n.est_absent', 'n.appreciation',
       'ev.type', 'ev.numero', 'ev.date_evaluation', 'ev.note_max',
       'ev.moyenne_classe', 'ev.note_min_classe', 'ev.note_max_classe',
-      'm.nom as matiere', 'm.couleur_affichage',
+      'm.nom as matiere', 'dm.couleur_affichage',
       'p.numero as trimestre', 'p.libelle as periode'
     );
 
@@ -305,6 +306,7 @@ router.get('/parents/moi/enfants/:id/bulletins', auth, isoler, async (req, res, 
       bulletins.map(async (bulletin) => {
         const matieres = await db('moyennes_matieres as mm')
           .join('matieres as m', 'm.id', 'mm.matiere_id')
+          .leftJoin('disciplines_matieres as dm', 'dm.id', 'm.discipline_id')
           .join('periodes as p2', 'p2.id', 'mm.periode_id')
           .where({ 'mm.inscription_id': inscription.inscription_id, 'p2.numero': bulletin.trimestre })
           .whereIn('p2.annee_scolaire_id',
@@ -312,7 +314,7 @@ router.get('/parents/moi/enfants/:id/bulletins', auth, isoler, async (req, res, 
           )
           .orderBy('m.nom')
           .select(
-            'm.nom as matiere', 'm.couleur_affichage',
+            'm.nom as matiere', 'dm.couleur_affichage',
             'mm.moyenne', 'mm.coefficient', 'mm.rang_dans_classe',
             'mm.appreciation_enseignant', 'mm.est_complete'
           );
