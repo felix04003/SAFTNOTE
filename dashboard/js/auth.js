@@ -10,7 +10,10 @@ var Auth = {
     localStorage.setItem(CONFIG.TOKEN_KEY, res.data.token);
     localStorage.setItem(CONFIG.USER_KEY, JSON.stringify(res.data.utilisateur));
     var role = (res.data.utilisateur && res.data.utilisateur.role) ? res.data.utilisateur.role.toLowerCase() : '';
-    window.location.href = (role === 'enseignant') ? 'enseignant.html' : 'index.html';
+    var dest = 'index.html';
+    if (role === 'enseignant') dest = 'enseignant.html';
+    else if (role === 'parent') dest = 'parent.html';
+    window.location.href = dest;
   },
 
   async logout() {
