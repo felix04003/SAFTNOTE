@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EcoleManager — Espace Parents</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sb-logo">
+    <div class="sb-mark">EM</div>
+    <div class="sb-app">EcoleManager</div>
+    <div class="sb-etab" id="sb-etab-nom"></div>
+  </div>
+  <nav class="sb-nav">
+    <div class="nav-sec">Général</div>
+    <a class="nav-item actif" data-page="par-dashboard" onclick="goto('par-dashboard')"><span class="nav-ico">📊</span>Tableau de bord</a>
+    <div class="nav-sec">Mon enfant</div>
+    <a class="nav-item" data-page="par-notes"     onclick="goto('par-notes')"    ><span class="nav-ico">📝</span>Notes & résultats</a>
+    <a class="nav-item" data-page="par-absences"  onclick="goto('par-absences')" ><span class="nav-ico">✅</span>Absences</a>
+    <a class="nav-item" data-page="par-bulletins" onclick="goto('par-bulletins')"><span class="nav-ico">📄</span>Bulletins</a>
+  </nav>
+  <div class="sb-user">
+    <div class="u-avatar" id="sb-user-avatar">P</div>
+    <div style="flex:1">
+      <div class="u-name" id="sb-user-nom"></div>
+      <div class="u-role" id="sb-user-role">Parent</div>
+    </div>
+    <a href="#" id="btn-logout" title="Déconnexion" style="color:rgba(255,255,255,.4);font-size:16px;text-decoration:none;padding:4px">🚪</a>
+  </div>
+</aside>
+
+<!-- Sélecteur d'enfant — affiché sous la sidebar nav si plusieurs enfants -->
+<div id="par-enfant-wrap" style="position:fixed;bottom:64px;left:0;width:200px;padding:12px 16px;background:#1a3d5c;border-top:1px solid rgba(255,255,255,.1);z-index:100">
+  <div style="font-size:9px;color:rgba(255,255,255,.5);margin-bottom:6px;letter-spacing:.5px;text-transform:uppercase">Enfant actif</div>
+  <select id="par-enfant-sel" class="fi" style="width:100%;background:rgba(255,255,255,.1);color:white;border:1px solid rgba(255,255,255,.2);font-size:11px;padding:5px 8px;border-radius:4px"></select>
+</div>
+
+<main class="main">
+  <header class="topbar">
+    <span class="tb-titre" id="tb-titre">Tableau de bord</span>
+    <span class="tb-annee" id="tb-annee"></span>
+    <div class="tb-notif" title="Notifications">🔔<span class="notif-dot"></span></div>
+  </header>
+
+  <div class="content">
+
+    <!-- ═══ PAGE DASHBOARD ═══ -->
+    <div class="page active" id="page-par-dashboard">
+      <div class="ph">
+        <div>
+          <div class="ph-titre" id="par-greeting">Bonjour 👋</div>
+          <div class="ph-sous" id="ph-sous-date"></div>
+        </div>
+      </div>
+      <div class="sg" style="grid-template-columns:repeat(3,1fr)">
+        <div class="sc" style="--c:var(--vert)">
+          <div class="sc-ico">📊</div>
+          <div class="sc-val" id="par-kpi-moy">—</div>
+          <div class="sc-lbl">Moyenne générale</div>
+        </div>
+        <div class="sc" style="--c:var(--orange)">
+          <div class="sc-ico">⚠️</div>
+          <div class="sc-val" id="par-kpi-abs">—</div>
+          <div class="sc-lbl">Absences (année)</div>
+        </div>
+        <div class="sc" style="--c:var(--bleu)">
+          <div class="sc-ico">🏆</div>
+          <div class="sc-val" id="par-kpi-mention">—</div>
+          <div class="sc-lbl">Mention</div>
+        </div>
+      </div>
+      <div class="g2">
+        <div class="carte">
+          <div class="ch"><span>📝</span><span class="ct">Dernières notes publiées</span><a class="ca" onclick="goto('par-notes')">Tout voir →</a></div>
+          <div id="par-dernieres-notes" style="padding:12px 18px"></div>
+        </div>
+        <div class="carte">
+          <div class="ch"><span>✅</span><span class="ct">Absences récentes</span><a class="ca" onclick="goto('par-absences')">Tout voir →</a></div>
+          <div id="par-recap-absences" style="padding:12px 18px"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ PAGE NOTES ═══ -->
+    <div class="page" id="page-par-notes">
+      <div class="ph">
+        <div><div class="ph-titre">Notes & résultats</div><div class="ph-sous" id="par-notes-sous">—</div></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-bottom:16px">
+        <select class="fi" id="par-fil-periode" onchange="PageParNotes.filtrerPeriode(this.value)" style="flex:1">
+          <option value="">Toutes les périodes</option>
+        </select>
+      </div>
+      <div id="par-notes-container"></div>
+    </div>
+
+    <!-- ═══ PAGE ABSENCES ═══ -->
+    <div class="page" id="page-par-absences">
+      <div class="ph">
+        <div><div class="ph-titre">Absences & retards</div></div>
+      </div>
+      <div id="par-recap-abs-table" style="margin-bottom:16px"></div>
+      <div class="carte">
+        <div class="ch"><span>📋</span><span class="ct">Détail des absences</span></div>
+        <div class="tw">
+          <table>
+            <thead><tr>
+              <th>Date</th><th>Matière</th><th>Horaire</th><th>Statut</th><th>Justifié</th>
+            </tr></thead>
+            <tbody id="tb-par-absences"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ PAGE BULLETINS ═══ -->
+    <div class="page" id="page-par-bulletins">
+      <div class="ph">
+        <div><div class="ph-titre">Bulletins scolaires</div><div class="ph-sous" id="par-bulletins-sous">—</div></div>
+      </div>
+      <div id="par-bulletins-liste"></div>
+    </div>
+
+  </div><!-- /.content -->
+</main>
+
+<div id="tc" style="position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px"></div>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/par-router.js"></script>
+<script src="js/pages/par-dashboard.js"></script>
+<script src="js/pages/par-notes.js"></script>
+<script src="js/pages/par-absences.js"></script>
+<script src="js/pages/par-bulletins.js"></script>
+<script src="js/par-app.js"></script>
+</body>
+</html>
