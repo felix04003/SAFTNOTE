@@ -214,7 +214,7 @@ var PageEnsNotes = {
       var evalRes = await Api.get('/evaluations/' + evalId + '/notes');
       var notesSaisies = evalRes.data || [];
       var notesMap = {};
-      notesSaisies.forEach(function(n) { notesMap[n.eleve_id] = n; });
+      notesSaisies.forEach(function(n) { notesMap[n.utilisateur_id || n.eleve_id] = n; });
 
       // Si _data est vide (navigation directe depuis le dashboard), charger les évals d'abord
       if (!PageEnsNotes._data || !PageEnsNotes._data.length) {
