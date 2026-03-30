@@ -79,6 +79,81 @@ router.post('/appels', auth, isoler, perm('absences.faire_appel'),
   }
 );
 
+// ── GET /appels/cours — État d'un cours pour le drawer EDT ──────
+// ?emploi_du_temps_id=<uuid>&date_cours=YYYY-MM-DD
+router.get('/appels/cours', auth, isoler, perm('absences.faire_appel'), async (req, res, next) => {
+  const db = getDB();
+  try {
+    const { emploi_du_temps_id, date_cours } = req.query;
+
+    if (!emploi_du_temps_id || !date_cours) {
+      throw ApiError.validationEchouee('emploi_du_temps_id et date_cours requis');
+    }
+
+    // Ownership check : le créneau doit appartenir à une affectation de l'enseignant
+    // dans l'établissement courant (scoping via annees_scolaires)
+    const creneauEns = await db('emplois_du_temps as edt')
+      .join('affectations_enseignants as ae', 'ae.id',  'edt.affectation_id')
+      .join('classes as c',                  'c.id',   'ae.classe_id')
+      .join('annees_scolaires as a',          'a.id',   'c.annee_scolaire_id')
+      .join('enseignants as ens',             'ens.id', 'ae.enseignant_id')
+      .where({
+        'edt.id':             emploi_du_temps_id,
+        'ens.utilisateur_id': req.session.utilisateur_id,
+        'a.etablissement_id': req.etablissement_id,
+      })
+      .first('edt.id', 'ae.classe_id', 'a.id as annee_id');
+
+    if (!creneauEns) throw ApiError.interdit('Ce créneau ne vous appartient pas');
+
+    // Chercher l'appel existant
+    const appel = await db('appels')
+      .where({ emploi_du_temps_id, date_cours })
+      .first('id', 'statut');
+
+    // Récupérer les élèves inscrits dans la classe
+    const inscriptions = await db('inscriptions as i')
+      .join('eleves as el',       'el.id', 'i.eleve_id')
+      .join('utilisateurs as u',  'u.id',  'el.utilisateur_id')
+      .where({
+        'i.classe_id':         creneauEns.classe_id,
+        'i.annee_scolaire_id': creneauEns.annee_id,
+        'i.statut':            'actif',
+      })
+      .orderBy(['u.nom', 'u.prenom'])
+      .select('i.id as inscription_id', 'u.nom', 'u.prenom');
+
+    // Si un appel existe, récupérer les statuts de présence
+    const presencesMap = {};
+    if (appel) {
+      const presences = await db('presences')
+        .where({ appel_id: appel.id })
+        .select('inscription_id', 'statut', 'minutes_retard');
+      presences.forEach(function(p) {
+        presencesMap[p.inscription_id] = { statut: p.statut, minutes_retard: p.minutes_retard || 0 };
+      });
+    }
+
+    const eleves = inscriptions.map(function(i) {
+      const p = presencesMap[i.inscription_id] || { statut: 'non_saisi', minutes_retard: 0 };
+      return {
+        inscription_id: i.inscription_id,
+        nom:            i.nom,
+        prenom:         i.prenom,
+        statut:         p.statut,
+        minutes_retard: p.minutes_retard,
+      };
+    });
+
+    return ok(res, {
+      appel_id: appel ? appel.id     : null,
+      statut:   appel ? appel.statut : null,
+      eleves,
+    });
+
+  } catch (err) { next(err); }
+});
+
 // ── PUT /appels/:appel_id/presences — Saisir l'appel ────────────
 // Déclencheur principal des notifications parents
 router.put('/appels/:appel_id/presences', auth, isoler, perm('absences.faire_appel'),

@@ -130,3 +130,55 @@ describe('GET /api/v1/appels/:id/presences', () => {
       .expect(404);
   });
 });
+
+// ── GET /appels/cours ───────────────────────────────────────────
+
+describe('GET /api/v1/appels/cours', () => {
+  it('devrait retourner null + élèves si aucun appel existant', async () => {
+    if (!edtId) return;
+
+    const res = await request
+      .get('/api/v1/appels/cours')
+      .query({ emploi_du_temps_id: edtId, date_cours: '2025-01-15' })
+      .set('Authorization', `Bearer ${tokenEns}`)
+      .expect(200);
+
+    expect(res.body.succes).toBe(true);
+    expect(res.body.data.appel_id).toBeNull();
+    expect(res.body.data.statut).toBeNull();
+    expect(Array.isArray(res.body.data.eleves)).toBe(true);
+  });
+
+  it('devrait retourner appel_id + statut si un appel existe', async () => {
+    if (!edtId) return;
+
+    await request
+      .post('/api/v1/appels')
+      .set('Authorization', `Bearer ${tokenEns}`)
+      .send({ emploi_du_temps_id: edtId, date_cours: '2025-02-10' });
+
+    const res = await request
+      .get('/api/v1/appels/cours')
+      .query({ emploi_du_temps_id: edtId, date_cours: '2025-02-10' })
+      .set('Authorization', `Bearer ${tokenEns}`)
+      .expect(200);
+
+    expect(res.body.data.appel_id).not.toBeNull();
+    expect(res.body.data.statut).toBe('ouvert');
+  });
+
+  it('devrait refuser si emploi_du_temps_id n\'appartient pas à l\'enseignant', async () => {
+    await request
+      .get('/api/v1/appels/cours')
+      .query({ emploi_du_temps_id: '00000000-0000-0000-0000-000000000000', date_cours: '2025-01-15' })
+      .set('Authorization', `Bearer ${tokenEns}`)
+      .expect(403);
+  });
+
+  it('devrait refuser sans authentification', async () => {
+    await request
+      .get('/api/v1/appels/cours')
+      .query({ emploi_du_temps_id: edtId || '00000000-0000-0000-0000-000000000000', date_cours: '2025-01-15' })
+      .expect(401);
+  });
+});
