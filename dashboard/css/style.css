@@ -205,5 +205,55 @@ td.nc{font-weight:600;color:var(--g900)}
 .login-err.show{display:block}
 .btn-full{width:100%;justify-content:center;padding:11px 16px;font-size:14px}
 
+/* EDT SEMAINE NAV */
+.edt-nav-semaine{display:flex;align-items:center;gap:8px;padding:10px 16px;flex-wrap:wrap}
+.edt-label-semaine{font-weight:600;font-size:14px;flex:1;text-align:center;white-space:nowrap}
+
+/* EDT GRILLE */
+.edt-creneau{border-radius:var(--rs);padding:10px 12px;cursor:pointer;transition:box-shadow .15s,transform .15s;color:#fff;margin-bottom:4px}
+.edt-creneau:hover{box-shadow:0 4px 12px rgba(0,0,0,.25);transform:translateY(-1px)}
+.edt-creneau-mat{font-weight:700;font-size:13px}
+.edt-creneau-info{font-size:11px;opacity:.85;margin-top:2px}
+.edt-creneau-pause{color:var(--gris);font-size:12px;padding:6px 0}
+
+/* EDT OVERLAY */
+#edt-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:199}
+#edt-overlay.show{display:block}
+
+/* EDT DRAWER */
+#edt-drawer{position:fixed;top:0;right:0;height:100vh;width:380px;max-width:100vw;background:var(--blanc);z-index:200;transform:translateX(100%);transition:transform .25s ease;display:flex;flex-direction:column;box-shadow:-4px 0 24px rgba(0,0,0,.15)}
+#edt-drawer.open{transform:translateX(0)}
+#edt-drawer-header{display:flex;align-items:flex-start;justify-content:space-between;padding:16px;color:#fff}
+#edt-drawer-matiere{font-weight:700;font-size:16px}
+#edt-drawer-info{font-size:12px;opacity:.85;margin-top:4px}
+#edt-drawer-close{background:none;border:none;color:#fff;font-size:20px;cursor:pointer;padding:0;line-height:1}
+.edt-tabs{display:flex;border-bottom:1px solid var(--bord)}
+.edt-tab{flex:1;padding:10px 4px;border:none;background:none;cursor:pointer;font-size:13px;color:var(--gris);font-weight:600;transition:color .15s}
+.edt-tab.active{color:var(--vert);border-bottom:2px solid var(--vert)}
+#edt-drawer-body{flex:1;overflow-y:auto;padding:16px}
+
+/* EDT DRAWER — Appel */
+.edt-eleve-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--bg)}
+.edt-eleve-nom{font-size:14px;font-weight:600;flex:1}
+.edt-eleve-btns{display:flex;gap:4px}
+.edt-btn-present{background:#e6f4ed;color:#1a7a46;border:1.5px solid #b2ddc8}
+.edt-btn-present.actif{background:#1a7a46;color:#fff}
+.edt-btn-absent{background:#fde8e8;color:#c0392b;border:1.5px solid #f5b5b5}
+.edt-btn-absent.actif{background:#c0392b;color:#fff}
+.edt-btn-retard{background:#fef3e2;color:#b7670a;border:1.5px solid #f5d8a0}
+.edt-btn-retard.actif{background:#b7670a;color:#fff}
+.edt-retard-input{width:64px;padding:4px 6px;border:1px solid var(--bord);border-radius:var(--rs);font-size:13px}
+.edt-badge-saisis{font-size:12px;color:var(--gris);margin-bottom:12px}
+.edt-cloture-btn{width:100%;margin-top:16px}
+
+/* EDT DRAWER — Historique badges */
+.badge-present{background:#e6f4ed;color:#1a7a46;padding:2px 8px;border-radius:20px;font-size:12px}
+.badge-absent{background:#fde8e8;color:#c0392b;padding:2px 8px;border-radius:20px;font-size:12px}
+.badge-retard{background:#fef3e2;color:#b7670a;padding:2px 8px;border-radius:20px;font-size:12px}
+.badge-sorti{background:#f0f0f0;color:#666;padding:2px 8px;border-radius:20px;font-size:12px}
+.badge-dispense{background:#e8f0fe;color:#1a56cc;padding:2px 8px;border-radius:20px;font-size:12px}
+.badge-nonsaisi{background:#f5f5f5;color:#aaa;padding:2px 8px;border-radius:20px;font-size:12px}
+
 /* RESPONSIVE */
 @media(max-width:1200px){.sg{grid-template-columns:repeat(2,1fr)}.g2{grid-template-columns:1fr}}
+@media(max-width:480px){#edt-drawer{width:100vw}}

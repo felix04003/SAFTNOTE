@@ -176,6 +176,12 @@
       <div class="ph">
         <div><div class="ph-titre">Mon emploi du temps</div><div class="ph-sous" id="ens-edt-annee"></div></div>
       </div>
+      <div class="edt-nav-semaine">
+        <button class="btn btn-s" id="edt-btn-prev" onclick="PageEnsEdt.semainePrec()">&#8592; Précédente</button>
+        <span id="edt-label-semaine" class="edt-label-semaine"></span>
+        <button class="btn btn-s" id="edt-btn-next" onclick="PageEnsEdt.semaineSuiv()">Suivante &#8594;</button>
+        <button class="btn btn-s" id="edt-btn-auj" onclick="PageEnsEdt.semaineAuj()">Aujourd'hui</button>
+      </div>
       <div class="carte">
         <div id="ens-edt-grid" style="padding:16px"></div>
       </div>
@@ -352,6 +358,25 @@
 <div id="tc" style="position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px"></div>
 
 <script src="js/config.js"></script>
+<!-- ═══ EDT DRAWER ═══ -->
+<div id="edt-overlay" onclick="EdtDrawer.fermer()"></div>
+<div id="edt-drawer">
+  <div id="edt-drawer-header">
+    <div>
+      <div id="edt-drawer-matiere"></div>
+      <div id="edt-drawer-info"></div>
+    </div>
+    <button id="edt-drawer-close" onclick="EdtDrawer.fermer()">&#10005;</button>
+  </div>
+  <div class="edt-tabs">
+    <button class="edt-tab active" id="edt-tab-appel"     onclick="EdtDrawer.onglet('appel')">Appel</button>
+    <button class="edt-tab"        id="edt-tab-historique" onclick="EdtDrawer.onglet('historique')">Historique</button>
+    <button class="edt-tab"        id="edt-tab-notes"     onclick="EdtDrawer.onglet('notes')">Notes</button>
+    <button class="edt-tab"        id="edt-tab-salle"     onclick="EdtDrawer.onglet('salle')">Salle</button>
+  </div>
+  <div id="edt-drawer-body"></div>
+</div>
+
 <script src="js/api.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/ui.js"></script>
