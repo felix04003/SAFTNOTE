@@ -204,11 +204,12 @@ router.get('/enseignants/moi/edt', auth, isoler, async (req, res, next) => {
     const { semaine } = req.query;
 
     let query = db('emplois_du_temps as edt')
-      .join('affectations_enseignants as ae', 'ae.id', 'edt.affectation_id')
-      .join('classes as c',         'c.id',  'ae.classe_id')
-      .join('niveaux as n',         'n.id',  'c.niveau_id')
-      .join('matieres as m',        'm.id',  'ae.matiere_id')
-      .join('plages_horaires as ph', 'ph.id', 'edt.plage_id')
+      .join('affectations_enseignants as ae',   'ae.id', 'edt.affectation_id')
+      .join('classes as c',                     'c.id',  'ae.classe_id')
+      .join('niveaux as n',                     'n.id',  'c.niveau_id')
+      .join('matieres as m',                    'm.id',  'ae.matiere_id')
+      .leftJoin('disciplines_matieres as dm',   'dm.id', 'm.discipline_id')
+      .join('plages_horaires as ph',            'ph.id', 'edt.plage_id')
       .where({
         'ae.enseignant_id':     enseignant.id,
         'ae.annee_scolaire_id': annee.id,
@@ -228,6 +229,7 @@ router.get('/enseignants/moi/edt', auth, isoler, async (req, res, next) => {
         'm.nom as matiere',
         'm.nom_court as matiere_court',
         'm.code as matiere_code',
+        'dm.couleur_affichage',
         'edt.salle',
         'ae.id as affectation_id'
       );
