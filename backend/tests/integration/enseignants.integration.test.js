@@ -97,6 +97,85 @@ describe('GET /api/v1/enseignants/moi/edt', () => {
   });
 });
 
+// ── PUT /enseignants/moi/edt/:creneau_id/salle ─────────────────
+
+describe('PUT /api/v1/enseignants/moi/edt/:creneau_id/salle', () => {
+  let creneauId;
+
+  beforeAll(async () => {
+    const db = getTestDB();
+
+    // S'assurer qu'il existe une matière et une affectation
+    let matId;
+    const matiere = await db('matieres')
+      .where({ etablissement_id: seed.etablissement.id })
+      .first('id').catch(() => null);
+
+    if (matiere) {
+      matId = matiere.id;
+    } else {
+      const [m] = await db('matieres').insert({
+        etablissement_id: seed.etablissement.id,
+        nom: 'Maths',
+        code: 'MATH',
+      }).returning('*');
+      matId = m.id;
+    }
+
+    const [aff] = await db('affectations_enseignants').insert({
+      enseignant_id: seed.enseignant.id,
+      matiere_id: matId,
+      classe_id: seed.classe.id,
+      annee_scolaire_id: seed.annee.id,
+    }).onConflict(['classe_id', 'matiere_id', 'annee_scolaire_id']).merge().returning('*');
+
+    const plage = await db('plages_horaires').first('id');
+    if (!plage) return;
+
+    const [edt] = await db('emplois_du_temps').insert({
+      classe_id: seed.classe.id,
+      affectation_id: aff.id,
+      plage_id: plage.id,
+      jour_semaine: 2,
+      salle: 'Salle A',
+      actif: true,
+    }).returning('*');
+
+    creneauId = edt?.id;
+  });
+
+  it('devrait mettre à jour la salle d\'un créneau appartenant à l\'enseignant', async () => {
+    if (!creneauId) return;
+
+    const res = await request
+      .put(`/api/v1/enseignants/moi/edt/${creneauId}/salle`)
+      .set('Authorization', `Bearer ${tokenEns}`)
+      .send({ salle: 'Salle B' })
+      .expect(200);
+
+    expect(res.body.succes).toBe(true);
+    expect(res.body.data.salle).toBe('Salle B');
+  });
+
+  it('devrait retourner 404 pour un créneau non propriétaire', async () => {
+    await request
+      .put('/api/v1/enseignants/moi/edt/00000000-0000-0000-0000-000000000099/salle')
+      .set('Authorization', `Bearer ${tokenEns}`)
+      .send({ salle: 'Salle X' })
+      .expect(404);
+  });
+
+  it('devrait refuser une salle trop longue (> 50 caractères)', async () => {
+    if (!creneauId) return;
+
+    await request
+      .put(`/api/v1/enseignants/moi/edt/${creneauId}/salle`)
+      .set('Authorization', `Bearer ${tokenEns}`)
+      .send({ salle: 'A'.repeat(51) })
+      .expect(422);
+  });
+});
+
 // ── GET /enseignants/moi/affectations ──────────────────────────
 
 describe('GET /api/v1/enseignants/moi/affectations', () => {

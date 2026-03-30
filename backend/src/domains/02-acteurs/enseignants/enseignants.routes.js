@@ -6,6 +6,7 @@ const bcrypt   = require('bcryptjs');
 const { v4: uuid } = require('uuid');
 
 const { getDB }      = require('../../../infrastructure/database/pool');
+const { invalidatePattern } = require('../../../infrastructure/cache/redis');
 const { authentifier } = require('../../../middleware/auth.middleware');
 const { exigerPermission, isolerEtablissement } = require('../../../middleware/permission.middleware');
 const { valider }    = require('../../../middleware/validate.middleware');
@@ -272,6 +273,42 @@ router.get('/enseignants/moi/edt', auth, isoler, async (req, res, next) => {
 
   } catch (err) { next(err); }
 });
+
+// ═════════════════════════════════════════════════════════════════
+// PUT /enseignants/moi/edt/:creneau_id/salle
+// Mise à jour ponctuelle de la salle d'un créneau par l'enseignant
+// ═════════════════════════════════════════════════════════════════
+router.put('/enseignants/moi/edt/:creneau_id/salle', auth, isoler, perm('edt.modifier_ponctuel'),
+  valider(z.object({
+    salle: z.string().max(50).nullable().optional(),
+  })),
+  async (req, res, next) => {
+    const db = getDB();
+    try {
+      const enseignant = await getEnseignantConnecte(db, req.session.utilisateur_id);
+
+      // Vérifier ownership : le créneau doit appartenir à l'enseignant
+      const creneau = await db('emplois_du_temps as edt')
+        .join('affectations_enseignants as ae', 'ae.id', 'edt.affectation_id')
+        .where({ 'edt.id': req.params.creneau_id, 'ae.enseignant_id': enseignant.id })
+        .first('edt.id');
+
+      if (!creneau) throw ApiError.nonTrouve('Créneau introuvable ou non autorisé');
+
+      const [updated] = await db('emplois_du_temps')
+        .where({ id: req.params.creneau_id })
+        .update({ salle: req.body.salle || null })
+        .returning('*');
+
+      // Invalider le cache Redis (vue admin EDT enseignant)
+      try {
+        await invalidatePattern('edt_ens:' + enseignant.id + '*');
+      } catch (_e) { /* Redis indisponible — non bloquant */ }
+
+      return ok(res, updated);
+    } catch (err) { next(err); }
+  }
+);
 
 // ═════════════════════════════════════════════════════════════════
 // GET /enseignants/moi/affectations
