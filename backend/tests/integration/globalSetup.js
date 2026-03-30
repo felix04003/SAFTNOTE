@@ -63,6 +63,7 @@ module.exports = async function globalSetup() {
     '006_donnees_reference.sql',
     '007_vues_et_fonctions.sql',
     '008_index_performance.sql',
+    '009_fix_statut_checks.sql',
   ];
 
   for (const file of migrationFiles) {
