@@ -205,6 +205,10 @@ td.nc{font-weight:600;color:var(--g900)}
 .login-err.show{display:block}
 .btn-full{width:100%;justify-content:center;padding:11px 16px;font-size:14px}
 
+/* BUTTON VARIANTS */
+.btn-s{padding:5px 10px;font-size:12px}
+.btn-xs{padding:4px 8px;font-size:12px}
+
 /* EDT SEMAINE NAV */
 .edt-nav-semaine{display:flex;align-items:center;gap:8px;padding:10px 16px;flex-wrap:wrap}
 .edt-label-semaine{font-weight:600;font-size:14px;flex:1;text-align:center;white-space:nowrap}
