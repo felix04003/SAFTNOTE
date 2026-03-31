@@ -72,3 +72,7 @@ postgres-data/
 # ── Archives temporaires ─────────────────────────────
 *.zip
 *.tar.gz
+
+# Tooling
+.claude/worktrees/
+.superpowers/
