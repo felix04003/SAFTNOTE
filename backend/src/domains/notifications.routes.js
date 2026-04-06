@@ -20,26 +20,20 @@ async function notifsAdmin(db, etablissementId) {
   depuis.setDate(depuis.getDate() - FENETRE_JOURS);
   var depuisISO = depuis.toISOString().split('T')[0];
 
-  // 1. Appels manqués : créneaux passés sans appel (7 derniers jours)
-  var appelsManques = await db('emplois_du_temps as edt')
+  // 1. Appels manqués : appels non effectués (7 derniers jours)
+  var appelsManques = await db('appels as ap')
+    .join('emplois_du_temps as edt', 'edt.id', 'ap.emploi_du_temps_id')
     .join('affectations_enseignants as ae', 'ae.id', 'edt.affectation_id')
-    .join('disciplines_matieres as dm', 'dm.affectation_id', 'ae.id')
-    .join('matieres as m', 'm.id', 'dm.matiere_id')
+    .join('matieres as m', 'm.id', 'ae.matiere_id')
     .join('classes as cl', 'cl.id', 'ae.classe_id')
-    .leftJoin('appels as ap', function() {
-      this.on('ap.emploi_du_temps_id', '=', 'edt.id')
-          .andOnVal('ap.statut', '!=', 'annule');
-    })
-    .where('ae.etablissement_id', etablissementId)
-    .where('edt.date_debut', '>=', depuisISO)
-    .where('edt.date_debut', '<', db.raw('CURRENT_DATE'))
-    .whereNull('ap.id')
+    .where('m.etablissement_id', etablissementId)
+    .where('ap.statut', 'non_effectue')
+    .where('ap.date_cours', '>=', depuisISO)
     .limit(MAX_ITEMS)
     .select(
       'cl.nom as classe',
       'm.nom as matiere',
-      'edt.date_debut as date',
-      'edt.heure_debut as heure'
+      'ap.date_cours as date'
     );
 
   // 2. Absences injustifiées (7 derniers jours)
@@ -49,24 +43,24 @@ async function notifsAdmin(db, etablissementId) {
     .join('eleves as el', 'el.id', 'i.eleve_id')
     .join('utilisateurs as u', 'u.id', 'el.utilisateur_id')
     .join('classes as cl', 'cl.id', 'i.classe_id')
-    .where('ap.etablissement_id', etablissementId)
+    .join('annees_scolaires as an', 'an.id', 'i.annee_scolaire_id')
+    .where('an.etablissement_id', etablissementId)
     .where('p.statut', 'absent')
     .where('p.est_justifie', false)
-    .where('ap.date', '>=', depuisISO)
+    .where('ap.date_cours', '>=', depuisISO)
     .limit(MAX_ITEMS)
     .select(
       db.raw("CONCAT(u.prenom, ' ', u.nom) as eleve"),
       'cl.nom as classe',
-      'ap.date as date'
+      'ap.date_cours as date'
     );
 
   // 3. Notes publiées (7 derniers jours)
   var notes = await db('evaluations as ev')
     .join('affectations_enseignants as ae', 'ae.id', 'ev.affectation_id')
-    .join('disciplines_matieres as dm', 'dm.affectation_id', 'ae.id')
-    .join('matieres as m', 'm.id', 'dm.matiere_id')
+    .join('matieres as m', 'm.id', 'ae.matiere_id')
     .join('classes as cl', 'cl.id', 'ae.classe_id')
-    .where('ae.etablissement_id', etablissementId)
+    .where('m.etablissement_id', etablissementId)
     .where('ev.notes_publiees', true)
     .where('ev.date_evaluation', '>=', depuisISO)
     .limit(MAX_ITEMS)
@@ -87,7 +81,7 @@ async function notifsAdmin(db, etablissementId) {
     .select(
       db.raw("CONCAT(u.prenom, ' ', u.nom) as eleve"),
       'cl.nom as classe',
-      'per.nom as periode'
+      'per.libelle as periode'
     );
 
   // 5. Incidents discipline (7 derniers jours)
@@ -96,9 +90,7 @@ async function notifsAdmin(db, etablissementId) {
     .join('eleves as el', 'el.id', 'i.eleve_id')
     .join('utilisateurs as u', 'u.id', 'el.utilisateur_id')
     .join('classes as cl', 'cl.id', 'i.classe_id')
-    .join('annees_scolaires as an', function() {
-      this.on('an.id', db.raw('(SELECT annee_scolaire_id FROM classes WHERE id = i.classe_id)'));
-    })
+    .join('annees_scolaires as an', 'an.id', 'i.annee_scolaire_id')
     .where('an.etablissement_id', etablissementId)
     .where('inc.statut', '!=', 'clos')
     .where('inc.created_at', '>=', depuisISO)
@@ -120,30 +112,24 @@ async function notifsEnseignant(db, utilisateurId, etablissementId) {
   var depuisISO = depuis.toISOString().split('T')[0];
 
   var enseignant = await db('enseignants')
-    .where({ utilisateur_id: utilisateurId, etablissement_id: etablissementId })
+    .where({ utilisateur_id: utilisateurId })
     .first('id');
   if (!enseignant) return { appelsManques: [], notes: [] };
 
-  var appelsManques = await db('emplois_du_temps as edt')
+  var appelsManques = await db('appels as ap')
+    .join('emplois_du_temps as edt', 'edt.id', 'ap.emploi_du_temps_id')
     .join('affectations_enseignants as ae', 'ae.id', 'edt.affectation_id')
-    .join('disciplines_matieres as dm', 'dm.affectation_id', 'ae.id')
-    .join('matieres as m', 'm.id', 'dm.matiere_id')
+    .join('matieres as m', 'm.id', 'ae.matiere_id')
     .join('classes as cl', 'cl.id', 'ae.classe_id')
-    .leftJoin('appels as ap', function() {
-      this.on('ap.emploi_du_temps_id', '=', 'edt.id')
-          .andOnVal('ap.statut', '!=', 'annule');
-    })
     .where('ae.enseignant_id', enseignant.id)
-    .where('edt.date_debut', '>=', depuisISO)
-    .where('edt.date_debut', '<', db.raw('CURRENT_DATE'))
-    .whereNull('ap.id')
+    .where('ap.statut', 'non_effectue')
+    .where('ap.date_cours', '>=', depuisISO)
     .limit(MAX_ITEMS)
-    .select('cl.nom as classe', 'm.nom as matiere', 'edt.date_debut as date', 'edt.heure_debut as heure');
+    .select('cl.nom as classe', 'm.nom as matiere', 'ap.date_cours as date');
 
   var notes = await db('evaluations as ev')
     .join('affectations_enseignants as ae', 'ae.id', 'ev.affectation_id')
-    .join('disciplines_matieres as dm', 'dm.affectation_id', 'ae.id')
-    .join('matieres as m', 'm.id', 'dm.matiere_id')
+    .join('matieres as m', 'm.id', 'ae.matiere_id')
     .join('classes as cl', 'cl.id', 'ae.classe_id')
     .where('ae.enseignant_id', enseignant.id)
     .where('ev.notes_publiees', true)
@@ -182,14 +168,13 @@ async function notifsParent(db, utilisateurId, etablissementId) {
     .whereIn('p.inscription_id', inscriptionIds)
     .where('p.statut', 'absent')
     .where('p.est_justifie', false)
-    .where('ap.date', '>=', depuisISO)
+    .where('ap.date_cours', '>=', depuisISO)
     .limit(MAX_ITEMS)
-    .select(db.raw("CONCAT(u.prenom, ' ', u.nom) as eleve"), 'cl.nom as classe', 'ap.date as date');
+    .select(db.raw("CONCAT(u.prenom, ' ', u.nom) as eleve"), 'cl.nom as classe', 'ap.date_cours as date');
 
   var notes = await db('evaluations as ev')
     .join('affectations_enseignants as ae', 'ae.id', 'ev.affectation_id')
-    .join('disciplines_matieres as dm', 'dm.affectation_id', 'ae.id')
-    .join('matieres as m', 'm.id', 'dm.matiere_id')
+    .join('matieres as m', 'm.id', 'ae.matiere_id')
     .join('inscriptions as i', 'i.classe_id', 'ae.classe_id')
     .whereIn('i.id', inscriptionIds)
     .where('ev.notes_publiees', true)
@@ -203,7 +188,7 @@ async function notifsParent(db, utilisateurId, etablissementId) {
     .where('mg.bulletin_genere', true)
     .where('mg.updated_at', '>=', depuisISO)
     .limit(MAX_ITEMS)
-    .select('per.nom as periode', 'mg.updated_at as date');
+    .select('per.libelle as periode', 'mg.updated_at as date');
 
   var incidents = await db('incidents_discipline as inc')
     .join('inscriptions as i', 'i.id', 'inc.inscription_id')
