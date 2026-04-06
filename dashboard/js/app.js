@@ -37,6 +37,9 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
+  // Init notifications
+  Notifs.init();
+
   // Handle initial hash route
   var hash = location.hash.slice(1);
   if (hash && TITRES[hash]) {
