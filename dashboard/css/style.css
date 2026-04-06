@@ -236,6 +236,26 @@ td.nc{font-weight:600;color:var(--g900)}
 .edt-tab.active{color:var(--vert);border-bottom:2px solid var(--vert)}
 #edt-drawer-body{flex:1;overflow-y:auto;padding:16px}
 
+/* NOTIF OVERLAY */
+#notif-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:199}
+#notif-overlay.show{display:block}
+
+/* NOTIF DRAWER */
+#notif-drawer{position:fixed;top:0;right:0;height:100vh;width:380px;max-width:100vw;background:var(--blanc);z-index:200;transform:translateX(100%);transition:transform .25s ease;display:flex;flex-direction:column;box-shadow:-4px 0 24px rgba(0,0,0,.15)}
+#notif-drawer.open{transform:translateX(0)}
+#notif-drawer-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--bord);flex-shrink:0}
+#notif-drawer-header span{font-weight:700;font-size:15px;color:var(--g700)}
+#notif-drawer-close{background:none;border:none;font-size:20px;cursor:pointer;padding:0;color:var(--gris);line-height:1}
+#notif-drawer-body{flex:1;overflow-y:auto;padding:12px 0}
+.notif-category{padding:8px 16px 0}
+.notif-category-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gris);margin-bottom:6px}
+.notif-item{font-size:13px;color:var(--g700);padding:6px 0;border-bottom:1px solid var(--g100)}
+.notif-item:last-child{border-bottom:none}
+.notif-empty{text-align:center;color:var(--gris);font-size:13px;padding:32px 16px}
+#notif-badge{display:none;position:absolute;top:4px;right:4px;background:var(--rouge);color:#fff;border-radius:50%;width:16px;height:16px;font-size:10px;font-weight:700;align-items:center;justify-content:center;border:2px solid #fff}
+#notif-badge.show{display:flex}
+@media(max-width:480px){#notif-drawer{width:100vw}}
+
 /* EDT DRAWER — Appel */
 .edt-eleve-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--bg)}
 .edt-eleve-nom{font-size:14px;font-weight:600;flex:1}
