@@ -49,9 +49,9 @@ var Notifs = {
     if (!badge) return;
     badge.textContent = count > 99 ? '99+' : String(count);
     if (count > 0) {
-      badge.classList.add('visible');
+      badge.classList.add('show');
     } else {
-      badge.classList.remove('visible');
+      badge.classList.remove('show');
     }
   },
 
