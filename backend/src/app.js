@@ -27,7 +27,8 @@ const enseignantsRouter = require('./domains/02-acteurs/enseignants/enseignants.
 const pedagogieRouter   = require('./domains/03-pedagogie/pedagogie.routes');
 const vieScolaireRouter = require('./domains/04-vie-scolaire/vie-scolaire.routes');
 const securiteRouter    = require('./domains/05-securite/securite.routes');
-const syncRouter        = require('./domains/sync.routes');
+const syncRouter           = require('./domains/sync.routes');
+const notificationsRouter  = require('./domains/notifications.routes');
 
 // ── App ──────────────────────────────────────────────────────────
 const app = express();
@@ -199,6 +200,7 @@ app.use(PREFIX, pedagogieRouter);
 app.use(PREFIX, vieScolaireRouter);
 app.use(PREFIX, securiteRouter);
 app.use(PREFIX, syncRouter);
+app.use(PREFIX, notificationsRouter);
 
 // ── Gestion des erreurs ─────────────────────────────────────────
 app.use(notFound);
