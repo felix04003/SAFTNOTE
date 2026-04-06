@@ -36,6 +36,9 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
+  // Initialiser les notifications
+  Notifs.init();
+
   // Routing hash initial
   var hash = location.hash.slice(1);
   if (hash && ENS_TITRES[hash]) {

@@ -38,7 +38,7 @@
   <header class="topbar">
     <span class="tb-titre" id="tb-titre">Tableau de bord</span>
     <span class="tb-annee" id="tb-annee">📅 —</span>
-    <div class="tb-notif" title="Notifications">🔔<span class="notif-dot"></span></div>
+    <div class="tb-notif" title="Notifications" onclick="Notifs.toggle()" style="position:relative">🔔<span id="notif-badge"></span></div>
   </header>
 
   <div class="content">
@@ -388,5 +388,16 @@
 <script src="js/pages/ens-edt.js"></script>
 <script src="js/pages/ens-discipline.js"></script>
 <script src="js/ens-app.js"></script>
+
+<!-- ═══ NOTIFICATION DRAWER ═══ -->
+<div id="notif-overlay" onclick="Notifs.fermer()"></div>
+<div id="notif-drawer">
+  <div id="notif-drawer-header">
+    <span>🔔 Notifications</span>
+    <button id="notif-drawer-close" onclick="Notifs.fermer()">✕</button>
+  </div>
+  <div id="notif-drawer-body"></div>
+</div>
+<script src="js/notifs.js"></script>
 </body>
 </html>
