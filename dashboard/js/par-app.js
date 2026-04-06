@@ -102,6 +102,9 @@ document.addEventListener('DOMContentLoaded', async function() {
   ParApp._peuplerSidebar();
   ParApp._peuplerSelecteur();
 
+  // Initialiser les notifications
+  Notifs.init();
+
   // Date dans la topbar
   var dateEl = document.getElementById('ph-sous-date');
   if (dateEl) {

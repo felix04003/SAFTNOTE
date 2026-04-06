@@ -44,7 +44,7 @@
   <header class="topbar">
     <span class="tb-titre" id="tb-titre">Tableau de bord</span>
     <span class="tb-annee" id="tb-annee"></span>
-    <div class="tb-notif" title="Notifications">🔔<span class="notif-dot"></span></div>
+    <div class="tb-notif" title="Notifications" onclick="Notifs.toggle()" style="position:relative">🔔<span id="notif-badge"></span></div>
   </header>
 
   <div class="content">
@@ -130,6 +130,16 @@
 </main>
 
 <div id="tc" style="position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px"></div>
+
+<div id="notif-overlay" onclick="Notifs.fermer()"></div>
+<div id="notif-drawer">
+  <div id="notif-drawer-header">
+    <span>🔔 Notifications</span>
+    <button id="notif-drawer-close" onclick="Notifs.fermer()">✕</button>
+  </div>
+  <div id="notif-drawer-body"></div>
+</div>
+<script src="js/notifs.js"></script>
 
 <script src="js/config.js"></script>
 <script src="js/api.js"></script>
