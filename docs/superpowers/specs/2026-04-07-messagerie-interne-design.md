@@ -28,7 +28,7 @@ EcoleManager a besoin d'un système de messages internes entre parents et enseig
 
 ## 1. Schéma de données
 
-Migration `008_messagerie.sql` :
+Migration `010_messagerie.sql` :
 
 ```sql
 -- conversations : un fil unique par (parent, enseignant, élève)
@@ -51,11 +51,13 @@ CREATE TABLE conversations (
 CREATE TABLE messages (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   conversation_id UUID NOT NULL REFERENCES conversations(id),
+  etablissement_id UUID NOT NULL REFERENCES etablissements(id),
   expediteur_id UUID NOT NULL REFERENCES utilisateurs(id),
   contenu TEXT NOT NULL CHECK (char_length(contenu) <= 2000),
   lu BOOLEAN DEFAULT FALSE,
   lu_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
   deleted_at TIMESTAMPTZ
 );
 
@@ -71,7 +73,16 @@ CREATE INDEX idx_messages_non_lus ON messages(conversation_id) WHERE lu = FALSE 
 ### Nouvelles permissions
 
 ```sql
-INSERT INTO permissions (code, description, categorie) VALUES
+-- Ajouter 'messagerie' au CHECK constraint existant
+ALTER TABLE permissions DROP CONSTRAINT IF EXISTS permissions_domaine_check;
+ALTER TABLE permissions ADD CONSTRAINT permissions_domaine_check
+  CHECK (domaine IN (
+    'notes','absences','discipline','bulletins','edt',
+    'eleves','parents','enseignants','config','rapports','admin',
+    'messagerie'
+  ));
+
+INSERT INTO permissions (code, description, domaine) VALUES
   ('messagerie.voir', 'Voir ses propres conversations', 'messagerie'),
   ('messagerie.envoyer', 'Envoyer un message', 'messagerie'),
   ('messagerie.superviser', 'Voir toutes les conversations de l''établissement', 'messagerie');
@@ -92,11 +103,12 @@ Domaine : `backend/src/domains/06-messagerie/messagerie.routes.js`
 
 | Méthode | Route | Rôle requis | Description |
 |---------|-------|-------------|-------------|
-| `GET` | `/conversations` | messagerie.voir | Liste mes conversations (triées par `dernier_message_at`) |
+| `GET` | `/conversations` | messagerie.voir | Liste mes conversations (paginées, triées par `dernier_message_at`) |
 | `POST` | `/conversations` | messagerie.envoyer | Créer/récupérer un fil (upsert sur le triplet parent+enseignant+élève) |
 | `GET` | `/conversations/:id/messages` | participant ou superviseur | Messages du fil (paginé, ordre chrono) |
 | `POST` | `/conversations/:id/messages` | participant | Envoyer un message |
-| `PATCH` | `/conversations/:id/lu` | participant | Marquer tous les messages comme lus |
+| `PATCH` | `/conversations/:id/lu` | participant | Marquer comme lus les messages reçus (WHERE `expediteur_id != moi`) |
+| `PATCH` | `/conversations/:id/archive` | participant | Archiver/désarchiver la conversation pour l'utilisateur courant |
 | `GET` | `/conversations/non-lus` | messagerie.voir | Compteur de messages non lus (pour badge) |
 
 ### Règles d'accès
@@ -105,7 +117,7 @@ Domaine : `backend/src/domains/06-messagerie/messagerie.routes.js`
 - **Enseignant** : ne voit que celles où `enseignant_id = req.user.id`
 - **Directeur/censeur** : voit toutes les conversations de son `etablissement_id`
 - Tout est filtré par `etablissement_id` (multi-tenant strict)
-- À la création, vérification que l'enseignant a bien l'élève dans une de ses classes (via table `affectations`)
+- À la création, vérification que l'enseignant a bien l'élève dans une de ses classes. Chemin de jointure : `utilisateurs.id → enseignants.utilisateur_id → enseignants.id → affectations_enseignants.enseignant_id → classe_id → inscriptions.classe_id → inscriptions.eleve_id`
 
 ### Réponses
 
@@ -168,7 +180,7 @@ Pas de nouvel onglet — bouton "Messages" avec badge sur le dashboard de chaque
 
 ### Offline-first
 
-- Table SQLite `messages_locaux` pour cache des messages
+- Tables SQLite `conversations_locaux` et `messages_locaux` pour cache offline
 - À l'envoi : écriture locale d'abord, puis sync via `syncService`
 - Conversations et messages synchronisés via le mécanisme existant (`operations_sync`)
 
@@ -176,8 +188,8 @@ Pas de nouvel onglet — bouton "Messages" avec badge sur le dashboard de chaque
 
 ## 5. Sécurité
 
-- Vérification que l'expéditeur est participant de la conversation (ou superviseur)
-- Un parent ne peut initier une conversation qu'avec un enseignant qui a son enfant en classe (vérifié via `affectations`)
+- Vérification que l'expéditeur est participant de la conversation (`parent_id` ou `enseignant_id`), OU détient la permission `messagerie.superviser` (directeur/censeur — peut lire et intervenir dans tout fil de son établissement)
+- Un parent ne peut initier une conversation qu'avec un enseignant qui a son enfant en classe (vérifié via jointure `affectations_enseignants` → `inscriptions`)
 - Contenu limité à 2000 caractères par message (CHECK constraint SQL + validation Zod)
 - Rate limiting : max 30 messages/minute par utilisateur
 - Filtrage `etablissement_id` sur toutes les requêtes (multi-tenant strict)
@@ -208,7 +220,7 @@ Pattern : mocks de `getDB`, fixtures, `testApp` helper (identique aux 9 suites e
 
 | Composant | Fichier(s) | Volume estimé |
 |-----------|------------|---------------|
-| Migration SQL | `migrations/008_messagerie.sql` | ~60 lignes |
+| Migration SQL | `migrations/010_messagerie.sql` | ~60 lignes |
 | Routes backend | `backend/src/domains/06-messagerie/messagerie.routes.js` | ~300 lignes |
 | Tests unitaires | `backend/tests/domains/messagerie.test.js` | ~200 lignes |
 | Dashboard page | `dashboard/js/pages/messagerie.js` | ~400 lignes |
