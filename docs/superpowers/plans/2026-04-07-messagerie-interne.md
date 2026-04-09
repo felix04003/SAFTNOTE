@@ -28,8 +28,13 @@
 | File | Change |
 |------|--------|
 | `backend/src/app.js` | Mount messagerie router |
-| `dashboard/index.html` | Add sidebar entry + page container for all 3 portals (admin, enseignant, parent) |
+| `backend/tests/helpers/mockKnex.js` | Add `whereNot`, `clearSelect`, `clearOrder` to chainable mock |
+| `backend/tests/helpers/fixtures.js` | Add conversation + message fixtures |
+| `dashboard/index.html` | Add sidebar entry + page container (admin portal) |
+| `dashboard/enseignant.html` | Add sidebar entry + page container (enseignant portal) |
+| `dashboard/parent.html` | Add sidebar entry + page container (parent portal) |
 | `dashboard/css/style.css` | Add chat bubble styles, message list styles |
+| `dashboard/js/api.js` | Add `Api.patch` method |
 | `dashboard/js/router.js` | Add `messagerie` to `TITRES` |
 | `dashboard/js/notifs.js` | Add `messages_recus` category to drawer |
 | `mobile/src/services/storage/database.ts` | Add SQLite tables for offline cache |
@@ -143,8 +148,9 @@ COMMIT;
 
 - [ ] **Step 2: Add to run_all_migrations.sql**
 
-Append this line at the end of `migrations/run_all_migrations.sql`:
+First verify that `\i 009_fix_statut_checks.sql` is included. If not, add it. Then append:
 ```sql
+\i 009_fix_statut_checks.sql
 \i 010_messagerie.sql
 ```
 
@@ -159,13 +165,52 @@ git commit -m "feat(db): add migration 010 — messagerie tables, indexes, permi
 
 ## Chunk 2: Backend Routes (TDD)
 
-### Task 2: Set up test file with mocks and fixtures
+### Task 2: Set up test file with mocks, fixtures, and extend mockKnex
 
 **Files:**
 - Create: `backend/tests/domains/messagerie.routes.test.js`
 - Create: `backend/src/domains/06-messagerie/messagerie.routes.js` (empty router)
+- Modify: `backend/tests/helpers/mockKnex.js` — add missing chainable methods
+- Modify: `backend/tests/helpers/fixtures.js` — add messagerie fixtures
 
-- [ ] **Step 1: Create empty router**
+- [ ] **Step 1: Extend mockKnex.js**
+
+Add `whereNot`, `whereNull`, `clearSelect`, `clearOrder` to the chainable methods list in `backend/tests/helpers/mockKnex.js`:
+
+```javascript
+// Add to the chainable methods array alongside existing ones (where, join, select, etc.):
+'whereNot', 'whereNull', 'clearSelect', 'clearOrder',
+```
+
+- [ ] **Step 2: Add fixtures to fixtures.js**
+
+Add to `backend/tests/helpers/fixtures.js`:
+
+```javascript
+const conversation = {
+  id: IDS.conversation || '00000000-0000-4000-a000-000000000055',
+  etablissement_id: IDS.etablissement,
+  parent_id: '00000000-0000-4000-a000-000000000011',
+  enseignant_id: '00000000-0000-4000-a000-000000000022',
+  eleve_id: '00000000-0000-4000-a000-000000000044',
+  dernier_message_at: new Date().toISOString(),
+  archived_by_parent: false,
+  archived_by_enseignant: false,
+};
+
+const messageFixture = {
+  id: '00000000-0000-4000-a000-000000000066',
+  conversation_id: conversation.id,
+  expediteur_id: conversation.parent_id,
+  contenu: 'Bonjour, je voudrais savoir comment va mon fils en classe.',
+  lu: false,
+  created_at: new Date().toISOString(),
+};
+```
+
+Export them alongside existing fixtures.
+
+- [ ] **Step 3: Create empty router**
 
 ```javascript
 // backend/src/domains/06-messagerie/messagerie.routes.js
@@ -177,7 +222,7 @@ const router  = express.Router();
 module.exports = router;
 ```
 
-- [ ] **Step 2: Create test file with mocks and fixtures**
+- [ ] **Step 4: Create test file using shared helpers**
 
 ```javascript
 // backend/tests/domains/messagerie.routes.test.js
@@ -186,6 +231,8 @@ module.exports = router;
 const request = require('supertest');
 const { getDB } = require('../../src/infrastructure/database/pool');
 const { createTestApp, defaultSession } = require('../helpers/testApp');
+const { createMockDB, mockQuery, IDS } = require('../helpers/mockKnex');
+const { conversation, messageFixture } = require('../helpers/fixtures');
 const router = require('../../src/domains/06-messagerie/messagerie.routes');
 
 jest.mock('../../src/infrastructure/database/pool');
@@ -211,75 +258,11 @@ jest.mock('../../src/middleware/permission.middleware', () => ({
 const { enqueuerNotification } = require('../../src/infrastructure/queue/bullmq');
 const app = createTestApp(router);
 
-// ── Fixtures ────────────────────────────────────────────
-const IDS = {
-  etablissement: defaultSession.etablissement_id,
-  parent:        '00000000-0000-4000-a000-000000000011',
-  enseignant:    '00000000-0000-4000-a000-000000000022',
-  enseignantRow: '00000000-0000-4000-a000-000000000033',
-  eleve:         '00000000-0000-4000-a000-000000000044',
-  conversation:  '00000000-0000-4000-a000-000000000055',
-  message:       '00000000-0000-4000-a000-000000000066',
-  classe:        '00000000-0000-4000-a000-000000000077',
-};
-
-const conversationRow = {
-  id: IDS.conversation,
-  etablissement_id: IDS.etablissement,
-  parent_id: IDS.parent,
-  enseignant_id: IDS.enseignant,
-  eleve_id: IDS.eleve,
-  dernier_message_at: new Date().toISOString(),
-  parent_nom: 'Diallo', parent_prenom: 'Aminata',
-  enseignant_nom: 'Ndiaye', enseignant_prenom: 'Moussa',
-  eleve_nom: 'Diallo', eleve_prenom: 'Ibrahima',
-};
-
-const messageRow = {
-  id: IDS.message,
-  conversation_id: IDS.conversation,
-  expediteur_id: IDS.parent,
-  contenu: 'Bonjour, je voudrais savoir comment va mon fils en classe.',
-  lu: false,
-  created_at: new Date().toISOString(),
-  expediteur_nom: 'Diallo', expediteur_prenom: 'Aminata',
-};
-
 let db;
 
 beforeEach(() => {
   jest.clearAllMocks();
-  db = {
-    _chain: {},
-    raw: jest.fn().mockReturnValue('NOW()'),
-  };
-
-  // Chainable query builder mock
-  const chainable = () => {
-    const chain = {
-      where: jest.fn().mockReturnThis(),
-      andWhere: jest.fn().mockReturnThis(),
-      join: jest.fn().mockReturnThis(),
-      leftJoin: jest.fn().mockReturnThis(),
-      select: jest.fn().mockReturnThis(),
-      orderBy: jest.fn().mockReturnThis(),
-      limit: jest.fn().mockReturnThis(),
-      offset: jest.fn().mockReturnThis(),
-      first: jest.fn().mockResolvedValue(null),
-      insert: jest.fn().mockReturnThis(),
-      update: jest.fn().mockResolvedValue(1),
-      returning: jest.fn().mockResolvedValue([]),
-      count: jest.fn().mockResolvedValue([{ count: '0' }]),
-      clone: jest.fn().mockReturnThis(),
-      then: jest.fn(),
-    };
-    return chain;
-  };
-
-  db = jest.fn().mockImplementation(() => chainable());
-  db.raw = jest.fn().mockReturnValue('NOW()');
-  db.transaction = jest.fn().mockImplementation(async (fn) => fn(db));
-
+  db = createMockDB();
   getDB.mockReturnValue(db);
 });
 
@@ -288,11 +271,11 @@ describe('Messagerie Routes', () => {
 });
 ```
 
-- [ ] **Step 3: Commit skeleton**
+- [ ] **Step 5: Commit skeleton**
 
 ```bash
-git add backend/src/domains/06-messagerie/messagerie.routes.js backend/tests/domains/messagerie.routes.test.js
-git commit -m "chore: scaffold messagerie route + test files"
+git add backend/src/domains/06-messagerie/messagerie.routes.js backend/tests/domains/messagerie.routes.test.js backend/tests/helpers/mockKnex.js backend/tests/helpers/fixtures.js
+git commit -m "chore: scaffold messagerie route + test files, extend shared helpers"
 ```
 
 ---
@@ -371,8 +354,13 @@ const { authentifier } = require('../../middleware/auth.middleware');
 const { exigerPermission, isolerEtablissement } = require('../../middleware/permission.middleware');
 const { valider } = require('../../middleware/validate.middleware');
 const { ok, cree, paginee, getPagination } = require('../../utils/reponse');
-const { ApiError } = require('../../utils/erreurs');
+const ApiError = require('../../utils/ApiError');
 const { enqueuerNotification } = require('../../infrastructure/queue/bullmq');
+const logger = require('../../utils/logger');
+const { rateLimiter } = require('../../middleware/rateLimiter');
+
+// Rate limit spécifique messagerie: 30 messages/min par utilisateur
+const msgRateLimit = rateLimiter({ windowMs: 60000, max: 30 });
 
 const auth  = authentifier;
 const isoler = isolerEtablissement;
@@ -636,7 +624,7 @@ const schemaEnvoyerMessage = z.object({
 // ── POST /conversations/:id/messages — envoyer un message ──
 
 router.post('/conversations/:id/messages',
-  auth, isoler, perm('messagerie.envoyer'),
+  auth, isoler, perm('messagerie.envoyer'), msgRateLimit,
   valider(schemaEnvoyerMessage),
   async (req, res, next) => {
     try {
@@ -697,7 +685,7 @@ router.post('/conversations/:id/messages',
           canal: prefs?.canal_prefere || 'sms',
         }).catch(err => {
           // Non-bloquant — le message est envoyé même si la notif échoue
-          console.error('Erreur notification messagerie:', err.message);
+          logger.error('Erreur notification messagerie', { error: err.message });
         });
       }
 
@@ -866,6 +854,8 @@ describe('PATCH /conversations/:id/archive', () => {
 
 - [ ] **Step 3: Implement all three endpoints**
 
+**IMPORTANT: Route order matters.** In the final file, `GET /conversations/non-lus` MUST be placed BEFORE `GET /conversations/:id/messages` (from Task 6). When inserting this code, place it ABOVE the `:id` routes. Otherwise Express will match `non-lus` as an `:id` parameter.
+
 ```javascript
 // ── GET /conversations/non-lus — compteur badge ──
 // IMPORTANT: doit être AVANT la route :id pour éviter que 'non-lus' soit capturé comme :id
@@ -974,7 +964,84 @@ git commit -m "feat(messagerie): PATCH lu, GET non-lus, PATCH archive endpoints"
 
 ---
 
-### Task 8: Mount router in app.js + run all tests
+### Task 8: Add helper endpoints for the new-conversation modal
+
+The "New conversation" modal in the dashboard needs two endpoints that don't exist yet:
+- `GET /eleves/:id/enseignants` — list teachers of a student (via affectations)
+- `GET /eleves/:id/parents` — list parents of a student (via parents_eleves)
+
+**Files:**
+- Modify: `backend/src/domains/02-acteurs/eleves/eleves.routes.js`
+- Modify: `backend/tests/domains/eleves.routes.test.js`
+
+- [ ] **Step 1: Add GET /eleves/:id/enseignants**
+
+```javascript
+// In eleves.routes.js — returns teachers linked to this student via inscriptions → affectations
+
+router.get('/eleves/:id/enseignants',
+  auth, isoler,
+  async (req, res, next) => {
+    try {
+      const db = getDB();
+      const eleveId = req.params.id;
+      const etab = req.etablissement_id;
+
+      const rows = await db('inscriptions as i')
+        .join('affectations_enseignants as ae', 'ae.classe_id', 'i.classe_id')
+        .join('enseignants as ens', 'ens.id', 'ae.enseignant_id')
+        .join('utilisateurs as u', 'u.id', 'ens.utilisateur_id')
+        .join('matieres as mat', 'mat.id', 'ae.matiere_id')
+        .where({ 'i.eleve_id': eleveId, 'i.etablissement_id': etab })
+        .whereNull('i.deleted_at')
+        .whereNull('ae.deleted_at')
+        .select('u.id as utilisateur_id', 'u.nom', 'u.prenom', 'mat.nom as matiere')
+        .groupBy('u.id', 'u.nom', 'u.prenom', 'mat.nom');
+
+      return ok(res, rows);
+    } catch (err) { next(err); }
+  }
+);
+```
+
+- [ ] **Step 2: Add GET /eleves/:id/parents**
+
+```javascript
+// In eleves.routes.js — returns parents linked to this student
+
+router.get('/eleves/:id/parents',
+  auth, isoler,
+  async (req, res, next) => {
+    try {
+      const db = getDB();
+      const eleveId = req.params.id;
+      const etab = req.etablissement_id;
+
+      const rows = await db('parents_eleves as pe')
+        .join('utilisateurs as u', 'u.id', 'pe.parent_id')
+        .where({ 'pe.eleve_id': eleveId })
+        .where('u.etablissement_id', etab)
+        .whereNull('u.deleted_at')
+        .select('u.id', 'u.nom', 'u.prenom', 'pe.lien', 'pe.est_contact_principal');
+
+      return ok(res, rows);
+    } catch (err) { next(err); }
+  }
+);
+```
+
+- [ ] **Step 3: Add tests for both endpoints**
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add backend/src/domains/02-acteurs/eleves/eleves.routes.js backend/tests/domains/eleves.routes.test.js
+git commit -m "feat(eleves): add GET /eleves/:id/enseignants and /parents for messagerie modal"
+```
+
+---
+
+### Task 9: Mount router in app.js + run all tests
 
 **Files:**
 - Modify: `backend/src/app.js`
@@ -1015,12 +1082,22 @@ git commit -m "feat(messagerie): mount router in app.js"
 ### Task 9: Add messagerie to sidebar + page container + router
 
 **Files:**
-- Modify: `dashboard/index.html`
+- Modify: `dashboard/index.html` (admin portal)
+- Modify: `dashboard/enseignant.html` (teacher portal)
+- Modify: `dashboard/parent.html` (parent portal)
 - Modify: `dashboard/js/router.js`
+- Modify: `dashboard/js/api.js` — add `Api.patch` method
 
-- [ ] **Step 1: Add sidebar entry in index.html**
+- [ ] **Step 1: Add `Api.patch` to api.js**
 
-Find the nav section in `index.html`. Add a "Messagerie" entry in each portal's sidebar (admin, enseignant, parent). Pattern:
+In `dashboard/js/api.js`, add alongside `get`, `post`, `put`, `del`:
+```javascript
+patch: function(path, body) { return this.request('PATCH', path, body); },
+```
+
+- [ ] **Step 2: Add sidebar entry + page container in ALL 3 HTML files**
+
+Add the sidebar entry and page container to `dashboard/index.html`, `dashboard/enseignant.html`, AND `dashboard/parent.html`. Find the nav section in each file. Pattern:
 
 ```html
 <a class="nav-item" data-page="messagerie" onclick="goto('messagerie')">
@@ -1045,18 +1122,20 @@ Add page container alongside other `<div class="page">` elements:
 </div>
 ```
 
-- [ ] **Step 2: Add to router.js TITRES**
+Also add `<script src="js/pages/messagerie.js"></script>` before the closing `</body>` in all 3 HTML files.
+
+- [ ] **Step 3: Add to router.js TITRES**
 
 In `dashboard/js/router.js`, add to `TITRES`:
 ```javascript
 messagerie: 'Messagerie',
 ```
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add dashboard/index.html dashboard/js/router.js
-git commit -m "feat(dashboard): add messagerie sidebar entry + page container"
+git add dashboard/index.html dashboard/enseignant.html dashboard/parent.html dashboard/js/router.js dashboard/js/api.js
+git commit -m "feat(dashboard): add messagerie sidebar, page container, Api.patch in all portals"
 ```
 
 ---
@@ -1459,31 +1538,17 @@ var PageMessagerie = {
 PAGE_HOOKS.messagerie = function() { PageMessagerie.init(); };
 ```
 
-- [ ] **Step 2: Add script tag in index.html**
-
-In `dashboard/index.html`, add before the closing `</body>` tag, alongside other page scripts:
-```html
-<script src="js/pages/messagerie.js"></script>
-```
-
-- [ ] **Step 3: Add PATCH to Api in api.js**
-
-Check if `Api.patch` exists. If not, add to `dashboard/js/api.js`:
-```javascript
-patch: function(path, body) { return this.request('PATCH', path, body); },
-```
-
-- [ ] **Step 4: Test manually with `npx serve dashboard -l 3001`**
+- [ ] **Step 2: Test manually with `npx serve dashboard -l 3001`**
 
 Open browser, log in, click "Messagerie" in sidebar. Verify:
 - Page loads with empty state message
 - "Nouvelle conversation" button opens modal
 - Badge shows in sidebar
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add dashboard/js/pages/messagerie.js dashboard/index.html dashboard/js/api.js
+git add dashboard/js/pages/messagerie.js
 git commit -m "feat(dashboard): messagerie page — conversation list, chat view, new conversation modal"
 ```
 
@@ -1593,7 +1658,7 @@ Build a React Native screen following the existing pattern from other enseignant
 - TextInput + Send button at bottom
 - Use `Api.get/post` for data fetching
 - Cache to SQLite for offline-first reads
-- Use theme colors from `src/constants/theme.ts`
+- Use theme colors from `src/utils/theme.ts`
 
 This is a substantial file (~250 lines). Follow the patterns from existing screens in `mobile/app/(app)/enseignant/` for navigation, layout, and API usage.
 
@@ -1604,6 +1669,7 @@ import { View, FlatList, TextInput, TouchableOpacity, Text, RefreshControl } fro
 import { enseignantApi } from '../../../src/services/api/client';
 import { getDB } from '../../../src/services/storage/database';
 import { Colors, Typography, Spacing } from '../../../src/utils/theme';
+import { Api } from '../../../src/services/api/client';
 
 export default function MessagerieEnseignant() {
   const [conversations, setConversations] = useState([]);
