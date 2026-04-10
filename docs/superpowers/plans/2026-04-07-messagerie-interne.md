@@ -1041,7 +1041,7 @@ git commit -m "feat(eleves): add GET /eleves/:id/enseignants and /parents for me
 
 ---
 
-### Task 9: Mount router in app.js + run all tests
+### Task 8b: Mount router in app.js + run all tests
 
 **Files:**
 - Modify: `backend/src/app.js`
