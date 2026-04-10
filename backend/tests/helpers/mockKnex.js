@@ -14,7 +14,7 @@ function mockQuery(result, cloneResult) {
 
   const methods = [
     'where', 'andWhere', 'orWhere', 'orWhereNull',
-    'whereNull', 'whereNotNull', 'whereIn', 'whereRaw',
+    'whereNull', 'whereNotNull', 'whereNot', 'whereIn', 'whereRaw',
     'join', 'leftJoin', 'rightJoin',
     'on', 'andOn', 'orOn',
     'orderBy', 'groupBy', 'having',
@@ -22,6 +22,7 @@ function mockQuery(result, cloneResult) {
     'select', 'first', 'count', 'sum', 'avg', 'min', 'max',
     'insert', 'update', 'del', 'delete',
     'returning', 'pluck',
+    'clearSelect', 'clearOrder',
   ];
 
   for (const m of methods) {
@@ -84,6 +85,7 @@ const IDS = {
   evaluation:       'dddddddd-dddd-dddd-dddd-dddddddddddd',
   autreUtilisateur: 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
   plage:            'ffffffff-ffff-ffff-ffff-ffffffffffff',
+  conversation:     '00000000-0000-4000-a000-000000000055',
 };
 
 module.exports = { mockQuery, createMockDB, IDS };

@@ -223,6 +223,26 @@ const sessionActive = {
   revoquee: false,
 };
 
+const conversation = {
+  id: IDS.conversation,
+  etablissement_id: IDS.etablissement,
+  parent_id: '00000000-0000-4000-a000-000000000011',
+  enseignant_id: '00000000-0000-4000-a000-000000000022',
+  eleve_id: '00000000-0000-4000-a000-000000000044',
+  dernier_message_at: new Date().toISOString(),
+  archived_by_parent: false,
+  archived_by_enseignant: false,
+};
+
+const messageFixture = {
+  id: '00000000-0000-4000-a000-000000000066',
+  conversation_id: conversation.id,
+  expediteur_id: conversation.parent_id,
+  contenu: 'Bonjour, je voudrais savoir comment va mon fils en classe.',
+  lu: false,
+  created_at: new Date().toISOString(),
+};
+
 module.exports = {
   enseignantProfil,
   anneeCourante,
@@ -238,4 +258,6 @@ module.exports = {
   evenement,
   auditEntry,
   sessionActive,
+  conversation,
+  messageFixture,
 };
