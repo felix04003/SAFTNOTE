@@ -47,6 +47,29 @@ describe('Messagerie Routes', () => {
     getDB.mockReturnValue(db);
   });
 
+  // ── GET /conversations ──────────────────────────────────────────
+  describe('GET /conversations', () => {
+    it("retourne les conversations de l'utilisateur paginées", async () => {
+      const convRow = {
+        ...conversation,
+        parent_nom: 'Diallo', parent_prenom: 'Fatou',
+        enseignant_nom: 'Sow', enseignant_prenom: 'Moussa',
+        eleve_nom: 'Traoré', eleve_prenom: 'Aminata',
+        non_lus: '0',
+      };
+      // mockQuery(rows, cloneResult) — clone() resolves to { count: '1' } for COUNT
+      db.mockReturnValueOnce(mockQuery([convRow], { count: '1' }));
+
+      const res = await request(app)
+        .get('/conversations?page=1&limite=20')
+        .expect(200);
+
+      expect(res.body.succes).toBe(true);
+      expect(res.body.data).toHaveLength(1);
+      expect(res.body.meta).toMatchObject({ total: 1, page: 1, limite: 20 });
+    });
+  });
+
   // ── POST /conversations ─────────────────────────────────────────
   describe('POST /conversations', () => {
     const payload = {
