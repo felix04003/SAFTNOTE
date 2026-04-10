@@ -47,7 +47,50 @@ describe('Messagerie Routes', () => {
     getDB.mockReturnValue(db);
   });
 
-  it('router is wired', () => {
-    expect(router).toBeDefined();
+  // ── POST /conversations ─────────────────────────────────────────
+  describe('POST /conversations', () => {
+    const payload = {
+      parent_id:     conversation.parent_id,
+      enseignant_id: conversation.enseignant_id,
+      eleve_id:      conversation.eleve_id,
+    };
+
+    it("crée une conversation si elle n'existe pas", async () => {
+      // 1. enseignant lookup (utilisateur → enseignants row)
+      db.mockReturnValueOnce(mockQuery({ id: IDS.enseignantRow }));
+      // 2. affectation check (enseignant affecté à la classe de l'élève)
+      db.mockReturnValueOnce(mockQuery({ id: IDS.classe }));
+      // 3. existing conversation → none
+      db.mockReturnValueOnce(mockQuery(null));
+      // 4. insert returning new conversation
+      db.mockReturnValueOnce(mockQuery([conversation]));
+
+      const res = await request(app)
+        .post('/conversations')
+        .send(payload)
+        .expect(201);
+
+      expect(res.body.succes).toBe(true);
+      expect(res.body.data).toBeDefined();
+      expect(res.body.data.id).toBe(conversation.id);
+    });
+
+    it('retourne la conversation existante si le triplet existe', async () => {
+      // 1. enseignant lookup
+      db.mockReturnValueOnce(mockQuery({ id: IDS.enseignantRow }));
+      // 2. affectation check
+      db.mockReturnValueOnce(mockQuery({ id: IDS.classe }));
+      // 3. existing conversation found
+      db.mockReturnValueOnce(mockQuery(conversation));
+
+      const res = await request(app)
+        .post('/conversations')
+        .send(payload)
+        .expect(200);
+
+      expect(res.body.succes).toBe(true);
+      expect(res.body.data).toBeDefined();
+      expect(res.body.data.id).toBe(conversation.id);
+    });
   });
 });

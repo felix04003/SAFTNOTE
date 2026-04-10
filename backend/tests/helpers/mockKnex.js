@@ -86,6 +86,7 @@ const IDS = {
   autreUtilisateur: 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
   plage:            'ffffffff-ffff-ffff-ffff-ffffffffffff',
   conversation:     '00000000-0000-4000-a000-000000000055',
+  enseignantRow:    '00000000-0000-4000-a000-000000000033',
 };
 
 module.exports = { mockQuery, createMockDB, IDS };
