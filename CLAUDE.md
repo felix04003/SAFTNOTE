@@ -195,9 +195,9 @@ Tous les 9 domaines sont **implémentés et testés** (60/60 tests passent).
 - [x] Dashboard : page inscription.html — formulaire de création d'établissement
 - [x] Dashboard : retrait des données fictives (data-mock.js) — pages branchées sur API réelle
 - [ ] Build mobile EAS + déploiement serveur (PM2 + Nginx)
-- [ ] Tests d'intégration avec vraie base PostgreSQL
-- [ ] Optimisations performance (index SQL, cache Redis stratégique)
-- [ ] Monitoring (health checks avancés, métriques, alertes)
+- [x] Tests d'intégration avec vraie base PostgreSQL
+- [x] Optimisations performance (index SQL, cache Redis stratégique)
+- [x] Monitoring (health checks avancés, métriques, alertes)
 
 ---
 
@@ -421,7 +421,10 @@ META_WA_TOKEN         → WhatsApp Business API
 | 13 | CI/CD GitHub Actions (lint, tests, Docker build) | ✅ |
 | 14 | Domaine setup — création établissement + directeur | ✅ |
 | 15 | Dashboard : page inscription + retrait données fictives | ✅ |
-| 16 | Build mobile EAS + déploiement serveur | 🔜 |
+| 16 | Index SQL performance + Cache Redis stratégique | ✅ |
+| 17 | Tests d'intégration (73 tests, 10 suites, vraie DB) | ✅ |
+| 18 | Monitoring `/health/deep` + `/metrics` + alertes SMS | ✅ |
+| 19 | Build mobile EAS + déploiement serveur | 🔜 |
 
 ---
 
