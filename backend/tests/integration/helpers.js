@@ -18,7 +18,7 @@ function getTestDB() {
     client: 'pg',
     connection: {
       host:     process.env.POSTGRES_HOST     || 'localhost',
-      port:     parseInt(process.env.POSTGRES_PORT) || 5433,
+      port:     parseInt(process.env.POSTGRES_PORT) || 5432,
       database: 'ecole_manager_test',
       user:     process.env.POSTGRES_USER     || 'ecole_user',
       password: process.env.POSTGRES_PASSWORD || 'ecole_password_dev',

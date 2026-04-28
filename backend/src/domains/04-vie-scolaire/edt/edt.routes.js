@@ -11,7 +11,6 @@ const { valider }    = require('../../../middleware/validate.middleware');
 const { ok, cree, liste, vide } = require('../../../utils/reponse');
 const ApiError       = require('../../../utils/ApiError');
 const logger         = require('../../../utils/logger');
-const { getOrSet, invalidatePattern } = require('../../../infrastructure/cache/redis');
 
 const router = express.Router();
 const auth   = authentifier;
@@ -23,134 +22,113 @@ const JOURS_NOMS = { 1: 'Lundi', 2: 'Mardi', 3: 'Mercredi', 4: 'Jeudi', 5: 'Vend
 // ═════════════════════════════════════════════════════════════════
 // GET /edt/classe/:classeId — EDT d'une classe (semaine)
 // ═════════════════════════════════════════════════════════════════
-async function fetchEdtClasse(db, classeId, etablissementId, semaine) {
-  const classe = await db('classes as c')
-    .join('niveaux as n', 'n.id', 'c.niveau_id')
-    .join('annees_scolaires as a', 'a.id', 'c.annee_scolaire_id')
-    .where({ 'c.id': classeId, 'a.etablissement_id': etablissementId, 'a.est_courante': true })
-    .first('c.id', db.raw("CONCAT(n.nom, ' ', c.nom) as classe"));
-
-  if (!classe) return null;
-
-  let query = db('emplois_du_temps as edt')
-    .join('affectations_enseignants as ae', 'ae.id', 'edt.affectation_id')
-    .join('matieres as m',        'm.id',  'ae.matiere_id')
-    .join('plages_horaires as ph', 'ph.id', 'edt.plage_id')
-    .join('enseignants as ens',    'ens.id', 'ae.enseignant_id')
-    .join('utilisateurs as u',     'u.id',   'ens.utilisateur_id')
-    .where({ 'edt.classe_id': classeId, 'edt.actif': true })
-    .orderBy(['edt.jour_semaine', 'ph.heure_debut'])
-    .select(
-      'edt.id as creneau_id', 'edt.jour_semaine',
-      'ph.numero as plage_numero', 'ph.libelle as plage_libelle',
-      'ph.heure_debut', 'ph.heure_fin', 'ph.est_pause',
-      'm.nom as matiere', 'm.nom_court as matiere_court', 'm.couleur_affichage',
-      db.raw("CONCAT(u.prenom, ' ', u.nom) as enseignant"),
-      'edt.salle', 'ae.id as affectation_id'
-    );
-
-  if (semaine) {
-    query = query
-      .where(function() { this.whereNull('edt.date_debut_validite').orWhere('edt.date_debut_validite', '<=', semaine); })
-      .where(function() { this.whereNull('edt.date_fin_validite').orWhere('edt.date_fin_validite', '>=', semaine); });
-  }
-
-  const creneaux = await query;
-  const parJour = {};
-  for (const c of creneaux) {
-    const jour = c.jour_semaine;
-    if (!parJour[jour]) parJour[jour] = { jour, nom: JOURS_NOMS[jour], creneaux: [] };
-    parJour[jour].creneaux.push(c);
-  }
-  return { classe: classe.classe, nb_creneaux: creneaux.length, emploi_du_temps: Object.values(parJour) };
-}
-
 router.get('/edt/classe/:classeId', auth, isoler, perm('edt.voir'), async (req, res, next) => {
   try {
     const db = getDB();
     const { semaine } = req.query;
-    const cle = semaine
-      ? `edt_classe:${req.params.classeId}:${semaine}`
-      : `edt_classe:${req.params.classeId}`;
 
-    let resultat;
-    try {
-      resultat = await getOrSet(cle, () => fetchEdtClasse(db, req.params.classeId, req.etablissement_id, semaine), 3600);
-    } catch {
-      resultat = await fetchEdtClasse(db, req.params.classeId, req.etablissement_id, semaine);
+    // Vérifier la classe
+    const classe = await db('classes as c')
+      .join('niveaux as n', 'n.id', 'c.niveau_id')
+      .join('annees_scolaires as a', 'a.id', 'c.annee_scolaire_id')
+      .where({ 'c.id': req.params.classeId, 'a.etablissement_id': req.etablissement_id, 'a.est_courante': true })
+      .first('c.id', db.raw("CONCAT(n.nom, ' ', c.nom) as classe"));
+
+    if (!classe) throw ApiError.nonTrouve('Classe introuvable');
+
+    let query = db('emplois_du_temps as edt')
+      .join('affectations_enseignants as ae', 'ae.id', 'edt.affectation_id')
+      .join('matieres as m',        'm.id',  'ae.matiere_id')
+      .join('plages_horaires as ph', 'ph.id', 'edt.plage_id')
+      .join('enseignants as ens',    'ens.id', 'ae.enseignant_id')
+      .join('utilisateurs as u',     'u.id',   'ens.utilisateur_id')
+      .where({ 'edt.classe_id': req.params.classeId, 'edt.actif': true })
+      .orderBy(['edt.jour_semaine', 'ph.heure_debut'])
+      .select(
+        'edt.id as creneau_id', 'edt.jour_semaine',
+        'ph.numero as plage_numero', 'ph.libelle as plage_libelle',
+        'ph.heure_debut', 'ph.heure_fin', 'ph.est_pause',
+        'm.nom as matiere', 'm.nom_court as matiere_court', 'm.couleur_affichage',
+        db.raw("CONCAT(u.prenom, ' ', u.nom) as enseignant"),
+        'edt.salle', 'ae.id as affectation_id'
+      );
+
+    if (semaine) {
+      query = query
+        .where(function() { this.whereNull('edt.date_debut_validite').orWhere('edt.date_debut_validite', '<=', semaine); })
+        .where(function() { this.whereNull('edt.date_fin_validite').orWhere('edt.date_fin_validite', '>=', semaine); });
     }
 
-    if (!resultat) throw ApiError.nonTrouve('Classe introuvable');
-    return ok(res, resultat);
+    const creneaux = await query;
+
+    // Organiser par jour
+    const parJour = {};
+    for (const c of creneaux) {
+      const jour = c.jour_semaine;
+      if (!parJour[jour]) parJour[jour] = { jour, nom: JOURS_NOMS[jour], creneaux: [] };
+      parJour[jour].creneaux.push(c);
+    }
+
+    return ok(res, { classe: classe.classe, nb_creneaux: creneaux.length, emploi_du_temps: Object.values(parJour) });
   } catch (err) { next(err); }
 });
 
 // ═════════════════════════════════════════════════════════════════
 // GET /edt/enseignant/:enseignantId — EDT d'un enseignant
 // ═════════════════════════════════════════════════════════════════
-async function fetchEdtEnseignant(db, enseignantId, etablissementId, semaine) {
-  const enseignant = await db('enseignants as ens')
-    .join('utilisateurs as u', 'u.id', 'ens.utilisateur_id')
-    .where({ 'ens.id': enseignantId, 'u.etablissement_id': etablissementId })
-    .first('ens.id', db.raw("CONCAT(u.prenom, ' ', u.nom) as nom_complet"));
-
-  if (!enseignant) return null;
-
-  const annee = await db('annees_scolaires')
-    .where({ etablissement_id: etablissementId, est_courante: true })
-    .first('id', 'libelle');
-  if (!annee) throw ApiError.nonTrouve('Aucune année scolaire courante');
-
-  let query = db('emplois_du_temps as edt')
-    .join('affectations_enseignants as ae', 'ae.id', 'edt.affectation_id')
-    .join('classes as c',          'c.id',  'ae.classe_id')
-    .join('niveaux as n',          'n.id',  'c.niveau_id')
-    .join('matieres as m',         'm.id',  'ae.matiere_id')
-    .join('plages_horaires as ph', 'ph.id', 'edt.plage_id')
-    .where({ 'ae.enseignant_id': enseignantId, 'ae.annee_scolaire_id': annee.id, 'edt.actif': true })
-    .orderBy(['edt.jour_semaine', 'ph.heure_debut'])
-    .select(
-      'edt.id as creneau_id', 'edt.jour_semaine',
-      'ph.numero as plage_numero', 'ph.libelle as plage_libelle',
-      'ph.heure_debut', 'ph.heure_fin', 'ph.est_pause',
-      db.raw("CONCAT(n.nom, ' ', c.nom) as classe"), 'c.id as classe_id',
-      'm.nom as matiere', 'm.nom_court as matiere_court', 'm.couleur_affichage',
-      'edt.salle', 'ae.id as affectation_id'
-    );
-
-  if (semaine) {
-    query = query
-      .where(function() { this.whereNull('edt.date_debut_validite').orWhere('edt.date_debut_validite', '<=', semaine); })
-      .where(function() { this.whereNull('edt.date_fin_validite').orWhere('edt.date_fin_validite', '>=', semaine); });
-  }
-
-  const creneaux = await query;
-  const parJour = {};
-  for (const c of creneaux) {
-    const jour = c.jour_semaine;
-    if (!parJour[jour]) parJour[jour] = { jour, nom: JOURS_NOMS[jour], creneaux: [] };
-    parJour[jour].creneaux.push(c);
-  }
-  return { enseignant: enseignant.nom_complet, annee: annee.libelle, nb_creneaux: creneaux.length, emploi_du_temps: Object.values(parJour) };
-}
-
 router.get('/edt/enseignant/:enseignantId', auth, isoler, perm('edt.voir'), async (req, res, next) => {
   try {
     const db = getDB();
     const { semaine } = req.query;
-    const cle = semaine
-      ? `edt_ens:${req.params.enseignantId}:${semaine}`
-      : `edt_ens:${req.params.enseignantId}`;
 
-    let resultat;
-    try {
-      resultat = await getOrSet(cle, () => fetchEdtEnseignant(db, req.params.enseignantId, req.etablissement_id, semaine), 3600);
-    } catch {
-      resultat = await fetchEdtEnseignant(db, req.params.enseignantId, req.etablissement_id, semaine);
+    const enseignant = await db('enseignants as ens')
+      .join('utilisateurs as u', 'u.id', 'ens.utilisateur_id')
+      .where({ 'ens.id': req.params.enseignantId, 'u.etablissement_id': req.etablissement_id })
+      .first('ens.id', db.raw("CONCAT(u.prenom, ' ', u.nom) as nom_complet"));
+
+    if (!enseignant) throw ApiError.nonTrouve('Enseignant introuvable');
+
+    const annee = await db('annees_scolaires')
+      .where({ etablissement_id: req.etablissement_id, est_courante: true })
+      .first('id', 'libelle');
+    if (!annee) throw ApiError.nonTrouve('Aucune année scolaire courante');
+
+    let query = db('emplois_du_temps as edt')
+      .join('affectations_enseignants as ae', 'ae.id', 'edt.affectation_id')
+      .join('classes as c',          'c.id',  'ae.classe_id')
+      .join('niveaux as n',          'n.id',  'c.niveau_id')
+      .join('matieres as m',         'm.id',  'ae.matiere_id')
+      .join('plages_horaires as ph', 'ph.id', 'edt.plage_id')
+      .where({ 'ae.enseignant_id': req.params.enseignantId, 'ae.annee_scolaire_id': annee.id, 'edt.actif': true })
+      .orderBy(['edt.jour_semaine', 'ph.heure_debut'])
+      .select(
+        'edt.id as creneau_id', 'edt.jour_semaine',
+        'ph.numero as plage_numero', 'ph.libelle as plage_libelle',
+        'ph.heure_debut', 'ph.heure_fin', 'ph.est_pause',
+        db.raw("CONCAT(n.nom, ' ', c.nom) as classe"), 'c.id as classe_id',
+        'm.nom as matiere', 'm.nom_court as matiere_court', 'm.couleur_affichage',
+        'edt.salle', 'ae.id as affectation_id'
+      );
+
+    if (semaine) {
+      query = query
+        .where(function() { this.whereNull('edt.date_debut_validite').orWhere('edt.date_debut_validite', '<=', semaine); })
+        .where(function() { this.whereNull('edt.date_fin_validite').orWhere('edt.date_fin_validite', '>=', semaine); });
     }
 
-    if (!resultat) throw ApiError.nonTrouve('Enseignant introuvable');
-    return ok(res, resultat);
+    const creneaux = await query;
+
+    const parJour = {};
+    for (const c of creneaux) {
+      const jour = c.jour_semaine;
+      if (!parJour[jour]) parJour[jour] = { jour, nom: JOURS_NOMS[jour], creneaux: [] };
+      parJour[jour].creneaux.push(c);
+    }
+
+    return ok(res, {
+      enseignant: enseignant.nom_complet, annee: annee.libelle,
+      nb_creneaux: creneaux.length, emploi_du_temps: Object.values(parJour),
+    });
   } catch (err) { next(err); }
 });
 
@@ -214,15 +192,6 @@ router.post('/edt/creneaux', auth, isoler, perm('edt.creer'),
         .returning('*');
 
       logger.info('Créneau EDT créé', { id: creneau.id, classe_id: req.body.classe_id, jour: req.body.jour_semaine });
-
-      // Invalider le cache EDT classe
-      try {
-        await invalidatePattern(`edt_classe:${req.body.classe_id}`);
-        // Récupérer l'enseignant pour invalider son cache
-        const aff = await db('affectations_enseignants').where({ id: req.body.affectation_id }).first('enseignant_id');
-        if (aff) await invalidatePattern(`edt_ens:${aff.enseignant_id}`);
-      } catch { /* Redis down, pas critique */ }
-
       return cree(res, creneau);
     } catch (err) { next(err); }
   }
@@ -265,14 +234,6 @@ router.put('/edt/creneaux/:id', auth, isoler, perm('edt.creer'),
       const [updated] = await db('emplois_du_temps').where({ id: req.params.id }).update(updates).returning('*');
 
       logger.info('Créneau EDT modifié', { id: req.params.id, champs: Object.keys(updates) });
-
-      // Invalider le cache EDT classe et enseignant
-      try {
-        await invalidatePattern(`edt_classe:${creneau.classe_id}`);
-        const aff = await db('affectations_enseignants').where({ id: updated.affectation_id }).first('enseignant_id');
-        if (aff) await invalidatePattern(`edt_ens:${aff.enseignant_id}`);
-      } catch { /* Redis down, pas critique */ }
-
       return ok(res, updated);
     } catch (err) { next(err); }
   }
@@ -289,7 +250,7 @@ router.delete('/edt/creneaux/:id', auth, isoler, perm('edt.creer'), async (req, 
       .join('classes as c', 'c.id', 'edt.classe_id')
       .join('annees_scolaires as a', 'a.id', 'c.annee_scolaire_id')
       .where({ 'edt.id': req.params.id, 'a.etablissement_id': req.etablissement_id })
-      .first('edt.id', 'edt.classe_id', 'edt.affectation_id');
+      .first('edt.id');
 
     if (!creneau) throw ApiError.nonTrouve('Créneau introuvable');
 
@@ -297,14 +258,6 @@ router.delete('/edt/creneaux/:id', auth, isoler, perm('edt.creer'), async (req, 
     await db('emplois_du_temps').where({ id: req.params.id }).update({ actif: false });
 
     logger.info('Créneau EDT supprimé', { id: req.params.id });
-
-    // Invalider le cache EDT
-    try {
-      await invalidatePattern(`edt_classe:${creneau.classe_id}`);
-      const aff = await db('affectations_enseignants').where({ id: creneau.affectation_id }).first('enseignant_id');
-      if (aff) await invalidatePattern(`edt_ens:${aff.enseignant_id}`);
-    } catch { /* Redis down, pas critique */ }
-
     return vide(res);
   } catch (err) { next(err); }
 });

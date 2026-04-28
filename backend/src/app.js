@@ -88,23 +88,8 @@ app.get('/health', (req, res) => {
   });
 });
 
-// ── Middleware protection monitoring ────────────────────────────
-function requireMonitoringToken(req, res, next) {
-  const token = process.env.MONITORING_TOKEN;
-  if (!token) return next(); // Si pas de token configuré, accès libre (dev)
-
-  const auth = req.headers.authorization || '';
-  if (auth === `Bearer ${token}`) return next();
-
-  return res.status(401).json({
-    succes: false,
-    erreur: 'Token monitoring requis',
-    code: 'MONITORING_UNAUTHORIZED',
-  });
-}
-
 // ── Health check profond (vérifie toutes les dépendances) ───────
-app.get('/health/deep', requireMonitoringToken, async (req, res) => {
+app.get('/health/deep', async (req, res) => {
   const checks = {};
   let globalStatus = 'ok';
 
@@ -142,7 +127,7 @@ app.get('/health/deep', requireMonitoringToken, async (req, res) => {
 });
 
 // ── Métriques applicatives ──────────────────────────────────────
-app.get('/metrics', requireMonitoringToken, async (req, res) => {
+app.get('/metrics', async (req, res) => {
   try {
     const { getDB } = require('./infrastructure/database/pool');
     const db = getDB();
@@ -218,12 +203,6 @@ async function start() {
       logger.info(`✓ API démarrée sur http://localhost:${PORT}${PREFIX}`);
       logger.info(`✓ Documentation : http://localhost:${PORT}/api/docs`);
       logger.info(`  Environnement : ${process.env.NODE_ENV}`);
-
-      // Démarrer la surveillance (production uniquement)
-      if (process.env.NODE_ENV === 'production') {
-        const { startMonitoring } = require('./infrastructure/monitoring/monitoring.service');
-        startMonitoring();
-      }
     });
   } catch (err) {
     logger.error('Échec du démarrage', { error: err.message });
@@ -243,10 +222,6 @@ async function shutdown(signal) {
     const { getRedis } = require('./infrastructure/cache/redis');
     await getRedis().quit();
     logger.info('✓ Redis déconnecté');
-  } catch { /* ignore */ }
-  try {
-    const { stopMonitoring } = require('./infrastructure/monitoring/monitoring.service');
-    stopMonitoring();
   } catch { /* ignore */ }
   process.exit(0);
 }

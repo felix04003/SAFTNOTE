@@ -33,7 +33,7 @@ describe('GET /api/v1/classes', () => {
     expect(Array.isArray(res.body.data)).toBe(true);
     expect(res.body.data.length).toBeGreaterThanOrEqual(1);
 
-    const classe = res.body.data.find(c => c.nom === 'Term S1');
+    const classe = res.body.data.find(c => c.nom_classe === 'Term S1');
     expect(classe).toBeDefined();
   });
 

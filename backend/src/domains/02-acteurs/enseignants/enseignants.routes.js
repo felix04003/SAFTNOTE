@@ -24,7 +24,7 @@ async function getEnseignantConnecte(db, utilisateurId) {
     .where({ utilisateur_id: utilisateurId })
     .first('id', 'utilisateur_id', 'matricule_fonct', 'specialite', 'type_contrat');
 
-  if (!enseignant) throw ApiError.interdit('Accès réservé aux enseignants');
+  if (!enseignant) throw ApiError.nonTrouve('Profil enseignant introuvable');
   return enseignant;
 }
 
@@ -268,37 +268,6 @@ router.get('/enseignants/moi/edt', auth, isoler, async (req, res, next) => {
       emploi_du_temps: Object.values(parJour),
     });
 
-  } catch (err) { next(err); }
-});
-
-// ═════════════════════════════════════════════════════════════════
-// GET /enseignants/moi/affectations
-// Affectations de l'enseignant connecté (année courante)
-// ═════════════════════════════════════════════════════════════════
-router.get('/enseignants/moi/affectations', auth, isoler, async (req, res, next) => {
-  try {
-    const db = getDB();
-    const enseignant = await getEnseignantConnecte(db, req.session.utilisateur_id);
-    const annee = await getAnneeCourante(db, req.session.etablissement_id);
-
-    const affectations = await db('affectations_enseignants as ae')
-      .join('classes as c',           'c.id',  'ae.classe_id')
-      .join('niveaux as n',           'n.id',  'c.niveau_id')
-      .join('matieres as m',          'm.id',  'ae.matiere_id')
-      .join('annees_scolaires as a',  'a.id',  'ae.annee_scolaire_id')
-      .where({ 'ae.enseignant_id': enseignant.id, 'ae.annee_scolaire_id': annee.id })
-      .orderBy(['n.ordre', 'c.nom', 'm.nom'])
-      .select(
-        'ae.id as affectation_id',
-        'c.id as classe_id',
-        db.raw("CONCAT(n.nom, ' ', c.nom) as classe"),
-        'n.nom as niveau', 'n.cycle',
-        'm.id as matiere_id', 'm.nom as matiere', 'm.code as matiere_code',
-        'ae.est_titulaire', 'ae.date_debut', 'ae.date_fin',
-        'a.libelle as annee_scolaire'
-      );
-
-    return liste(res, affectations, { enseignant: `${enseignant.utilisateur_id}` });
   } catch (err) { next(err); }
 });
 
