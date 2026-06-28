@@ -179,20 +179,22 @@ async function persisterDonneesParent(db: any, payload: any) {
 
   if (payload.notes?.length) {
     for (const n of payload.notes) {
+      if (!n.id) continue;
       await db.runAsync(
-        `INSERT OR IGNORE INTO notes_parent (id, eleve_id, matiere, type_eval, date_evaluation, valeur, trimestre, updated_at)
+        `INSERT OR REPLACE INTO notes_parent (id, eleve_id, matiere, type_eval, date_evaluation, valeur, trimestre, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [Date.now() + Math.random(), n.eleve_id, n.matiere, n.type, n.date_evaluation, n.valeur, n.trimestre, new Date().toISOString()]
+        [n.id, n.eleve_id, n.matiere, n.type, n.date_evaluation, n.valeur, n.trimestre, new Date().toISOString()]
       );
     }
   }
 
   if (payload.absences?.length) {
     for (const a of payload.absences) {
+      if (!a.id) continue;
       await db.runAsync(
-        `INSERT OR IGNORE INTO absences (id, eleve_id, date_cours, matiere, statut, est_justifie, updated_at)
+        `INSERT OR REPLACE INTO absences (id, eleve_id, date_cours, matiere, statut, est_justifie, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [Date.now() + Math.random(), a.eleve_id, a.date_cours, a.matiere,
+        [a.id, a.eleve_id, a.date_cours, a.matiere,
          a.statut, a.est_justifie ? 1 : 0, new Date().toISOString()]
       );
     }

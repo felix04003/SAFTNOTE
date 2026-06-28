@@ -42,7 +42,7 @@ app.use(cors({
   credentials: true,
 }));
 app.use(compression());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // ── Logs HTTP ───────────────────────────────────────────────────
@@ -71,12 +71,17 @@ app.use((req, res, next) => {
   next();
 });
 
-// ── Documentation API (Swagger) ─────────────────────────────────
-app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
-  customCss: '.swagger-ui .topbar { display: none }',
-  customSiteTitle: 'EcoleManager API — Documentation',
-}));
-app.get('/api/docs.json', (req, res) => res.json(swaggerSpec));
+// ── Documentation API (Swagger) — désactivée en production ──────
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+    customCss: '.swagger-ui .topbar { display: none }',
+    customSiteTitle: 'EcoleManager API — Documentation',
+  }));
+  app.get('/api/docs.json', (req, res) => res.json(swaggerSpec));
+} else {
+  app.get('/api/docs', (req, res) => res.status(404).json({ succes: false, erreur: 'Not found' }));
+  app.get('/api/docs.json', (req, res) => res.status(404).json({ succes: false, erreur: 'Not found' }));
+}
 
 // ── Health check (léger, pour load balancer) ────────────────────
 app.get('/health', (req, res) => {
@@ -92,7 +97,13 @@ app.get('/health', (req, res) => {
 // ── Middleware protection monitoring ────────────────────────────
 function requireMonitoringToken(req, res, next) {
   const token = process.env.MONITORING_TOKEN;
-  if (!token) return next(); // Si pas de token configuré, accès libre (dev)
+  if (!token) {
+    return res.status(403).json({
+      succes: false,
+      erreur: 'MONITORING_TOKEN non configuré — accès refusé',
+      code: 'MONITORING_NOT_CONFIGURED',
+    });
+  }
 
   const auth = req.headers.authorization || '';
   if (auth === `Bearer ${token}`) return next();
@@ -190,6 +201,17 @@ app.get('/metrics', requireMonitoringToken, async (req, res) => {
 // ── Routes API ──────────────────────────────────────────────────
 const PREFIX = process.env.API_PREFIX || '/api/v1';
 
+// ── Rate limiting global ─────────────────────────────────────────
+const rateLimit = require('express-rate-limit');
+const limiterGlobal = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: parseInt(process.env.RATE_LIMIT_GLOBAL_MAX) || 100,
+  message: { succes: false, erreur: 'Trop de requêtes — réessayez dans 1 minute', code: 'RATE_LIMIT' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use(PREFIX, limiterGlobal);
+
 app.use(PREFIX, setupRouter);
 app.use(PREFIX, authRouter);
 app.use(PREFIX, identitesRouter);
@@ -207,8 +229,12 @@ app.use(notFound);
 app.use(errorHandler);
 
 // ── Démarrage ───────────────────────────────────────────────────
+const { validateEnv } = require('./utils/env');
+
 async function start() {
   try {
+    validateEnv();
+
     await connectDB();
     logger.info('✓ PostgreSQL connecté');
 
