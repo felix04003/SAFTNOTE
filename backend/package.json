@@ -14,7 +14,8 @@
     "migrate": "psql -U $POSTGRES_USER -d $POSTGRES_DB -f migrations/run_all_migrations.sql",
     "worker:notif": "node src/workers/notification.worker.js",
     "worker:moyennes": "node src/workers/calcul-moyennes.worker.js",
-    "worker:bulletins": "node src/workers/generation-bulletins.worker.js"
+    "worker:bulletins": "node src/workers/generation-bulletins.worker.js",
+    "migrate": "node src/utils/migrate.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

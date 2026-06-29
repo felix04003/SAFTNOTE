@@ -1,0 +1,203 @@
+version: '3.9'
+
+# ── Production compose ──────────────────────────────────────────────
+# Usage : docker compose -f docker-compose.prod.yml up -d
+# Prérequis : fichier .env.production à la racine du projet
+# Différences vs dev :
+#   - Nginx reverse-proxy avec TLS (Certbot/Let's Encrypt)
+#   - Pas de volume hot-reload src/
+#   - NODE_ENV=production
+#   - Worker bulletins inclus
+#   - Ports directs non exposés (tout passe par Nginx)
+
+services:
+
+  # ── PostgreSQL ─────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: ecole_postgres_prod
+    restart: always
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB}
+      POSTGRES_USER:     ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend
+
+  # ── Redis ───────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: ecole_redis_prod
+    restart: always
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redisdata_prod:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend
+
+  # ── API Backend ─────────────────────────────────────────────────
+  api:
+    image: ecole-manager-api:${IMAGE_TAG:-latest}
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ecole_api_prod
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV:        production
+      PORT:            3000
+      DATABASE_URL:    postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_HOST:      redis
+      REDIS_PORT:      6379
+      REDIS_PASSWORD:  ${REDIS_PASSWORD}
+      JWT_SECRET:      ${JWT_SECRET}
+      S3_ENDPOINT:     ${S3_ENDPOINT}
+      S3_ACCESS_KEY:   ${S3_ACCESS_KEY}
+      S3_SECRET_KEY:   ${S3_SECRET_KEY}
+      S3_BUCKET:       ${S3_BUCKET}
+      S3_REGION:       ${S3_REGION:-auto}
+      AT_API_KEY:      ${AT_API_KEY}
+      AT_USERNAME:     ${AT_USERNAME}
+      META_WA_TOKEN:            ${META_WA_TOKEN}
+      META_WA_PHONE_NUMBER_ID:  ${META_WA_PHONE_NUMBER_ID}
+      META_WA_VERIFY_TOKEN:     ${META_WA_VERIFY_TOKEN}
+      MONITORING_TOKEN: ${MONITORING_TOKEN}
+      FRONTEND_URL:    ${FRONTEND_URL}
+    expose:
+      - "3000"
+    networks:
+      - backend
+      - frontend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # ── Worker — Notifications ───────────────────────────────────────
+  worker-notif:
+    image: ecole-manager-api:${IMAGE_TAG:-latest}
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ecole_worker_notif_prod
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV:       production
+      DATABASE_URL:   postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_HOST:     redis
+      REDIS_PORT:     6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      AT_API_KEY:     ${AT_API_KEY}
+      AT_USERNAME:    ${AT_USERNAME}
+      META_WA_TOKEN:  ${META_WA_TOKEN}
+      META_WA_PHONE_NUMBER_ID: ${META_WA_PHONE_NUMBER_ID}
+      WORKER_NOTIF_CONCURRENCY: ${WORKER_NOTIF_CONCURRENCY:-5}
+    command: node src/workers/notification.worker.js
+    networks:
+      - backend
+
+  # ── Worker — Génération bulletins PDF ───────────────────────────
+  worker-bulletins:
+    image: ecole-manager-api:${IMAGE_TAG:-latest}
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ecole_worker_bulletins_prod
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV:       production
+      DATABASE_URL:   postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_HOST:     redis
+      REDIS_PORT:     6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      S3_ENDPOINT:    ${S3_ENDPOINT}
+      S3_ACCESS_KEY:  ${S3_ACCESS_KEY}
+      S3_SECRET_KEY:  ${S3_SECRET_KEY}
+      S3_BUCKET:      ${S3_BUCKET}
+      S3_REGION:      ${S3_REGION:-auto}
+      WORKER_BULLETINS_CONCURRENCE: ${WORKER_BULLETINS_CONCURRENCE:-1}
+    command: node src/workers/generation-bulletins.worker.js
+    shm_size: '1gb'
+    networks:
+      - backend
+
+  # ── Nginx — Reverse proxy + TLS ─────────────────────────────────
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: ecole_nginx_prod
+    restart: always
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - certbot_www:/var/www/certbot:ro
+      - certbot_conf:/etc/letsencrypt:ro
+    networks:
+      - frontend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  # ── Certbot — Renouvellement TLS automatique ─────────────────────
+  certbot:
+    image: certbot/certbot:latest
+    container_name: ecole_certbot
+    volumes:
+      - certbot_www:/var/www/certbot
+      - certbot_conf:/etc/letsencrypt
+    entrypoint: >
+      sh -c "trap exit TERM;
+             while :; do
+               certbot renew --webroot -w /var/www/certbot --quiet;
+               sleep 12h & wait $${!};
+             done"
+
+volumes:
+  pgdata_prod:
+  redisdata_prod:
+  certbot_www:
+  certbot_conf:
+
+networks:
+  backend:
+    internal: true
+  frontend:

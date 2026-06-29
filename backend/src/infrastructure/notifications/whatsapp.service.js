@@ -1,6 +1,7 @@
 'use strict';
 
 const logger = require('../../utils/logger');
+const { getDB } = require('../database/pool');
 
 /**
  * Service WhatsApp via Meta Cloud API.
@@ -85,7 +86,7 @@ async function envoyerTemplate(telephone, templateKey, parametres = [], document
         method: 'POST',
         headers: {
           'Content-Type':  'application/json',
-          'Authorization': `Bearer ${process.env.META_WA_ACCESS_TOKEN}`,
+          'Authorization': `Bearer ${process.env.META_WA_TOKEN}`,
         },
         body: JSON.stringify(payload),
       }
@@ -126,10 +127,49 @@ function verifierWebhook(req, res) {
 /**
  * Webhook Meta — réception des statuts de livraison.
  * Met à jour journal_notifications avec statut livré/lu.
+ *
+ * Format Meta entry :
+ *   { changes: [{ value: { statuses: [{ id, status, timestamp, recipient_id }] } }] }
  */
 async function traiterWebhookStatut(entry) {
-  // TODO: parser les statuts delivered/read et mettre à jour journal_notifications
-  logger.debug('Webhook WA statut reçu', { entry: JSON.stringify(entry) });
+  const changes = entry?.changes || [];
+
+  for (const change of changes) {
+    const statuses = change?.value?.statuses || [];
+
+    for (const s of statuses) {
+      const messageId = s.id;
+      const statut    = s.status; // 'sent' | 'delivered' | 'read' | 'failed'
+
+      if (!messageId) continue;
+
+      try {
+        const db = getDB();
+
+        if (statut === 'delivered') {
+          await db('journal_notifications')
+            .where('provider_message_id', messageId)
+            .update({ statut: 'livre', livre_at: db.raw('NOW()') });
+          logger.debug('WA livré', { messageId });
+
+        } else if (statut === 'read') {
+          await db('journal_notifications')
+            .where('provider_message_id', messageId)
+            .update({ statut: 'lu', lu_at: db.raw('NOW()') });
+          logger.debug('WA lu', { messageId });
+
+        } else if (statut === 'failed') {
+          const erreur = s.errors?.[0]?.title || 'Échec Meta';
+          await db('journal_notifications')
+            .where('provider_message_id', messageId)
+            .update({ statut: 'echec', code_erreur: erreur.slice(0, 100) });
+          logger.warn('WA échec livraison', { messageId, erreur });
+        }
+      } catch (err) {
+        logger.error('Erreur mise à jour statut WA', { messageId, error: err.message });
+      }
+    }
+  }
 }
 
 module.exports = { envoyerTemplate, verifierWebhook, traiterWebhookStatut, TEMPLATES };

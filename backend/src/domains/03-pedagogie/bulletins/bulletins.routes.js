@@ -11,6 +11,7 @@ const { valider }    = require('../../../middleware/validate.middleware');
 const { ok, cree, liste, paginee, getPagination } = require('../../../utils/reponse');
 const ApiError       = require('../../../utils/ApiError');
 const logger         = require('../../../utils/logger');
+const { enqueuerGenerationBulletins, getQueue, QUEUES } = require('../../../infrastructure/queue/bullmq');
 
 const router = express.Router();
 const auth   = authentifier;
@@ -251,8 +252,15 @@ router.post('/bulletins/generer', auth, isoler, perm('bulletins.generer'),
         }
       });
 
-      logger.info('Bulletins générés', { classe_id, periode_id, nb: bulletins.length, par: req.session.utilisateur_id });
-      return cree(res, { message: `${bulletins.length} bulletins générés`, classe: classe.classe, nb_bulletins: bulletins.length });
+      // Enqueuer la génération PDF asynchrone
+      const job = await enqueuerGenerationBulletins({
+        classe_id,
+        periode_id,
+        etablissement_id: req.etablissement_id,
+      });
+
+      logger.info('Bulletins générés + job PDF enqueued', { classe_id, periode_id, nb: bulletins.length, jobId: job.id, par: req.session.utilisateur_id });
+      return cree(res, { message: `${bulletins.length} bulletins générés`, classe: classe.classe, nb_bulletins: bulletins.length, job_id: job.id });
     } catch (err) { next(err); }
   }
 );
@@ -309,6 +317,25 @@ router.get('/bulletins/:id/download', auth, isoler, perm('bulletins.voir'), asyn
     if (!bulletin.bulletin_url) throw ApiError.nonTrouve('Le fichier PDF n\'est pas encore disponible');
 
     return ok(res, { download_url: bulletin.bulletin_url, expire_dans: '1h' });
+  } catch (err) { next(err); }
+});
+
+// ═════════════════════════════════════════════════════════════════
+// GET /bulletins/jobs/:jobId — Statut du job de génération PDF
+// ═════════════════════════════════════════════════════════════════
+router.get('/bulletins/jobs/:jobId', auth, isoler, perm('bulletins.voir'), async (req, res, next) => {
+  try {
+    const queue = getQueue(QUEUES.BULLETINS);
+    const job   = await queue.getJob(req.params.jobId);
+
+    if (!job) throw ApiError.nonTrouve('Job introuvable');
+
+    const etat     = await job.getState();
+    const progress = job.progress;
+    const result   = job.returnvalue;
+    const erreur   = job.failedReason;
+
+    return ok(res, { job_id: req.params.jobId, etat, progress, result, erreur });
   } catch (err) { next(err); }
 });
 
