@@ -170,10 +170,10 @@ Tous les 9 domaines sont **implémentés et testés** (60/60 tests passent).
 - **Workflow** : `.github/workflows/ci.yml`
 - **Déclenché sur** : push `main`/`develop` + pull requests vers `main`
 - **Jobs** :
-  1. `backend-lint-test` — ESLint + Jest (60 tests, couverture)
+  1. `backend-lint-test` — ESLint + Jest (108 tests, couverture)
   2. `backend-docker` — Build image Docker (après tests)
   3. `mobile-typecheck` — TypeScript `tsc --noEmit`
-- **ESLint** : `backend/.eslintrc.js` — 0 erreurs, <50 warnings
+- **ESLint** : `backend/.eslintrc.js` — 0 erreurs, <60 warnings
 
 ### 🖥️ Dashboard — Architecture
 
@@ -424,7 +424,7 @@ META_WA_TOKEN         → WhatsApp Business API
 | 16 | Index SQL performance + Cache Redis stratégique | ✅ |
 | 17 | Tests d'intégration (73 tests, 10 suites, vraie DB) | ✅ |
 | 18 | Monitoring `/health/deep` + `/metrics` + alertes SMS | ✅ |
-| 19 | Build mobile EAS + déploiement serveur | ✅ |
+| 19 | Build mobile EAS + CI verte (108 tests, TypeScript, Docker) | ✅ |
 
 ---
 
