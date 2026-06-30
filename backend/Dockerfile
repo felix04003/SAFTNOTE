@@ -16,13 +16,19 @@ ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 WORKDIR /app
 
+# Donner la propriété du répertoire à l'utilisateur node
+RUN chown -R node:node /app
+
 # Copier les dépendances d'abord (cache Docker)
-COPY package*.json ./
+COPY --chown=node:node package*.json ./
 RUN npm ci --only=production
 
 # Copier le code source
-COPY src/ ./src/
-COPY migrations/ ./migrations/
+COPY --chown=node:node src/ ./src/
+COPY --chown=node:node migrations/ ./migrations/
+
+# Ne pas tourner en root
+USER node
 
 EXPOSE 3000
 

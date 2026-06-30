@@ -18,6 +18,25 @@ const logger            = require('../../../utils/logger');
 const { getOrSet, invalidatePattern } = require('../../../infrastructure/cache/redis');
 
 const router = express.Router();
+const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS) || 12;
+
+/**
+ * Valide un mot de passe selon la politique de sécurité de l'établissement.
+ * @param {string} mdp - Le mot de passe à valider
+ * @param {object} politique - Objet avec mdp_longueur_min, mdp_necessite_majuscule, mdp_necessite_chiffre
+ * @returns {string|null} Message d'erreur ou null si valide
+ */
+function validerMotDePasse(mdp, politique) {
+  const min = politique?.mdp_longueur_min || 8;
+  if (mdp.length < min) return `Le mot de passe doit contenir au moins ${min} caractères`;
+  if (politique?.mdp_necessite_majuscule && !/[A-Z]/.test(mdp)) {
+    return 'Le mot de passe doit contenir au moins une lettre majuscule';
+  }
+  if (politique?.mdp_necessite_chiffre && !/[0-9]/.test(mdp)) {
+    return 'Le mot de passe doit contenir au moins un chiffre';
+  }
+  return null;
+}
 
 // Rate limiting strict sur les routes d'auth
 const limiterAuth = rateLimit({
@@ -120,7 +139,7 @@ router.post('/auth/connexion', limiterAuth, valider(schemaConnexion), async (req
     }
 
     // 5. Créer la session
-    const { token, sessionId } = await creerSession(db, utilisateur.id, etablissement.id, req);
+    const { token, sessionId, refreshToken } = await creerSession(db, utilisateur.id, etablissement.id, req);
 
     // 6. Charger le rôle principal
     const roleRow = await db('utilisateur_roles as ur')
@@ -140,6 +159,7 @@ router.post('/auth/connexion', limiterAuth, valider(schemaConnexion), async (req
 
     return ok(res, {
       token,
+      refresh_token: refreshToken,
       utilisateur: {
         id:              utilisateur.id,
         nom:             utilisateur.nom,
@@ -182,7 +202,7 @@ router.post('/auth/otp/demander', limiterAuth, valider(schemaOtpDemander), async
     }
 
     // Générer le code OTP à 6 chiffres
-    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const code = String(crypto.randomInt(100000, 1000000));
     const codeHash = crypto.createHash('sha256').update(code).digest('hex');
 
     // Invalider les anciens OTP du même numéro
@@ -200,9 +220,9 @@ router.post('/auth/otp/demander', limiterAuth, valider(schemaOtpDemander), async
       expire_at:     db.raw("NOW() + INTERVAL '10 minutes'"),
     });
 
-    // Envoyer le SMS (en dev : log du code en clair si SMS non configuré)
-    if (process.env.NODE_ENV !== 'production' && !process.env.AT_API_KEY) {
-      logger.warn('⚠️  SMS non configuré — CODE OTP (dev uniquement) : ' + code, { telephone });
+    // En dev : log le code UNIQUEMENT en mode test (jamais en dev ordinaire)
+    if (process.env.NODE_ENV === 'test' && !process.env.AT_API_KEY) {
+      logger.warn('⚠️  SMS non configuré — CODE OTP (test uniquement) : ' + code, { telephone });
     } else {
       await envoyerOTP(telephone, code, etablissement.nom);
     }
@@ -262,10 +282,11 @@ router.post('/auth/otp/valider', limiterAuth, valider(schemaOtpValider), async (
       .where({ 'ur.utilisateur_id': utilisateur.id, 'ur.etablissement_id': etablissement.id, 'ur.actif': true })
       .first('r.code as role');
 
-    const { token } = await creerSession(db, utilisateur.id, etablissement.id, req);
+    const { token, refreshToken } = await creerSession(db, utilisateur.id, etablissement.id, req);
 
     return ok(res, {
       token,
+      refresh_token: refreshToken,
       utilisateur: {
         id:               utilisateur.id,
         nom:              utilisateur.nom,
@@ -401,7 +422,7 @@ router.post('/auth/mot-de-passe-oublie', limiterAuth, valider(schemaMotDePasseOu
       return ok(res, { message: 'Si ce compte existe, un code vous a été envoyé.' });
     }
 
-    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const code = String(crypto.randomInt(100000, 1000000));
     const codeHash = crypto.createHash('sha256').update(code).digest('hex');
     const telephone = utilisateur.telephone;
 
@@ -418,9 +439,8 @@ router.post('/auth/mot-de-passe-oublie', limiterAuth, valider(schemaMotDePasseOu
       expire_at:      db.raw("NOW() + INTERVAL '15 minutes'"),
     });
 
-    // En dev : log le code dans la console si SMS non configuré
-    if (process.env.NODE_ENV === 'development' && !process.env.AT_API_KEY) {
-      logger.info(`[DEV] Code reset mot de passe pour ${identifiant} : ${code}`);
+    if (process.env.NODE_ENV === 'test' && !process.env.AT_API_KEY) {
+      logger.warn(`[TEST] Code reset mot de passe pour ${identifiant} : ${code}`);
     } else {
       await envoyerOTP(telephone, code, `Réinitialisation — ${etablissement.nom}`);
     }
@@ -473,6 +493,16 @@ router.post('/auth/reinitialiser-mot-de-passe', limiterAuth, valider(schemaReini
 
     if (!otp) throw ApiError.otpInvalide('Code invalide, expiré ou trop de tentatives');
 
+    // Vérifier la politique de mot de passe
+    try {
+      const politique = await db('politique_securite').first('mdp_longueur_min', 'mdp_necessite_majuscule', 'mdp_necessite_chiffre');
+      const errMdp = validerMotDePasse(nouveau_mot_de_passe, politique);
+      if (errMdp) throw ApiError.validation(errMdp);
+    } catch (e) {
+      if (e.isApiError) throw e;
+      // Si la table n'existe pas encore, continuer sans validation
+    }
+
     const hash = await bcrypt.hash(nouveau_mot_de_passe, 12);
 
     await db.transaction(async trx => {
@@ -500,28 +530,50 @@ router.post('/auth/reinitialiser-mot-de-passe', limiterAuth, valider(schemaReini
 // ── Helpers ──────────────────────────────────────────────────────
 
 async function creerSession(db, utilisateurId, etablissementId, req) {
+  // Vérifier et appliquer la limite de sessions simultanées
+  try {
+    const politique = await db('politique_securite').first('session_max_simultanees');
+    const max = politique?.session_max_simultanees || 3;
+    const sessionsActives = await db('sessions')
+      .where({ utilisateur_id: utilisateurId, revoquee: false })
+      .where('expire_at', '>', db.raw('NOW()'))
+      .orderBy('created_at', 'asc')
+      .select('id');
+    if (sessionsActives.length >= max) {
+      // Révoquer les sessions les plus anciennes
+      const aRevoquer = sessionsActives.slice(0, sessionsActives.length - max + 1);
+      await db('sessions')
+        .whereIn('id', aRevoquer.map(s => s.id))
+        .update({ revoquee: true, motif_revocation: 'session_max_atteint' });
+    }
+  } catch { /* Non bloquant — continuer */ }
+
   const sessionId = uuid();
   const token = jwt.sign(
     { sub: utilisateurId, eid: etablissementId, sid: sessionId },
     process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || '8h' }
+    { expiresIn: process.env.JWT_EXPIRES_IN || '30m' }
   );
 
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const refreshToken = crypto.randomBytes(40).toString('hex');
+  const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
 
   await db('sessions').insert({
-    id:               sessionId,
-    utilisateur_id:   utilisateurId,
-    etablissement_id: etablissementId,
-    token_hash:       tokenHash,
-    ip_address:       req.ip,
-    user_agent:       req.headers['user-agent']?.slice(0, 255),
-    appareil:         detecterAppareil(req.headers['user-agent']),
-    canal_connexion:  'web',
-    expire_at:        db.raw("NOW() + INTERVAL '8 hours'"),
+    id:                 sessionId,
+    utilisateur_id:     utilisateurId,
+    etablissement_id:   etablissementId,
+    token_hash:         tokenHash,
+    refresh_token_hash: refreshTokenHash,
+    refresh_expire_at:  db.raw("NOW() + INTERVAL '7 days'"),
+    ip_address:         req.ip,
+    user_agent:         req.headers['user-agent']?.slice(0, 255),
+    appareil:           detecterAppareil(req.headers['user-agent']),
+    canal_connexion:    'web',
+    expire_at:          db.raw("NOW() + INTERVAL '30 minutes'"),
   });
 
-  return { token, sessionId };
+  return { token, sessionId, refreshToken };
 }
 
 function detecterAppareil(userAgent = '') {
@@ -529,6 +581,43 @@ function detecterAppareil(userAgent = '') {
   if (/iPhone|iPad/i.test(userAgent)) return 'mobile_ios';
   return 'desktop';
 }
+
+// ── POST /auth/refresh — Rafraîchir le token d'accès ────────────
+router.post('/auth/refresh', async (req, res, next) => {
+  const { refresh_token } = req.body;
+  if (!refresh_token) return next(ApiError.nonAutorise('Refresh token manquant'));
+  const db = getDB();
+
+  try {
+    const refreshHash = crypto.createHash('sha256').update(refresh_token).digest('hex');
+
+    const session = await db('sessions')
+      .where({ refresh_token_hash: refreshHash, revoquee: false })
+      .where('refresh_expire_at', '>', db.raw('NOW()'))
+      .first('id', 'utilisateur_id', 'etablissement_id');
+
+    if (!session) return next(ApiError.nonAutorise('Refresh token invalide ou expiré'));
+
+    const newSessionId = uuid();
+    const newToken = jwt.sign(
+      { sub: session.utilisateur_id, eid: session.etablissement_id, sid: newSessionId },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '30m' }
+    );
+    const tokenHash = crypto.createHash('sha256').update(newToken).digest('hex');
+
+    // Mise à jour de la session avec le nouveau token hash
+    await db('sessions').where({ id: session.id }).update({
+      id: newSessionId,
+      token_hash: tokenHash,
+      derniere_activite: db.raw('NOW()'),
+    });
+
+    return ok(res, { token: newToken });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // ── POST /etablissements/register ────────────────────────────────
 // Endpoint PUBLIC — crée un nouvel établissement + compte directeur
@@ -571,7 +660,7 @@ router.post('/etablissements/register', limiterRegister,
       const rand4     = String(Math.floor(1000 + Math.random() * 9000));
       const codeOfficiel = `${initiales}-${villeSlug}-${rand4}`;
 
-      const mdpHash = await bcrypt.hash(directeur_mdp, 10);
+      const mdpHash = await bcrypt.hash(directeur_mdp, BCRYPT_ROUNDS);
 
       // Calcul de l'année scolaire courante si non fournie
       const now    = new Date();

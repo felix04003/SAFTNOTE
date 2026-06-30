@@ -40,7 +40,7 @@ var PageEleves = {
       if (!sel) return;
       sel.innerHTML = '<option value="">— Choisir une classe —</option>' +
         this._classes.map(function(c) {
-          return '<option value="' + c.id + '">' + (c.nom_classe || c.nom || c.id) + '</option>';
+          return '<option value="' + escapeHtml(c.id) + '">' + escapeHtml(c.nom_classe || c.nom || c.id) + '</option>';
         }).join('');
     } catch (e) {
       console.warn('PageEleves.chargerClasses —', e.message);
@@ -104,18 +104,18 @@ var PageEleves = {
     }
 
     tbody.innerHTML = eleves.map(function(e) {
-      var nom = (e.prenom || '') + ' ' + (e.nom || '');
+      var nom = escapeHtml((e.prenom || '') + ' ' + (e.nom || ''));
       var moy = e.moyenne != null ? e.moyenne : null;
       var abs = e.nb_absences || 0;
       return '<tr>' +
         '<td class="nc" style="display:flex;align-items:center;gap:9px"><div class="av" style="background:' + cn(moy) + '">' + init2(nom) + '</div>' + nom + '</td>' +
-        '<td style="font-family:\'Space Mono\',monospace;font-size:11.5px;color:var(--g400)">' + (e.matricule || '—') + '</td>' +
-        '<td><span class="badge bp">' + (e.classe || e.niveau || '—') + '</span></td>' +
+        '<td style="font-family:\'Space Mono\',monospace;font-size:11.5px;color:var(--g400)">' + escapeHtml(e.matricule || '—') + '</td>' +
+        '<td><span class="badge bp">' + escapeHtml(e.classe || e.niveau || '—') + '</span></td>' +
         '<td><span class="badge bs">✓ Inscrit</span></td>' +
         '<td>' + (moy != null ? '<span style="font-weight:700;color:' + cn(moy) + '">' + moy + '/20</span>' : '<span class="badge bn">—</span>') + '</td>' +
         '<td><span style="font-weight:600;color:' + (abs >= 10 ? 'var(--rouge)' : abs >= 5 ? 'var(--warning)' : 'var(--g700)') + '">' + abs + 'j</span></td>' +
-        '<td style="font-size:12px;color:var(--g500)">' + (e.parent_nom || '—') + '</td>' +
-        '<td><button class="btn btn-l btn-sm" onclick="PageEleves.voirFiche(\'' + e.id + '\')">Voir</button></td>' +
+        '<td style="font-size:12px;color:var(--g500)">' + escapeHtml(e.parent_nom || '—') + '</td>' +
+        '<td><button class="btn btn-l btn-sm" onclick="PageEleves.voirFiche(\'' + escapeHtml(e.id) + '\')">Voir</button></td>' +
       '</tr>';
     }).join('');
   },

@@ -33,11 +33,11 @@ function errorHandler(err, req, res, next) {
 
   // Erreurs Knex / PostgreSQL
   if (err.code === '23505') {
+    if (err.detail) logger.warn('Contrainte unicité BD', { detail: err.detail, url: req.originalUrl });
     return res.status(409).json({
       succes:  false,
       erreur:  'Cet enregistrement existe déjà',
       code:    'DOUBLON',
-      details: err.detail ? [{ message: err.detail }] : [],
     });
   }
 
@@ -50,11 +50,11 @@ function errorHandler(err, req, res, next) {
   }
 
   if (err.code === '23514') {
+    if (err.detail) logger.warn('Contrainte check BD', { detail: err.detail, url: req.originalUrl });
     return res.status(422).json({
       succes:  false,
       erreur:  'Contrainte de validation violée',
       code:    'CONTRAINTE_BD',
-      details: err.detail ? [{ message: err.detail }] : [],
     });
   }
 

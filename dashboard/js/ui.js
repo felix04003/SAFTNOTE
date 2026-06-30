@@ -1,6 +1,21 @@
 'use strict';
 
 // ── HELPERS ────────────────────────────────────────────
+
+/**
+ * Échappe les caractères HTML dangereux pour prévenir les attaques XSS.
+ * À utiliser chaque fois que des données utilisateur sont insérées via innerHTML.
+ */
+function escapeHtml(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 function cn(n) {
   return n == null ? 'var(--g400)' :
     n >= 16 ? 'var(--success)' :

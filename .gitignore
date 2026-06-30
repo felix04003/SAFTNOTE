@@ -76,3 +76,4 @@ postgres-data/
 # Tooling
 .claude/worktrees/
 .superpowers/
+.gstack/

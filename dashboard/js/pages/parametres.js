@@ -81,7 +81,7 @@ var PageParametres = {
           }
         });
         var discOptions = Object.keys(disciplinesVues).map(function(id) {
-          return '<option value="' + id + '">' + disciplinesVues[id] + '</option>';
+          return '<option value="' + escapeHtml(id) + '">' + escapeHtml(disciplinesVues[id]) + '</option>';
         });
         discSel.innerHTML = '<option value="">— Aucune discipline —</option>' + discOptions.join('');
       }
@@ -92,10 +92,10 @@ var PageParametres = {
       }
       liste.innerHTML = matieres.map(function(m) {
         return '<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--g100)">' +
-          '<span style="font-size:13px"><strong>' + m.nom + '</strong>' +
-          (m.nom_court ? ' <span style="color:var(--g400);font-size:11px">(' + m.nom_court + ')</span>' : '') +
-          ' <span class="badge bo" style="font-size:10px">' + m.code + '</span>' +
-          (m.discipline ? ' · ' + m.discipline : '') +
+          '<span style="font-size:13px"><strong>' + escapeHtml(m.nom) + '</strong>' +
+          (m.nom_court ? ' <span style="color:var(--g400);font-size:11px">(' + escapeHtml(m.nom_court) + ')</span>' : '') +
+          ' <span class="badge bo" style="font-size:10px">' + escapeHtml(m.code) + '</span>' +
+          (m.discipline ? ' · ' + escapeHtml(m.discipline) : '') +
           (!m.actif ? ' <span class="badge bd" style="font-size:10px">Inactif</span>' : '') +
           '</span>' +
         '</div>';

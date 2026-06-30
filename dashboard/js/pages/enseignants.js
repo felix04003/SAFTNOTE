@@ -66,17 +66,18 @@ var PageEnseignants = {
     }
 
     tbody.innerHTML = enseignants.map(function(e) {
-      var nom = (e.prenom || '') + ' ' + (e.nom || '');
+      var nom = escapeHtml((e.prenom || '') + ' ' + (e.nom || ''));
+      var nomForAttr = nom.replace(/'/g, '');
       return '<tr>' +
         '<td class="nc" style="display:flex;align-items:center;gap:9px"><div class="av" style="background:var(--bleu)">' + init2(nom) + '</div>' + nom + '</td>' +
-        '<td><span class="badge bo">' + (e.specialite || '—') + '</span></td>' +
-        '<td style="font-size:12px;color:var(--g500)">' + (e.telephone || '—') + '</td>' +
-        '<td style="font-size:12px;color:var(--g500)">' + (e.email || '—') + '</td>' +
-        '<td><span class="badge bn">' + (e.type_contrat || 'titulaire') + '</span></td>' +
+        '<td><span class="badge bo">' + escapeHtml(e.specialite || '—') + '</span></td>' +
+        '<td style="font-size:12px;color:var(--g500)">' + escapeHtml(e.telephone || '—') + '</td>' +
+        '<td style="font-size:12px;color:var(--g500)">' + escapeHtml(e.email || '—') + '</td>' +
+        '<td><span class="badge bn">' + escapeHtml(e.type_contrat || 'titulaire') + '</span></td>' +
         '<td><span class="badge bs">Actif</span></td>' +
         '<td style="display:flex;gap:6px">' +
           '<button class="btn btn-l btn-sm" onclick="toast(\'Fiche à venir\')">Voir</button>' +
-          '<button class="btn btn-p btn-sm" onclick="PageAffectations.ouvrir(\'' + e.id + '\',\'' + nom.replace(/'/g, '') + '\')">📋 Affecter</button>' +
+          '<button class="btn btn-p btn-sm" onclick="PageAffectations.ouvrir(\'' + escapeHtml(e.id) + '\',\'' + nomForAttr + '\')">📋 Affecter</button>' +
         '</td>' +
       '</tr>';
     }).join('');
@@ -163,8 +164,8 @@ var PageAffectations = {
 
       liste.innerHTML = aff.map(function(a) {
         return '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--g100)">' +
-          '<span style="font-size:13px">• <strong>' + a.matiere + '</strong> · ' + (a.niveau || '') + ' ' + a.classe + (a.est_titulaire ? ' <span class="badge bs" style="font-size:10px">Titulaire</span>' : '') + '</span>' +
-          '<button class="btn btn-d btn-sm" onclick="PageAffectations.supprimer(\'' + a.id + '\')">🗑️</button>' +
+          '<span style="font-size:13px">• <strong>' + escapeHtml(a.matiere) + '</strong> · ' + escapeHtml(a.niveau || '') + ' ' + escapeHtml(a.classe) + (a.est_titulaire ? ' <span class="badge bs" style="font-size:10px">Titulaire</span>' : '') + '</span>' +
+          '<button class="btn btn-d btn-sm" onclick="PageAffectations.supprimer(\'' + escapeHtml(a.id) + '\')">🗑️</button>' +
         '</div>';
       }).join('');
     } catch (e) {
