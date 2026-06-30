@@ -424,7 +424,7 @@ META_WA_TOKEN         → WhatsApp Business API
 | 16 | Index SQL performance + Cache Redis stratégique | ✅ |
 | 17 | Tests d'intégration (73 tests, 10 suites, vraie DB) | ✅ |
 | 18 | Monitoring `/health/deep` + `/metrics` + alertes SMS | ✅ |
-| 19 | Build mobile EAS + déploiement serveur | 🔜 |
+| 19 | Build mobile EAS + déploiement serveur | ✅ |
 
 ---
 
