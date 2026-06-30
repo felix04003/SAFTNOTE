@@ -67,6 +67,30 @@ module.exports = {
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
     },
 
+    // ── Worker — Calcul des moyennes ──────────────────────────────
+    {
+      name:      'ecolemanager-worker-moyennes',
+      script:    'src/workers/calcul-moyennes.worker.js',
+      cwd:       './backend',
+      instances: 1,
+      exec_mode: 'fork',
+      watch:     false,
+      max_memory_restart: '256M',
+
+      env: {
+        NODE_ENV: 'development',
+        WORKER_MOYENNES_CONCURRENCE: 2,
+      },
+      env_production: {
+        NODE_ENV: 'production',
+        WORKER_MOYENNES_CONCURRENCE: 2,
+      },
+
+      out_file:        './logs/worker-moyennes-out.log',
+      error_file:      './logs/worker-moyennes-err.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss',
+    },
+
     // ── Worker — Génération bulletins PDF ─────────────────────────
     {
       name:      'ecolemanager-worker-bulletins',
