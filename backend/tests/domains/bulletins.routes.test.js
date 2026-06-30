@@ -164,4 +164,37 @@ describe('Bulletins Routes', () => {
         .expect(404);
     });
   });
+
+  // ── GET /bulletins/jobs/:jobId ───────────────────────────────────
+  describe('GET /bulletins/jobs/:jobId', () => {
+    const { getQueue } = require('../../src/infrastructure/queue/bullmq');
+
+    test('retourne l\'état d\'un job en cours', async () => {
+      const mockJob = {
+        id: 'job-001',
+        getState: jest.fn().mockResolvedValue('active'),
+        progress: 42,
+        returnvalue: null,
+        failedReason: null,
+      };
+      getQueue.mockReturnValue({ getJob: jest.fn().mockResolvedValue(mockJob) });
+
+      const res = await request(app)
+        .get('/bulletins/jobs/job-001')
+        .expect(200);
+
+      expect(res.body.succes).toBe(true);
+      expect(res.body.data).toMatchObject({ job_id: 'job-001', etat: 'active', progress: 42 });
+    });
+
+    test('retourne 404 si job inexistant', async () => {
+      getQueue.mockReturnValue({ getJob: jest.fn().mockResolvedValue(null) });
+
+      const res = await request(app)
+        .get('/bulletins/jobs/job-999')
+        .expect(404);
+
+      expect(res.body.code).toBe('RESSOURCE_INTROUVABLE');
+    });
+  });
 });
