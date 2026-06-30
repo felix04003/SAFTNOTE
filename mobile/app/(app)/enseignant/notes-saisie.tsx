@@ -218,7 +218,7 @@ const styles = StyleSheet.create({
   eleveInfo:  { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
   numBulle:   { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
   numTxt:     { fontSize: Typography.xs, fontWeight: Typography.bold, color: Colors.primary },
-  eleveNom:   { fontSize: Typography.sm, color: Colors.gray800, fontWeight: Typography.medium, flex: 1 },
+  eleveNom:   { fontSize: Typography.sm, color: Colors.gray700, fontWeight: Typography.medium, flex: 1 },
   noteInput:  { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderRadius: Radius.sm,
     backgroundColor: Colors.white, paddingHorizontal: 8, height: 40, minWidth: 80 },
   noteInputTxt: { fontSize: Typography.md, fontWeight: Typography.bold, minWidth: 40, textAlign: 'center' },

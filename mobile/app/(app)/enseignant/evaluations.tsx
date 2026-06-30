@@ -99,7 +99,7 @@ export default function EvaluationsScreen() {
     return (
       <TouchableOpacity activeOpacity={0.85}
         onPress={() => router.push({ pathname: '/(app)/enseignant/notes-saisie', params: { evaluation_id: e.id, matiere: e.matiere, classe: e.classe, type_eval: e.type, note_max: String(e.note_max) } })}>
-        <Carte style={[styles.evalCard, { borderLeftColor: couleur }]} padding={12}>
+        <Carte style={{ ...styles.evalCard, borderLeftColor: couleur }} padding={12}>
           <View style={styles.evalLigne}>
             <View style={[styles.typeIco, { backgroundColor: couleur + '15' }]}>
               <Ionicons name="document-text-outline" size={20} color={couleur} />

@@ -122,7 +122,7 @@ describe('Discipline Routes', () => {
       db.mockReturnValueOnce(mockQuery([sanction]));
 
       const res = await request(app)
-        .get(`/discipline/eleve/${IDS.eleve}`)
+        .get(`/discipline/eleves/${IDS.eleve}/dossier`)
         .expect(200);
 
       expect(res.body.succes).toBe(true);

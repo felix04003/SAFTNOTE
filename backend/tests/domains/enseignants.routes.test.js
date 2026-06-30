@@ -77,15 +77,15 @@ describe('Enseignants Routes', () => {
       expect(res.body.meta).toHaveProperty('annee');
     });
 
-    test('retourne 404 si profil enseignant introuvable', async () => {
+    test('retourne 403 si profil enseignant introuvable', async () => {
       db.mockReturnValueOnce(mockQuery(null)); // enseignant non trouvé
 
       const res = await request(app)
         .get('/enseignants/moi/classes')
-        .expect(404);
+        .expect(403);
 
       expect(res.body.succes).toBe(false);
-      expect(res.body.code).toBe('RESSOURCE_INTROUVABLE');
+      expect(res.body.code).toBe('PERMISSION_INSUFFISANTE');
     });
   });
 

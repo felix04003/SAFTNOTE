@@ -112,7 +112,7 @@ export default function TableauBordEnseignant() {
           ? <Carte><Text style={styles.aucun}>Aucun cours ce {JOURS[jourActif]}</Text></Carte>
           : coursJour.map((c, i) => (
             <TouchableOpacity key={i} activeOpacity={0.85} onPress={() => router.push({ pathname: '/(app)/enseignant/appel', params: { cours_id: c.id, classe: c.classe } })}>
-              <Carte style={[styles.coursCard, { borderLeftColor: COULEURS_MATIERES[c.matiere] || COULEURS_MATIERES.default }]} padding={12}>
+              <Carte style={{ ...styles.coursCard, borderLeftColor: COULEURS_MATIERES[c.matiere] || COULEURS_MATIERES.default }} padding={12}>
                 <View style={styles.coursLigne}>
                   <View style={[styles.coursHeure, { backgroundColor: (COULEURS_MATIERES[c.matiere] || COULEURS_MATIERES.default) + '15' }]}>
                     <Text style={[styles.coursHeureTxt, { color: COULEURS_MATIERES[c.matiere] || COULEURS_MATIERES.default }]}>{c.heure_debut?.slice(0,5)}</Text>

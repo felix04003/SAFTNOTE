@@ -18,6 +18,9 @@ interface AuthState {
   session:        Session | null;
   token:          string | null;
   chargement:     boolean;
+  estConnecte:    boolean;
+  estParent:      () => boolean;
+  estEnseignant:  () => boolean;
   chargerSession: () => Promise<void>;
   connexionMDP:   (data: { identifiant: string; mot_de_passe: string; etablissement_code: string }) => Promise<void>;
   connexionOTP:   (data: { telephone: string; code: string; etablissement_code: string }) => Promise<void>;
@@ -25,9 +28,12 @@ interface AuthState {
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
-  session:    null,
-  token:      null,
-  chargement: true,
+  session:       null,
+  token:         null,
+  chargement:    true,
+  estConnecte:   false,
+  estParent:     () => get().session?.role === 'parent',
+  estEnseignant: () => ['enseignant', 'directeur', 'censeur'].includes(get().session?.role ?? ''),
 
   // Charger la session persistée au démarrage
   chargerSession: async () => {
@@ -36,7 +42,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const session = await SecureStore.getItemAsync('session');
       if (token && session) {
         api.setToken(token);
-        set({ token, session: JSON.parse(session) });
+        set({ token, session: JSON.parse(session), estConnecte: true });
       }
     } finally {
       set({ chargement: false });
@@ -78,7 +84,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           DELETE FROM bulletins;
         `);
       } catch {}
-      set({ session: null, token: null });
+      set({ session: null, token: null, estConnecte: false });
     }
   },
 }));
@@ -96,5 +102,5 @@ async function persisterSession(res: any, set: any) {
   api.setToken(token);
   await SecureStore.setItemAsync('jwt_token', token);
   await SecureStore.setItemAsync('session', JSON.stringify(session));
-  set({ token, session });
+  set({ token, session, estConnecte: true });
 }
