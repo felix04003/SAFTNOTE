@@ -123,7 +123,9 @@ describe('GET /api/v1/parents/moi/enfants/:id/absences', () => {
       .expect(200);
 
     expect(res.body.succes).toBe(true);
-    expect(Array.isArray(res.body.data)).toBe(true);
+    expect(res.body.data).toHaveProperty('recapitulatif');
+    expect(res.body.data).toHaveProperty('detail');
+    expect(Array.isArray(res.body.data.detail)).toBe(true);
   });
 
   it('devrait refuser l\'accès à un élève non lié au parent', async () => {
