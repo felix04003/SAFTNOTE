@@ -106,7 +106,7 @@ export default function MoyennesScreen() {
           </View>
           <View style={[styles.resumeItem, { backgroundColor: Colors.dangerLight }]}>
             <Text style={[styles.resumeNum, { color: Colors.danger }]}>{moyennes.filter(m => m.moyenne != null && m.moyenne < 10).length}</Text>
-            <Text style={styles.resumeLbl}>< 10/20</Text>
+            <Text style={styles.resumeLbl}>{'< 10/20'}</Text>
           </View>
         </View>
       )}

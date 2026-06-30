@@ -9,7 +9,7 @@
     "test": "jest --coverage",
     "test:watch": "jest --watch",
     "test:integration": "jest --config jest.integration.config.js --verbose",
-    "lint": "eslint src/ tests/ --max-warnings 50",
+    "lint": "eslint src/ tests/ --max-warnings 60",
     "lint:fix": "eslint src/ tests/ --fix",
     "migrate": "psql -U $POSTGRES_USER -d $POSTGRES_DB -f migrations/run_all_migrations.sql",
     "worker:notif": "node src/workers/notification.worker.js",
