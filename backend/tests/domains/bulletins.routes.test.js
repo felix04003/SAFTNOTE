@@ -116,7 +116,7 @@ describe('Bulletins Routes', () => {
       const res = await request(app)
         .post('/bulletins/generer')
         .send({ classe_id: IDS.classe, periode_id: IDS.periode })
-        .expect(201);
+        .expect(202);
 
       expect(res.body.succes).toBe(true);
     });
