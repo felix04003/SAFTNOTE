@@ -342,6 +342,7 @@ function createIntegrationApp() {
   const { notFound } = require('../../src/middleware/notFound.middleware');
 
   const authRouter        = require('../../src/domains/02-acteurs/auth/auth.routes');
+  const setupRouter       = require('../../src/domains/setup/setup.routes');
   const identitesRouter   = require('../../src/domains/01-identites/identites.routes');
   const elevesRouter      = require('../../src/domains/02-acteurs/eleves/eleves.routes');
   const parentsRouter     = require('../../src/domains/02-acteurs/parents/parents.routes');
@@ -356,6 +357,7 @@ function createIntegrationApp() {
 
   const PREFIX = '/api/v1';
   app.use(PREFIX, authRouter);
+  app.use(PREFIX, setupRouter);
   app.use(PREFIX, identitesRouter);
   app.use(PREFIX, elevesRouter);
   app.use(PREFIX, parentsRouter);

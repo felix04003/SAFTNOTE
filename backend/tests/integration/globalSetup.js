@@ -64,6 +64,9 @@ module.exports = async function globalSetup() {
     '007_vues_et_fonctions.sql',
     '008_index_performance.sql',
     '009_fix_statut_checks.sql',
+    '010_security_hardening.sql',
+    '011_rgpd_consentements.sql',
+    '012_chiffrement_medical.sql',
   ];
 
   for (const file of migrationFiles) {

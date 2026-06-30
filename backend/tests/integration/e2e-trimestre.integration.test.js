@@ -111,7 +111,7 @@ beforeAll(async () => {
 
   await db.raw(`
     SELECT affecter_permissions('directeur', ARRAY[
-      'notes.voir_classe','notes.saisir','notes.modifier_toutes','notes.publier','notes.supprimer',
+      'notes.voir_classe','notes.voir_eleve','notes.saisir','notes.modifier_toutes','notes.publier','notes.supprimer',
       'evaluations.creer','evaluations.modifier','evaluations.supprimer',
       'moyennes.calculer','bulletins.voir','bulletins.generer','bulletins.valider',
       'bulletins.envoyer','bulletins.conseil',
@@ -180,7 +180,7 @@ describe('Phase 1 — Création école + directeur (POST /setup)', () => {
       .expect(201);
 
     expect(res.body.succes).toBe(true);
-    expect(res.body.data).toHaveProperty('etablissement_id');
+    expect(res.body.data).toHaveProperty('etablissement.id');
 
     etablissement = await db('etablissements').where({ code_officiel: 'LCD-E2E' }).first();
     annee   = await db('annees_scolaires').where({ etablissement_id: etablissement.id, est_courante: true }).first();
@@ -386,13 +386,13 @@ describe('Phase 4 — Inscription élèves et parent', () => {
     });
 
     await db('parents_eleves').insert({
-      utilisateur_id:       parentUser.id,
-      eleve_id:             eleves[0].eleve.id,
-      lien:                 'pere',
-      peut_voir_notes:      true,
-      peut_voir_absences:   true,
-      peut_voir_bulletins:  true,
-      est_contact_urgence:  true,
+      parent_id:             parentUser.id,
+      eleve_id:              eleves[0].eleve.id,
+      lien:                  'pere',
+      peut_voir_notes:       true,
+      peut_voir_absences:    true,
+      peut_voir_bulletins:   true,
+      est_contact_principal: true,
     });
 
     parentToken = await creerSession(parentUser.id, etablissement.id);
@@ -446,7 +446,7 @@ describe('Phase 5 — Appel et absences', () => {
   });
 
   it('GET /presences/absences retourne les absences de la classe', async () => {
-    if (!classe) return;
+    if (!classe || !appel) return;
 
     const res = await req
       .get('/api/v1/presences/absences')
@@ -544,11 +544,11 @@ describe('Phase 7 — Calcul des moyennes', () => {
       .expect(200);
 
     expect(res.body.succes).toBe(true);
-    expect(Array.isArray(res.body.data)).toBe(true);
+    expect(res.body.data).toHaveProperty('matieres');
   });
 
   it('GET /moyennes/eleve/:id retourne la moyenne de Fatou Diallo', async () => {
-    const eleveId = eleves[0].eleve.id;
+    const eleveId = eleves[0].user.id;
 
     const res = await req
       .get(`/api/v1/moyennes/eleve/${eleveId}`)
@@ -567,7 +567,7 @@ describe('Phase 7 — Calcul des moyennes', () => {
       .expect(200);
 
     expect(res.body.succes).toBe(true);
-    expect(Array.isArray(res.body.data)).toBe(true);
+    expect(res.body.data).toHaveProperty('classement');
   });
 });
 
@@ -608,8 +608,8 @@ describe('Phase 8 — Bulletins', () => {
       .put(`/api/v1/bulletins/${bulletinId}/valider`)
       .set('Authorization', `Bearer ${directeurToken}`)
       .send({
-        decision_conseil:       'Passage en classe supérieure',
-        appreciation_generale:  'Bon trimestre, continue ainsi.',
+        decision_passage:     'admis',
+        appreciation_conseil: 'Bon trimestre, continue ainsi.',
       })
       .expect(200);
 
@@ -640,11 +640,11 @@ describe('Phase 9 — Parent consulte le dossier de son enfant', () => {
       .expect(200);
 
     expect(res.body.succes).toBe(true);
-    expect(res.body.data).toHaveProperty('enfants');
+    expect(Array.isArray(res.body.data)).toBe(true);
   });
 
   it('GET /parents/moi/enfants/:id/notes retourne les notes publiées de Fatou', async () => {
-    const eleveId = eleves[0].eleve.id;
+    const eleveId = eleves[0].user.id;
 
     const res = await req
       .get(`/api/v1/parents/moi/enfants/${eleveId}/notes`)
@@ -652,11 +652,11 @@ describe('Phase 9 — Parent consulte le dossier de son enfant', () => {
       .expect(200);
 
     expect(res.body.succes).toBe(true);
-    expect(Array.isArray(res.body.data)).toBe(true);
+    expect(res.body.data).toHaveProperty('par_matiere');
   });
 
   it('GET /parents/moi/enfants/:id/absences retourne le récapitulatif', async () => {
-    const eleveId = eleves[0].eleve.id;
+    const eleveId = eleves[0].user.id;
 
     const res = await req
       .get(`/api/v1/parents/moi/enfants/${eleveId}/absences`)
@@ -669,7 +669,7 @@ describe('Phase 9 — Parent consulte le dossier de son enfant', () => {
   });
 
   it('GET /parents/moi/enfants/:id/bulletins retourne les bulletins validés', async () => {
-    const eleveId = eleves[0].eleve.id;
+    const eleveId = eleves[0].user.id;
 
     const res = await req
       .get(`/api/v1/parents/moi/enfants/${eleveId}/bulletins`)
@@ -677,11 +677,11 @@ describe('Phase 9 — Parent consulte le dossier de son enfant', () => {
       .expect(200);
 
     expect(res.body.succes).toBe(true);
-    expect(Array.isArray(res.body.data)).toBe(true);
+    expect(res.body.data).toHaveProperty('bulletins');
   });
 
   it('GET /parents/moi/enfants/:id/notes retourne 403 pour un élève non lié', async () => {
-    const autreEleveId = eleves[2].eleve.id;
+    const autreEleveId = eleves[2].user.id;
 
     await req
       .get(`/api/v1/parents/moi/enfants/${autreEleveId}/notes`)

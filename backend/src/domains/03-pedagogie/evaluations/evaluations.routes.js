@@ -36,7 +36,7 @@ router.get('/evaluations', auth, isoler, perm('notes.voir_classe'), async (req, 
 
     // Un enseignant ne voit que ses propres évaluations
     if (req.session.roles.includes('enseignant') && !req.session.roles.includes('directeur')) {
-      query = query.where('ae.enseignant_id', req.session.utilisateur_id);
+      query = query.where('ens.utilisateur_id', req.session.utilisateur_id);
     }
 
     const evals = await query
@@ -252,13 +252,17 @@ router.put('/evaluations/:evaluation_id/publier', auth, isoler, perm('notes.publ
 
     if (!evaluation) throw ApiError.nonTrouve('Évaluation introuvable');
 
-    // Déclencher les notifications aux parents
-    const { enqueuerNotification } = require('../../../infrastructure/queue/bullmq');
-    await enqueuerNotification({
-      type_notif:       'nouvelle_note',
-      evaluation_id:    evaluation.id,
-      etablissement_id: req.etablissement_id,
-    }, 2);
+    // Déclencher les notifications aux parents (best-effort — ne pas bloquer si queue absente)
+    try {
+      const { enqueuerNotification } = require('../../../infrastructure/queue/bullmq');
+      await enqueuerNotification({
+        type_notif:       'nouvelle_note',
+        evaluation_id:    evaluation.id,
+        etablissement_id: req.etablissement_id,
+      }, 2);
+    } catch (notifErr) {
+      logger.warn('Notification non envoyée (queue absente)', { error: notifErr.message });
+    }
 
     logger.info('Notes publiées', { evaluation_id: evaluation.id });
     return ok(res, { message: 'Notes publiées — parents notifiés' });

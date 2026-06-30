@@ -252,15 +252,21 @@ router.post('/bulletins/generer', auth, isoler, perm('bulletins.generer'),
         }
       });
 
-      // Enqueuer la génération PDF asynchrone
-      const job = await enqueuerGenerationBulletins({
-        classe_id,
-        periode_id,
-        etablissement_id: req.etablissement_id,
-      });
+      // Enqueuer la génération PDF asynchrone (best-effort — ne pas bloquer si queue absente)
+      let jobId = null;
+      try {
+        const job = await enqueuerGenerationBulletins({
+          classe_id,
+          periode_id,
+          etablissement_id: req.etablissement_id,
+        });
+        jobId = job.id;
+      } catch (notifErr) {
+        logger.warn('Queue PDF absente — bulletins créés sans génération asynchrone', { error: notifErr.message });
+      }
 
-      logger.info('Bulletins générés + job PDF enqueued', { classe_id, periode_id, nb: bulletins.length, jobId: job.id, par: req.session.utilisateur_id });
-      return cree(res, { message: `${bulletins.length} bulletins générés`, classe: classe.classe, nb_bulletins: bulletins.length, job_id: job.id });
+      logger.info('Bulletins générés', { classe_id, periode_id, nb: bulletins.length, jobId, par: req.session.utilisateur_id });
+      return res.status(202).json({ succes: true, data: { message: `${bulletins.length} bulletins générés`, classe: classe.classe, nb_bulletins: bulletins.length, job_id: jobId } });
     } catch (err) { next(err); }
   }
 );

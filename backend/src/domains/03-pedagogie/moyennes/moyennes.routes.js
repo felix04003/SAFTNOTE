@@ -143,7 +143,7 @@ router.get('/moyennes/eleve/:eleveId', auth, isoler, perm('notes.voir_eleve'), a
         .where({ 'mm.inscription_id': inscription.inscription_id })
         .orderBy(['m.nom', 'p.numero'])
         .select(
-          'm.nom as matiere', 'm.code as matiere_code', 'm.couleur_affichage',
+          'm.nom as matiere', 'm.code as matiere_code',
           'mm.moyenne', 'mm.coefficient', 'mm.points',
           'mm.rang_dans_classe', 'mm.rang_sur',
           'mm.appreciation_enseignant', 'mm.est_complete',
@@ -225,7 +225,7 @@ router.post('/moyennes/calculer', auth, isoler, perm('moyennes.calculer'),
                 est_complete=EXCLUDED.est_complete, calculee_at=NOW()
             `, [uuid(), insc.id, mat.matiere_id, periode_id, calc.moyenne, coefficient,
                 calc.moyenne ? (parseFloat(calc.moyenne) * coefficient).toFixed(2) : null,
-                calc.somme_devoirs, calc.nb_devoirs_comptes, calc.note_composition, calc.denominateur, calc.est_complete]);
+                calc.somme_devoirs, calc.nb_devoirs_comptes, calc.note_composition, calc.denominateur, calc.est_complete ?? false]);
 
             nbCalculees++;
           }

@@ -38,7 +38,38 @@ const schemaSetup = z.object({
     telephone:    z.string().regex(/^\+?[0-9]{8,15}$/, 'Numéro invalide'),
     mot_de_passe: z.string().min(8, 'Minimum 8 caractères'),
   }),
+  annee_scolaire: z.object({
+    libelle:      z.string().min(4),
+    date_debut:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    date_fin:     z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    nb_periodes:  z.number().int().refine(n => n === 2 || n === 3).default(3),
+    type_periode: z.enum(['trimestre', 'semestre']).default('trimestre'),
+  }).optional(),
 });
+
+/**
+ * Divise une année scolaire en périodes de durée égale.
+ */
+function calculerPeriodes(dateDebutStr, dateFinStr, nbPeriodes, typePeriode) {
+  const debut    = new Date(dateDebutStr);
+  const fin      = new Date(dateFinStr);
+  const totalMs  = fin - debut;
+  const periodeMs = totalMs / nbPeriodes;
+
+  return Array.from({ length: nbPeriodes }, (_, i) => {
+    const pDebut = new Date(debut.getTime() + i * periodeMs);
+    const pFin   = i === nbPeriodes - 1
+      ? fin
+      : new Date(debut.getTime() + (i + 1) * periodeMs - 86400000);
+    const label  = typePeriode === 'semestre' ? `Semestre ${i + 1}` : `Trimestre ${i + 1}`;
+    return {
+      numero:     i + 1,
+      libelle:    label,
+      date_debut: pDebut.toISOString().slice(0, 10),
+      date_fin:   pFin.toISOString().slice(0, 10),
+    };
+  });
+}
 
 // ── POST /setup — Initialisation première école + directeur ──────
 router.post('/setup', valider(schemaSetup), async (req, res, next) => {
@@ -58,7 +89,7 @@ router.post('/setup', valider(schemaSetup), async (req, res, next) => {
       );
     }
 
-    const { etablissement: etabData, directeur: dirData } = req.body;
+    const { etablissement: etabData, directeur: dirData, annee_scolaire: anneeData } = req.body;
 
     // Vérifier unicité du code
     const codeExiste = await db('etablissements')
@@ -114,6 +145,31 @@ router.post('/setup', valider(schemaSetup), async (req, res, next) => {
         etablissement_id: etabId,
         actif:            true,
       });
+
+      // 6. Créer l'année scolaire + périodes si fournie
+      let anneeId = null;
+      if (anneeData) {
+        const [annee] = await trx('annees_scolaires').insert({
+          etablissement_id: etabId,
+          libelle:          anneeData.libelle,
+          date_debut:       anneeData.date_debut,
+          date_fin:         anneeData.date_fin,
+          nb_periodes:      anneeData.nb_periodes,
+          type_periode:     anneeData.type_periode,
+          est_courante:     true,
+        }).returning('id');
+        anneeId = annee.id;
+
+        const periodes = calculerPeriodes(
+          anneeData.date_debut,
+          anneeData.date_fin,
+          anneeData.nb_periodes,
+          anneeData.type_periode
+        );
+        await trx('periodes').insert(
+          periodes.map(p => ({ ...p, annee_scolaire_id: anneeId }))
+        );
+      }
 
       logger.info('Setup initial terminé', {
         etablissement_id:   etabId,
