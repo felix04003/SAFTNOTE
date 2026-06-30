@@ -23,10 +23,6 @@
     "docker:down":   "docker-compose down",
     "docker:logs":   "docker-compose logs -f api"
   },
-  "workspaces": [
-    "backend",
-    "mobile"
-  ],
   "keywords": ["education", "scolaire", "afrique", "offline-first", "nodejs", "react-native"],
   "author": "EcoleManager",
   "license": "UNLICENSED"
