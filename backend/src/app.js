@@ -29,6 +29,8 @@ const vieScolaireRouter = require('./domains/04-vie-scolaire/vie-scolaire.routes
 const securiteRouter    = require('./domains/05-securite/securite.routes');
 const syncRouter           = require('./domains/sync.routes');
 const notificationsRouter  = require('./domains/notifications.routes');
+const rgpdRouter           = require('./domains/02-acteurs/auth/rgpd.routes');
+const { initPurgeWorker, stopPurgeWorker } = require('./workers/purge.worker');
 
 // ── App ──────────────────────────────────────────────────────────
 const app = express();
@@ -223,6 +225,7 @@ app.use(PREFIX, vieScolaireRouter);
 app.use(PREFIX, securiteRouter);
 app.use(PREFIX, syncRouter);
 app.use(PREFIX, notificationsRouter);
+app.use(PREFIX, rgpdRouter);
 
 // ── Gestion des erreurs ─────────────────────────────────────────
 app.use(notFound);
@@ -240,6 +243,9 @@ async function start() {
 
     await connectRedis();
     logger.info('✓ Redis connecté');
+
+    initPurgeWorker();
+    logger.info('✓ Worker de purge initialisé');
 
     const PORT = parseInt(process.env.PORT) || 3000;
     app.listen(PORT, () => {
@@ -275,6 +281,9 @@ async function shutdown(signal) {
   try {
     const { stopMonitoring } = require('./infrastructure/monitoring/monitoring.service');
     stopMonitoring();
+  } catch { /* ignore */ }
+  try {
+    stopPurgeWorker();
   } catch { /* ignore */ }
   process.exit(0);
 }
