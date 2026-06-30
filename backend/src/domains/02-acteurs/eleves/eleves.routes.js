@@ -11,6 +11,7 @@ const { valider }    = require('../../../middleware/validate.middleware');
 const { ok, cree, liste, paginee, getPagination } = require('../../../utils/reponse');
 const ApiError       = require('../../../utils/ApiError');
 const { invalidatePattern } = require('../../../infrastructure/cache/redis');
+const { preparerDonneesMediacles, selecteursMedicaux } = require('../../../utils/medical-crypto');
 
 const router = express.Router();
 const auth   = authentifier;
@@ -99,6 +100,11 @@ router.post('/eleves', auth, isoler, perm('eleves.creer'),
     adresse:        z.string().optional(),
     matricule:      z.string().optional(),
     classe_id:      z.string().uuid('ID classe invalide'),
+    // Données médicales (stockées chiffrées via pgcrypto si MEDICAL_ENCRYPTION_KEY définie)
+    allergies:            z.string().optional(),
+    conditions_medicales: z.string().optional(),
+    groupe_sanguin:       z.enum(['A+','A-','B+','B-','AB+','AB-','O+','O-']).optional(),
+    medecin_urgence:      z.string().optional(),
     // Parent optionnel à créer en même temps
     parent:         z.object({
       nom:       z.string(),
@@ -131,11 +137,18 @@ router.post('/eleves', auth, isoler, perm('eleves.creer'),
           actif:            true,
         });
 
-        // Créer le profil élève
+        // Créer le profil élève (avec données médicales chiffrées si clé configurée)
+        const colonnesMedicales = preparerDonneesMediacles(trx, {
+          allergies:            req.body.allergies,
+          conditions_medicales: req.body.conditions_medicales,
+          groupe_sanguin:       req.body.groupe_sanguin,
+          medecin_urgence:      req.body.medecin_urgence,
+        });
         const [eleveRecord] = await trx('eleves').insert({
-          utilisateur_id: utilisateurId,
-          matricule:      req.body.matricule || genMatricule(req.etablissement_id),
+          utilisateur_id:   utilisateurId,
+          matricule:        req.body.matricule || genMatricule(req.etablissement_id),
           date_inscription: trx.raw('NOW()'),
+          ...colonnesMedicales,
         }).returning('id');
 
         // Attribuer le rôle élève
@@ -211,11 +224,13 @@ router.get('/eleves/:eleve_id', auth, isoler, perm('eleves.voir'), async (req, r
     const eleve = await db('utilisateurs as u')
       .join('eleves as e', 'e.utilisateur_id', 'u.id')
       .where({ 'u.id': req.params.eleve_id, 'u.etablissement_id': req.etablissement_id })
-      .first(
+      .select(
         'u.id', 'u.nom', 'u.prenom', 'u.date_naissance', 'u.genre',
         'u.telephone', 'u.adresse', 'u.photo_url',
-        'e.matricule', 'e.date_inscription', 'e.groupe_sanguin'
-      );
+        'e.matricule', 'e.date_inscription',
+        ...selecteursMedicaux(db, 'e')
+      )
+      .first();
 
     if (!eleve) throw ApiError.nonTrouve('Élève introuvable');
     return ok(res, eleve);
