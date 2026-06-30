@@ -77,3 +77,4 @@ postgres-data/
 .claude/worktrees/
 .superpowers/
 .gstack/
+mobile/package-lock.json
