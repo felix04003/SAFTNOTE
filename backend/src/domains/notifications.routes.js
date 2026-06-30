@@ -12,16 +12,16 @@ const isoler = isolerEtablissement;
 
 // ── Helpers ────────────────────────────────────────────────────
 
-var FENETRE_JOURS = 7;
-var MAX_ITEMS     = 10;
+const FENETRE_JOURS = 7;
+const MAX_ITEMS     = 10;
 
 async function notifsAdmin(db, etablissementId) {
-  var depuis = new Date();
+  const depuis = new Date();
   depuis.setDate(depuis.getDate() - FENETRE_JOURS);
-  var depuisISO = depuis.toISOString().split('T')[0];
+  const depuisISO = depuis.toISOString().split('T')[0];
 
   // 1. Appels manqués : appels non effectués (7 derniers jours)
-  var appelsManques = await db('appels as ap')
+  const appelsManques = await db('appels as ap')
     .join('emplois_du_temps as edt', 'edt.id', 'ap.emploi_du_temps_id')
     .join('affectations_enseignants as ae', 'ae.id', 'edt.affectation_id')
     .join('matieres as m', 'm.id', 'ae.matiere_id')
@@ -37,7 +37,7 @@ async function notifsAdmin(db, etablissementId) {
     );
 
   // 2. Absences injustifiées (7 derniers jours)
-  var absences = await db('presences as p')
+  const absences = await db('presences as p')
     .join('appels as ap', 'ap.id', 'p.appel_id')
     .join('inscriptions as i', 'i.id', 'p.inscription_id')
     .join('eleves as el', 'el.id', 'i.eleve_id')
@@ -56,7 +56,7 @@ async function notifsAdmin(db, etablissementId) {
     );
 
   // 3. Notes publiées (7 derniers jours)
-  var notes = await db('evaluations as ev')
+  const notes = await db('evaluations as ev')
     .join('affectations_enseignants as ae', 'ae.id', 'ev.affectation_id')
     .join('matieres as m', 'm.id', 'ae.matiere_id')
     .join('classes as cl', 'cl.id', 'ae.classe_id')
@@ -67,7 +67,7 @@ async function notifsAdmin(db, etablissementId) {
     .select('m.nom as matiere', 'cl.nom as classe', 'ev.date_evaluation as date');
 
   // 4. Bulletins disponibles (7 derniers jours)
-  var bulletins = await db('moyennes_generales as mg')
+  const bulletins = await db('moyennes_generales as mg')
     .join('inscriptions as i', 'i.id', 'mg.inscription_id')
     .join('eleves as el', 'el.id', 'i.eleve_id')
     .join('utilisateurs as u', 'u.id', 'el.utilisateur_id')
@@ -85,7 +85,7 @@ async function notifsAdmin(db, etablissementId) {
     );
 
   // 5. Incidents discipline (7 derniers jours)
-  var incidents = await db('incidents_discipline as inc')
+  const incidents = await db('incidents_discipline as inc')
     .join('inscriptions as i', 'i.id', 'inc.inscription_id')
     .join('eleves as el', 'el.id', 'i.eleve_id')
     .join('utilisateurs as u', 'u.id', 'el.utilisateur_id')
@@ -107,16 +107,16 @@ async function notifsAdmin(db, etablissementId) {
 }
 
 async function notifsEnseignant(db, utilisateurId, etablissementId) {
-  var depuis = new Date();
+  const depuis = new Date();
   depuis.setDate(depuis.getDate() - FENETRE_JOURS);
-  var depuisISO = depuis.toISOString().split('T')[0];
+  const depuisISO = depuis.toISOString().split('T')[0];
 
-  var enseignant = await db('enseignants')
+  const enseignant = await db('enseignants')
     .where({ utilisateur_id: utilisateurId })
     .first('id');
   if (!enseignant) return { appelsManques: [], notes: [] };
 
-  var appelsManques = await db('appels as ap')
+  const appelsManques = await db('appels as ap')
     .join('emplois_du_temps as edt', 'edt.id', 'ap.emploi_du_temps_id')
     .join('affectations_enseignants as ae', 'ae.id', 'edt.affectation_id')
     .join('matieres as m', 'm.id', 'ae.matiere_id')
@@ -127,7 +127,7 @@ async function notifsEnseignant(db, utilisateurId, etablissementId) {
     .limit(MAX_ITEMS)
     .select('cl.nom as classe', 'm.nom as matiere', 'ap.date_cours as date');
 
-  var notes = await db('evaluations as ev')
+  const notes = await db('evaluations as ev')
     .join('affectations_enseignants as ae', 'ae.id', 'ev.affectation_id')
     .join('matieres as m', 'm.id', 'ae.matiere_id')
     .join('classes as cl', 'cl.id', 'ae.classe_id')
@@ -141,11 +141,11 @@ async function notifsEnseignant(db, utilisateurId, etablissementId) {
 }
 
 async function notifsParent(db, utilisateurId, etablissementId) {
-  var depuis = new Date();
+  const depuis = new Date();
   depuis.setDate(depuis.getDate() - FENETRE_JOURS);
-  var depuisISO = depuis.toISOString().split('T')[0];
+  const depuisISO = depuis.toISOString().split('T')[0];
 
-  var enfants = await db('parents_eleves as pe')
+  const enfants = await db('parents_eleves as pe')
     .join('eleves as el', 'el.id', 'pe.eleve_id')
     .join('inscriptions as i', 'i.eleve_id', 'el.id')
     .join('annees_scolaires as an', 'an.id', 'i.annee_scolaire_id')
@@ -157,9 +157,9 @@ async function notifsParent(db, utilisateurId, etablissementId) {
 
   if (!enfants.length) return { absences: [], notes: [], bulletins: [], incidents: [] };
 
-  var inscriptionIds = enfants.map(function(r) { return r.inscription_id; });
+  const inscriptionIds = enfants.map(function(r) { return r.inscription_id; });
 
-  var absences = await db('presences as p')
+  const absences = await db('presences as p')
     .join('appels as ap', 'ap.id', 'p.appel_id')
     .join('inscriptions as i', 'i.id', 'p.inscription_id')
     .join('eleves as el', 'el.id', 'i.eleve_id')
@@ -172,7 +172,7 @@ async function notifsParent(db, utilisateurId, etablissementId) {
     .limit(MAX_ITEMS)
     .select(db.raw("CONCAT(u.prenom, ' ', u.nom) as eleve"), 'cl.nom as classe', 'ap.date_cours as date');
 
-  var notes = await db('evaluations as ev')
+  const notes = await db('evaluations as ev')
     .join('affectations_enseignants as ae', 'ae.id', 'ev.affectation_id')
     .join('matieres as m', 'm.id', 'ae.matiere_id')
     .join('inscriptions as i', 'i.classe_id', 'ae.classe_id')
@@ -182,7 +182,7 @@ async function notifsParent(db, utilisateurId, etablissementId) {
     .limit(MAX_ITEMS)
     .select('m.nom as matiere', 'ev.date_evaluation as date');
 
-  var bulletins = await db('moyennes_generales as mg')
+  const bulletins = await db('moyennes_generales as mg')
     .join('periodes as per', 'per.id', 'mg.periode_id')
     .whereIn('mg.inscription_id', inscriptionIds)
     .where('mg.bulletin_genere', true)
@@ -190,7 +190,7 @@ async function notifsParent(db, utilisateurId, etablissementId) {
     .limit(MAX_ITEMS)
     .select('per.libelle as periode', 'mg.updated_at as date');
 
-  var incidents = await db('incidents_discipline as inc')
+  const incidents = await db('incidents_discipline as inc')
     .join('inscriptions as i', 'i.id', 'inc.inscription_id')
     .join('eleves as el', 'el.id', 'i.eleve_id')
     .join('utilisateurs as u', 'u.id', 'el.utilisateur_id')
@@ -211,13 +211,13 @@ async function notifsParent(db, utilisateurId, etablissementId) {
 // ── Route ──────────────────────────────────────────────────────
 
 router.get('/notifications', auth, isoler, async function(req, res, next) {
-  var db     = getDB();
-  var userId = req.session.utilisateur_id;
-  var etabId = req.etablissement_id;
-  var role   = req.session.role;
+  const db     = getDB();
+  const userId = req.session.utilisateur_id;
+  const etabId = req.etablissement_id;
+  const role   = req.session.role;
 
   try {
-    var raw;
+    let raw;
     if (role === 'parent') {
       raw = await notifsParent(db, userId, etabId);
     } else if (role === 'enseignant') {
@@ -226,11 +226,11 @@ router.get('/notifications', auth, isoler, async function(req, res, next) {
       raw = await notifsAdmin(db, etabId);
     }
 
-    var categories = [];
+    const categories = [];
 
-    function ajouterCategorie(type, label, items) {
-      categories.push({ type: type, label: label, count: items.length, items: items });
-    }
+    const ajouterCategorie = (type, label, items) => {
+      categories.push({ type, label, count: items.length, items });
+    };
 
     if (raw.appelsManques)  ajouterCategorie('appels_manques',        'Appels non effectués',     raw.appelsManques);
     if (raw.absences)       ajouterCategorie('absences_injustifiees', 'Absences injustifiées',    raw.absences);
@@ -238,7 +238,7 @@ router.get('/notifications', auth, isoler, async function(req, res, next) {
     if (raw.bulletins)      ajouterCategorie('bulletins_disponibles', 'Bulletins disponibles',    raw.bulletins);
     if (raw.incidents)      ajouterCategorie('incidents_discipline',  'Incidents disciplinaires', raw.incidents);
 
-    var total = categories.reduce(function(sum, c) { return sum + c.count; }, 0);
+    const total = categories.reduce(function(sum, c) { return sum + c.count; }, 0);
 
     return ok(res, { total: total, categories: categories });
 

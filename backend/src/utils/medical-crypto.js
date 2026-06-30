@@ -43,7 +43,7 @@ function preparerDonneesMediacles(db, donneesMediacles) {
     const valeur = donneesMediacles[champ];
     if (valeur === undefined) continue;
 
-    if (cle && valeur != null) {
+    if (cle && valeur !== null) {
       // Chiffrer avec pgcrypto
       cols[`${champ}_enc`] = db.raw('chiffrer_medical(?, ?)', [String(valeur), cle]);
       // Vider l'ancienne colonne en clair (si elle existe encore)
