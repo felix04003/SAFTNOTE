@@ -48,7 +48,7 @@ const TEMPLATES_SMS = {
 
 // ── Processeur principal ─────────────────────────────────────────
 async function traiterNotification(job) {
-  const { type_notif, inscription_id, etablissement_id } = job.data;
+  const { type_notif, inscription_id } = job.data;
   const db = getDB();
 
   logger.debug('Traitement notification', { type: type_notif, inscription_id });

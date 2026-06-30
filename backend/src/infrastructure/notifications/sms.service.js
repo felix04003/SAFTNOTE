@@ -1,6 +1,5 @@
 'use strict';
 
-const https  = require('https');
 const logger = require('../../utils/logger');
 
 /**

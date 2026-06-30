@@ -1,6 +1,6 @@
 'use strict';
 
-const { Queue, Worker, QueueEvents } = require('bullmq');
+const { Queue } = require('bullmq');
 const { createBullMQConnection } = require('../cache/redis');
 const logger = require('../../utils/logger');
 

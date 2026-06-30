@@ -15,7 +15,7 @@ const { authentifier }  = require('../../../middleware/auth.middleware');
 const ApiError          = require('../../../utils/ApiError');
 const { ok }            = require('../../../utils/reponse');
 const logger            = require('../../../utils/logger');
-const { getOrSet, invalidatePattern } = require('../../../infrastructure/cache/redis');
+const { getOrSet } = require('../../../infrastructure/cache/redis');
 
 const router = express.Router();
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS) || 12;
@@ -139,7 +139,7 @@ router.post('/auth/connexion', limiterAuth, valider(schemaConnexion), async (req
     }
 
     // 5. Créer la session
-    const { token, sessionId, refreshToken } = await creerSession(db, utilisateur.id, etablissement.id, req);
+    const { token, refreshToken } = await creerSession(db, utilisateur.id, etablissement.id, req);
 
     // 6. Charger le rôle principal
     const roleRow = await db('utilisateur_roles as ur')

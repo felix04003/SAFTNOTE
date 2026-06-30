@@ -106,7 +106,7 @@ async function notifsAdmin(db, etablissementId) {
   return { appelsManques, absences, notes, bulletins, incidents };
 }
 
-async function notifsEnseignant(db, utilisateurId, etablissementId) {
+async function notifsEnseignant(db, utilisateurId, _etablissementId) {
   const depuis = new Date();
   depuis.setDate(depuis.getDate() - FENETRE_JOURS);
   const depuisISO = depuis.toISOString().split('T')[0];

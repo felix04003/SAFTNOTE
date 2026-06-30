@@ -13,7 +13,6 @@ const express = require('express');
 const { getDB } = require('../../../infrastructure/database/pool');
 const { authentifier } = require('../../../middleware/auth.middleware');
 const { ok } = require('../../../utils/reponse');
-const ApiError = require('../../../utils/ApiError');
 const logger = require('../../../utils/logger');
 const { z } = require('zod');
 const { valider } = require('../../../middleware/validate.middleware');

@@ -18,7 +18,7 @@ const router = express.Router();
 router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) => {
   const { depuis } = req.query; // Format ISO : 2025-09-01T06:00:00Z
   const db = getDB();
-  const { utilisateur_id, etablissement_id, roles } = req.session;
+  const { utilisateur_id, roles } = req.session;
 
   try {
     const syncDepuis = depuis ? new Date(depuis) : new Date(0);

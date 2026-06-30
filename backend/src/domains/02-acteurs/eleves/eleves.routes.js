@@ -361,7 +361,7 @@ router.get('/eleves/:eleve_id/absences', auth, isoler, perm('absences.voir_eleve
 });
 
 // ── Helpers ──────────────────────────────────────────────────────
-function genMatricule(etablissementId) {
+function genMatricule(_etablissementId) {
   const annee = new Date().getFullYear().toString().slice(2);
   const rand  = Math.floor(1000 + Math.random() * 9000);
   return `E${annee}${rand}`;

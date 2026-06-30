@@ -1,18 +1,15 @@
 'use strict';
 
 const express  = require('express');
-const { z }    = require('zod');
 
 const { getDB }      = require('../../../infrastructure/database/pool');
 const { authentifier } = require('../../../middleware/auth.middleware');
-const { exigerPermission, isolerEtablissement } = require('../../../middleware/permission.middleware');
+const { isolerEtablissement } = require('../../../middleware/permission.middleware');
 const { ok, liste }  = require('../../../utils/reponse');
 const ApiError       = require('../../../utils/ApiError');
-const logger         = require('../../../utils/logger');
 
 const router = express.Router();
 const auth   = authentifier;
-const perm   = exigerPermission;
 const isoler = isolerEtablissement;
 
 // ── Helpers ──────────────────────────────────────────────────────

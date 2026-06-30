@@ -2,13 +2,12 @@
 
 const express    = require('express');
 const { z }      = require('zod');
-const { v4: uuid } = require('uuid');
 
 const { getDB }      = require('../../../infrastructure/database/pool');
 const { authentifier } = require('../../../middleware/auth.middleware');
 const { exigerPermission, isolerEtablissement } = require('../../../middleware/permission.middleware');
 const { valider }    = require('../../../middleware/validate.middleware');
-const { ok, cree, liste, paginee, getPagination } = require('../../../utils/reponse');
+const { ok, liste, paginee, getPagination } = require('../../../utils/reponse');
 const ApiError       = require('../../../utils/ApiError');
 const logger         = require('../../../utils/logger');
 const { enqueuerGenerationBulletins, getQueue, QUEUES } = require('../../../infrastructure/queue/bullmq');

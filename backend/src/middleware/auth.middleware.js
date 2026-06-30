@@ -20,9 +20,8 @@ async function authentifier(req, res, next) {
     const token = authHeader.slice(7);
 
     // Vérifier la signature JWT
-    let payload;
     try {
-      payload = jwt.verify(token, process.env.JWT_SECRET);
+      jwt.verify(token, process.env.JWT_SECRET);
     } catch (jwtErr) {
       throw ApiError.nonAutorise(
         jwtErr.name === 'TokenExpiredError' ? 'Token expiré' : 'Token invalide'

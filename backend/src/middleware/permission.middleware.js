@@ -106,7 +106,7 @@ async function isolerEtablissement(req, res, next) {
       { param: 'evaluation_id',  table: 'evaluations',       jointure: 'affectations_enseignants' },
     ];
 
-    for (const { param, table, jointure } of verifications) {
+    for (const { param, table } of verifications) {
       if (!req.params[param]) continue;
 
       const resourceId = req.params[param];

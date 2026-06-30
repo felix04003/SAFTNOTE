@@ -32,7 +32,8 @@ const CONCURRENCE = parseInt(process.env.WORKER_MOYENNES_CONCURRENCE) || 2;
 
 async function traiterCalcul(job) {
   const db = getDB();
-  let { classe_id, matiere_id, evaluation_id, periode_id, etablissement_id } = job.data;
+  const { classe_id, matiere_id, evaluation_id, etablissement_id } = job.data;
+  let { periode_id } = job.data;
 
   // Dériver periode_id depuis evaluation_id si absent
   if (!periode_id && evaluation_id) {
