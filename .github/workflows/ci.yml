@@ -3,6 +3,7 @@ name: CI — EcoleManager
 on:
   push:
     branches: [main, develop]
+    tags: ['v*']
   pull_request:
     branches: [main]
 
@@ -92,3 +93,38 @@ jobs:
 
       - name: TypeScript check
         run: npx tsc --noEmit
+
+  # ──────────────────────────────────────────────────────
+  #  Mobile : EAS Build Android (sur tag v*)
+  # ──────────────────────────────────────────────────────
+  mobile-eas-build:
+    name: Mobile — EAS Build (Android)
+    runs-on: ubuntu-latest
+    needs: [backend-lint-test, mobile-typecheck]
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    defaults:
+      run:
+        working-directory: mobile
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup EAS CLI
+        run: npm install -g eas-cli
+
+      - name: EAS Build — Android production
+        run: eas build --platform android --profile production --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
