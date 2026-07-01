@@ -47,12 +47,7 @@ const REGLES = [
     },
     hint: 'Configurez DATABASE_URL ou les 4 variables POSTGRES_HOST / POSTGRES_DB / POSTGRES_USER / POSTGRES_PASSWORD',
   },
-  {
-    // REDIS_HOST OU REDIS_URL
-    nom:   '_REDIS_GROUP',
-    check: () => Boolean(process.env.REDIS_URL || process.env.REDIS_HOST),
-    hint:  'Configurez REDIS_URL ou REDIS_HOST',
-  },
+  // Redis est optionnel — si absent, cache et queues désactivés (plan gratuit Render)
   {
     nom:      'MONITORING_TOKEN',
     prodOnly: true,

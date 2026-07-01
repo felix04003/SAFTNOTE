@@ -85,7 +85,8 @@ if (process.env.NODE_ENV !== 'production') {
   app.get('/api/docs.json', (req, res) => res.status(404).json({ succes: false, erreur: 'Not found' }));
 }
 
-// ── Health check (léger, pour load balancer) ────────────────────
+// ── Health check (léger, pour load balancer + Render) ───────────
+app.get('/api/v1/health', (req, res) => res.json({ status: 'ok', uptime: Math.floor(process.uptime()) }));
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -241,8 +242,12 @@ async function start() {
     await connectDB();
     logger.info('✓ PostgreSQL connecté');
 
-    await connectRedis();
-    logger.info('✓ Redis connecté');
+    if (process.env.REDIS_URL || process.env.REDIS_HOST) {
+      await connectRedis();
+      logger.info('✓ Redis connecté');
+    } else {
+      logger.warn('⚠ Redis non configuré — cache et queues désactivés');
+    }
 
     initPurgeWorker();
     logger.info('✓ Worker de purge initialisé');

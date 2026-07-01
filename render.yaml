@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: ecolemanager-api
+    runtime: node
+    rootDir: backend
+    buildCommand: npm ci
+    startCommand: node src/app.js
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3010
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ecolemanager-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: REDIS_URL
+        value: ""          # Redis non dispo plan gratuit — cache désactivé
+      - key: AT_API_KEY
+        value: ""          # Africa's Talking — à renseigner pour activer SMS
+      - key: AT_USERNAME
+        value: sandbox
+      - key: META_WA_TOKEN
+        value: ""          # WhatsApp Business — à renseigner pour activer WA
+      - key: CLOUDFLARE_R2_BUCKET
+        value: ""
+      - key: MEDICAL_ENCRYPTION_KEY
+        generateValue: true
+    plan: free
+
+databases:
+  - name: ecolemanager-db
+    databaseName: ecolemanager
+    user: ecolemanager
+    plan: free
