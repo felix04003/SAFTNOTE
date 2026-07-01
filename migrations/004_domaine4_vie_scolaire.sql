@@ -372,8 +372,7 @@ CREATE TABLE evenements (
 
 CREATE INDEX idx_evenements_etablissement ON evenements(etablissement_id, date_debut);
 CREATE INDEX idx_evenements_type          ON evenements(type, date_debut);
-CREATE INDEX idx_evenements_a_venir       ON evenements(date_debut)
-    WHERE date_debut >= CURRENT_DATE;
+CREATE INDEX idx_evenements_a_venir       ON evenements(date_debut);
 
 CREATE TRIGGER trg_evenements_updated_at
     BEFORE UPDATE ON evenements

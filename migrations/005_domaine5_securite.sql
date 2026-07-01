@@ -233,8 +233,7 @@ CREATE TABLE permissions_surcharges (
     UNIQUE (utilisateur_id, permission_id, type)
 );
 
-CREATE INDEX idx_surcharges_utilisateur ON permissions_surcharges(utilisateur_id)
-    WHERE date_fin IS NULL OR date_fin >= CURRENT_DATE;
+CREATE INDEX idx_surcharges_utilisateur ON permissions_surcharges(utilisateur_id);
 
 COMMENT ON TABLE permissions_surcharges IS 'Exceptions individuelles. Permet des accès ponctuels sans changer le rôle.';
 
@@ -491,22 +490,16 @@ CREATE TABLE journal_audit (
     details             JSONB,                  -- Informations contextuelles supplémentaires
 
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
-) PARTITION BY RANGE (created_at);
-
--- Partitionnement par année pour les performances
-CREATE TABLE journal_audit_2025 PARTITION OF journal_audit
-    FOR VALUES FROM ('2025-01-01') TO ('2026-01-01');
-CREATE TABLE journal_audit_2026 PARTITION OF journal_audit
-    FOR VALUES FROM ('2026-01-01') TO ('2027-01-01');
-CREATE TABLE journal_audit_2027 PARTITION OF journal_audit
-    FOR VALUES FROM ('2027-01-01') TO ('2028-01-01');
+);
+-- Note : table simple (pas de PARTITION BY) — compatibilité PostgreSQL 18
+-- PRIMARY KEY BIGSERIAL incompatible avec partitionnement sans inclure created_at.
 
 CREATE INDEX idx_audit_utilisateur     ON journal_audit(utilisateur_id, created_at DESC);
 CREATE INDEX idx_audit_etablissement   ON journal_audit(etablissement_id, created_at DESC);
 CREATE INDEX idx_audit_table_cible     ON journal_audit(table_cible, enregistrement_id);
 CREATE INDEX idx_audit_action          ON journal_audit(action, created_at DESC);
 
-COMMENT ON TABLE journal_audit IS 'Traçabilité complète. BIGSERIAL + partitionnement annuel pour volumes élevés.';
+COMMENT ON TABLE journal_audit IS 'Traçabilité complète. BIGSERIAL, sans partitionnement (compat PostgreSQL 18).';
 
 
 -- ──────────────────────────────────────────────────────────────
