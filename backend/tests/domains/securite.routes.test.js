@@ -95,7 +95,7 @@ describe('Securite Routes', () => {
       db.mockReturnValueOnce(mockQuery({ id: IDS.session, utilisateur_id: IDS.utilisateur }));
       db.mockReturnValueOnce(mockQuery(1));
 
-      const res = await request(app)
+      await request(app)
         .delete(`/securite/sessions/${IDS.session}`)
         .expect(204);
     });
@@ -103,7 +103,7 @@ describe('Securite Routes', () => {
     test('retourne 404 si session inexistante', async () => {
       db.mockReturnValueOnce(mockQuery(null));
 
-      const res = await request(app)
+      await request(app)
         .delete(`/securite/sessions/${IDS.evaluation}`)
         .expect(404);
     });
@@ -139,7 +139,7 @@ describe('Securite Routes', () => {
     test('retourne 404 si utilisateur inexistant', async () => {
       db.mockReturnValueOnce(mockQuery(null));
 
-      const res = await request(app)
+      await request(app)
         .post(`/securite/blocage/${IDS.autreUtilisateur}`)
         .send({ motif: 'Motif de test valide' })
         .expect(404);

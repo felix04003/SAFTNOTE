@@ -2,7 +2,7 @@
 
 const supertest = require('supertest');
 const {
-  getTestDB, closeTestDB, truncateData, seedTestData,
+  closeTestDB, truncateData, seedTestData,
   createIntegrationApp, creerSession,
 } = require('./helpers');
 

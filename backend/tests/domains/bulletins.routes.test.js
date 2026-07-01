@@ -159,7 +159,7 @@ describe('Bulletins Routes', () => {
     test('retourne 404 si bulletin sans PDF', async () => {
       db.mockReturnValueOnce(mockQuery(null));
 
-      const res = await request(app)
+      await request(app)
         .get(`/bulletins/${IDS.evaluation}/download`)
         .expect(404);
     });

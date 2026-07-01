@@ -7,7 +7,7 @@ const {
 } = require('./helpers');
 
 let app, request;
-let seedA, seedB, tokenA, tokenB;
+let seedA, tokenA, tokenB;
 
 beforeAll(async () => {
   app = createIntegrationApp();
@@ -79,7 +79,6 @@ beforeAll(async () => {
     .insert({ etablissement_id: etabB.id })
     .onConflict('etablissement_id').ignore();
 
-  seedB = { etablissement: etabB, directeur: dirB };
   tokenB = await creerSession(dirB.id, etabB.id);
 });
 

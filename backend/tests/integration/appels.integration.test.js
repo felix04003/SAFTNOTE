@@ -6,14 +6,13 @@ const {
   createIntegrationApp, creerSession,
 } = require('./helpers');
 
-let app, request, seed, tokenEns, tokenDir, edtId;
+let app, request, seed, tokenEns, edtId;
 
 beforeAll(async () => {
   app = createIntegrationApp();
   request = supertest(app);
   await truncateData();
   seed = await seedTestData();
-  tokenDir = await creerSession(seed.directeur.id, seed.etablissement.id);
   tokenEns = await creerSession(seed.enseignantUser.id, seed.etablissement.id);
 
   // Créer un créneau EDT pour pouvoir faire un appel

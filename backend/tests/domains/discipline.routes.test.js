@@ -102,7 +102,7 @@ describe('Discipline Routes', () => {
     test('retourne 404 si sanction introuvable', async () => {
       db.mockReturnValueOnce(mockQuery(null));
 
-      const res = await request(app)
+      await request(app)
         .put(`/discipline/sanctions/${IDS.evaluation}`)
         .send({ motif: 'Motif de test valide' })
         .expect(404);

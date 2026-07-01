@@ -2,11 +2,11 @@
 
 const supertest = require('supertest');
 const {
-  getTestDB, closeTestDB, truncateData, seedTestData,
+  closeTestDB, truncateData, seedTestData,
   createIntegrationApp, creerSession,
 } = require('./helpers');
 
-let app, request, seed, tokenEns, tokenDir;
+let app, request, seed, tokenDir;
 
 beforeAll(async () => {
   app = createIntegrationApp();
@@ -14,7 +14,6 @@ beforeAll(async () => {
   await truncateData();
   seed = await seedTestData();
   tokenDir = await creerSession(seed.directeur.id, seed.etablissement.id);
-  tokenEns = await creerSession(seed.enseignantUser.id, seed.etablissement.id);
 });
 
 afterAll(async () => {

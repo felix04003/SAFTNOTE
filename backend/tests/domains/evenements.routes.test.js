@@ -101,7 +101,7 @@ describe('Evenements Routes', () => {
     test('retourne 404 si événement inexistant', async () => {
       db.mockReturnValueOnce(mockQuery(null));
 
-      const res = await request(app)
+      await request(app)
         .put(`/evenements/${IDS.evaluation}`)
         .send({ titre: 'Nouveau titre événement' })
         .expect(404);
@@ -114,7 +114,7 @@ describe('Evenements Routes', () => {
       db.mockReturnValueOnce(mockQuery({ id: evenement.id }));
       db.mockReturnValueOnce(mockQuery(1));
 
-      const res = await request(app)
+      await request(app)
         .delete(`/evenements/${evenement.id}`)
         .expect(204);
     });
@@ -122,7 +122,7 @@ describe('Evenements Routes', () => {
     test('retourne 404 si événement inexistant', async () => {
       db.mockReturnValueOnce(mockQuery(null));
 
-      const res = await request(app)
+      await request(app)
         .delete(`/evenements/${IDS.evaluation}`)
         .expect(404);
     });

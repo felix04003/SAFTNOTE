@@ -19,7 +19,7 @@ jest.mock('../../src/utils/logger', () => ({
 const request = require('supertest');
 const { getDB } = require('../../src/infrastructure/database/pool');
 const { mockQuery, createMockDB, IDS } = require('../helpers/mockKnex');
-const { createTestApp, defaultSession, mockAuthentifier, mockIsolerEtablissement } = require('../helpers/testApp');
+const { createTestApp } = require('../helpers/testApp');
 const { enseignantProfil, anneeCourante, classeTermS1, creneauEdt } = require('../helpers/fixtures');
 
 // ── Mock auth & permission ─────────────────────────────────────────

@@ -153,7 +153,7 @@ describe('EDT Routes', () => {
     test('retourne 404 si créneau inexistant', async () => {
       db.mockReturnValueOnce(mockQuery(null));
 
-      const res = await request(app)
+      await request(app)
         .put(`/edt/creneaux/${IDS.evaluation}`)
         .send({ salle: 'Salle X' })
         .expect(404);
@@ -166,7 +166,7 @@ describe('EDT Routes', () => {
       db.mockReturnValueOnce(mockQuery({ id: 'creneau-1' }));
       db.mockReturnValueOnce(mockQuery(1));
 
-      const res = await request(app)
+      await request(app)
         .delete('/edt/creneaux/creneau-1')
         .expect(204);
     });
@@ -174,7 +174,7 @@ describe('EDT Routes', () => {
     test('retourne 404 si créneau inexistant', async () => {
       db.mockReturnValueOnce(mockQuery(null));
 
-      const res = await request(app)
+      await request(app)
         .delete(`/edt/creneaux/${IDS.evaluation}`)
         .expect(404);
     });

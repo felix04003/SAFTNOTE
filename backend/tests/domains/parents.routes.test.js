@@ -151,7 +151,7 @@ describe('Parents Routes', () => {
     test('retourne 403 si lien parent-enfant inexistant', async () => {
       db.mockReturnValueOnce(mockQuery(null));
 
-      const res = await request(app)
+      await request(app)
         .get(`/parents/moi/enfants/fake-id/notes`)
         .expect(403);
     });
@@ -182,7 +182,7 @@ describe('Parents Routes', () => {
     test('retourne 403 si peut_voir_absences est false', async () => {
       db.mockReturnValueOnce(mockQuery({ ...lienParentEnfant, peut_voir_absences: false }));
 
-      const res = await request(app)
+      await request(app)
         .get(`/parents/moi/enfants/${IDS.eleve}/absences`)
         .expect(403);
     });
@@ -211,7 +211,7 @@ describe('Parents Routes', () => {
     test('retourne 403 si peut_voir_bulletins est false', async () => {
       db.mockReturnValueOnce(mockQuery({ ...lienParentEnfant, peut_voir_bulletins: false }));
 
-      const res = await request(app)
+      await request(app)
         .get(`/parents/moi/enfants/${IDS.eleve}/bulletins`)
         .expect(403);
     });

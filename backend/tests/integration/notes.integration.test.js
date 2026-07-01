@@ -6,14 +6,13 @@ const {
   createIntegrationApp, creerSession,
 } = require('./helpers');
 
-let app, request, seed, tokenEns, tokenDir, affectationId;
+let app, request, seed, tokenEns, affectationId;
 
 beforeAll(async () => {
   app = createIntegrationApp();
   request = supertest(app);
   await truncateData();
   seed = await seedTestData();
-  tokenDir = await creerSession(seed.directeur.id, seed.etablissement.id);
   tokenEns = await creerSession(seed.enseignantUser.id, seed.etablissement.id);
 
   // Créer une affectation enseignant <-> matière <-> classe

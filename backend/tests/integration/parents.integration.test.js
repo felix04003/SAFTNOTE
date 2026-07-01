@@ -6,14 +6,13 @@ const {
   createIntegrationApp, creerSession,
 } = require('./helpers');
 
-let app, request, seed, tokenParent, tokenDir;
+let app, request, seed, tokenParent;
 
 beforeAll(async () => {
   app = createIntegrationApp();
   request = supertest(app);
   await truncateData();
   seed = await seedTestData();
-  tokenDir = await creerSession(seed.directeur.id, seed.etablissement.id);
 
   // Créer un utilisateur parent lié à l'élève[0]
   const db = getTestDB();

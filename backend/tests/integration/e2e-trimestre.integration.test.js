@@ -30,7 +30,7 @@ let db;
 
 let etablissement, annee, periodes;
 let niveau, classe;
-let directeurUser, directeurToken;
+let directeurToken;
 let enseignantUser, enseignant, enseignantToken;
 let parentUser, parentToken;
 const eleves = [];
@@ -210,7 +210,6 @@ describe('Phase 2 — Connexion directeur', () => {
     expect(res.body.succes).toBe(true);
     expect(res.body.data).toHaveProperty('token');
     directeurToken = res.body.data.token;
-    directeurUser  = res.body.data.utilisateur;
   });
 
   it('POST /auth/connexion rejette un mauvais mot de passe', async () => {
