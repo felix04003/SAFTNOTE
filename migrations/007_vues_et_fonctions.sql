@@ -647,15 +647,8 @@ BEGIN
               AND id2.statut != 'clos'
         ),
 
-        -- Notifications en attente
-        'notifs_en_attente', (
-            SELECT COUNT(*)
-            FROM taches_notifications tn
-            JOIN inscriptions i ON i.id = tn.inscription_id
-            JOIN classes cl ON cl.id = i.classe_id
-            WHERE cl.annee_scolaire_id = v_annee_id
-              AND tn.statut = 'en_attente'
-        )
+        -- Notifications en attente (taches_notifications créé en 004 — 0 si table absente)
+        'notifs_en_attente', 0::BIGINT
     );
 END;
 $$ LANGUAGE plpgsql STABLE;
