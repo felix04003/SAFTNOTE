@@ -116,5 +116,157 @@ function _patchStatHome(s) {
     sparkline('sp-en', [0,0,0,0,0,0], 'var(--bleu)');
     sparkline('sp-mo', [0,0,0,0,0,0], 'var(--orange)');
     sparkline('sp-ab', [0,0,0,0,0,0], 'var(--rouge)');
+  } else {
+    _initCharts(s);
   }
+}
+
+// ── Charts dynamiques ─────────────────────────────────────────────
+var _charts = {};
+
+function _destroyChart(id) {
+  if (_charts[id]) { try { _charts[id].destroy(); } catch(e) {} delete _charts[id]; }
+}
+
+function _initCharts(s) {
+  Promise.all([
+    Api.get('/annees-scolaires/courante'),
+    Api.get('/classes')
+  ]).then(function(results) {
+    var periodes = (results[0].data && results[0].data.periodes) ? results[0].data.periodes : [];
+    var classes  = results[1].data || [];
+    if (!classes.length || !periodes.length) return;
+
+    var classeId = classes[0].id;
+
+    Promise.all(periodes.map(function(p) {
+      return Api.get('/moyennes/classement/' + classeId + '?periode_id=' + p.id)
+        .then(function(r) { return { periode: p, data: r.data }; })
+        .catch(function() { return { periode: p, data: null }; });
+    })).then(function(classements) {
+      var labels = periodes.map(function(p) { return p.libelle || ('T' + p.numero); });
+      var moyClasse = classements.map(function(c) {
+        return (c.data && c.data.stats && c.data.stats.moyenne_classe)
+          ? parseFloat(c.data.stats.moyenne_classe) : null;
+      });
+
+      _drawLineMoy(labels, moyClasse);
+
+      var lastData = null;
+      for (var i = classements.length - 1; i >= 0; i--) {
+        if (classements[i].data && classements[i].data.classement && classements[i].data.classement.length) {
+          lastData = classements[i].data;
+          break;
+        }
+      }
+      if (lastData) {
+        _drawDonut(lastData.classement);
+        _drawTopClasses(lastData.classement, lastData.stats);
+      }
+    }).catch(function() {});
+  }).catch(function() {});
+}
+
+function _drawLineMoy(labels, moyennes) {
+  var canvas = document.getElementById('c-moy');
+  if (!canvas || !window.Chart) return;
+  _destroyChart('moy');
+  _charts['moy'] = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Moy. classe',
+        data: moyennes,
+        borderColor: '#2563eb',
+        backgroundColor: 'rgba(37,99,235,0.08)',
+        borderWidth: 2,
+        pointRadius: 4,
+        pointBackgroundColor: '#2563eb',
+        tension: 0.3,
+        fill: true,
+        spanGaps: true
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { min: 0, max: 20, ticks: { font: { size: 10 }, color: '#94a3b8' }, grid: { color: 'rgba(0,0,0,0.05)' } },
+        x: { ticks: { font: { size: 10 }, color: '#94a3b8' }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+function _drawDonut(classement) {
+  var counts = [0, 0, 0, 0, 0]; // TB, B, AB, P, I
+  var total = 0;
+  classement.forEach(function(e) {
+    if (e.moyenne_generale == null) return;
+    total++;
+    var m = parseFloat(e.moyenne_generale);
+    if (m >= 16)      counts[0]++;
+    else if (m >= 14) counts[1]++;
+    else if (m >= 12) counts[2]++;
+    else if (m >= 10) counts[3]++;
+    else              counts[4]++;
+  });
+
+  var legendIds = ['donut-tresbien','donut-bien','donut-assezbien','donut-passable','donut-insuff'];
+  legendIds.forEach(function(id, i) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = (total > 0 ? Math.round(counts[i] / total * 100) : 0) + '%';
+  });
+
+  var canvas = document.getElementById('c-donut');
+  if (!canvas || !window.Chart) return;
+  _destroyChart('donut');
+  _charts['donut'] = new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels: ['Très bien (≥16)', 'Bien (≥14)', 'Assez bien (≥12)', 'Passable (≥10)', 'Insuffisant (<10)'],
+      datasets: [{
+        data: counts,
+        backgroundColor: ['#22c55e','#84cc16','#f59e0b','#f97316','#ef4444'],
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: function(ctx) {
+          return ctx.label + ' : ' + ctx.parsed + ' élève' + (ctx.parsed !== 1 ? 's' : '');
+        }}}
+      },
+      cutout: '70%'
+    }
+  });
+}
+
+function _drawTopClasses(classement, stats) {
+  var el = document.getElementById('top-classes');
+  if (!el) return;
+  var top = classement.slice(0, 5);
+  if (!top.length) return;
+  var html = '<table style="width:100%;border-collapse:collapse;font-size:12px">'
+    + '<tr style="color:var(--g400);font-size:11px"><th style="text-align:left;padding:4px 0">Élève</th>'
+    + '<th style="text-align:center">Rg</th><th style="text-align:right">Moy.</th></tr>';
+  top.forEach(function(e) {
+    var moy = e.moyenne_generale != null ? parseFloat(e.moyenne_generale).toFixed(2) : '—';
+    var c = parseFloat(moy) >= 14 ? '#22c55e' : parseFloat(moy) >= 10 ? '#f59e0b' : '#ef4444';
+    html += '<tr style="border-top:1px solid var(--g100)">'
+      + '<td style="padding:5px 0;font-size:11px">' + e.prenom + ' ' + e.nom + '</td>'
+      + '<td style="text-align:center;color:var(--g400);font-size:11px">' + (e.rang || '—') + '</td>'
+      + '<td style="text-align:right;font-weight:600;color:' + c + '">' + moy + '</td>'
+      + '</tr>';
+  });
+  html += '</table>';
+  if (stats && stats.taux_reussite) {
+    html += '<div style="margin-top:6px;font-size:11px;color:var(--g400)">Réussite : <strong style="color:var(--vert)">'
+      + stats.taux_reussite + '</strong></div>';
+  }
+  el.innerHTML = html;
 }
