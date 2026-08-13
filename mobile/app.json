@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "EcoleManager",
-    "slug": "ecole-manager",
+    "slug": "safthcorp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./src/assets/icon.png",
@@ -13,7 +13,7 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.ecolmanager.mobile",
+      "bundleIdentifier": "com.ecolemanager.mobile",
       "buildNumber": "1"
     },
     "android": {
@@ -44,14 +44,20 @@
       ],
       [
         "expo-sqlite",
-        { "enableFTS": true }
+        {
+          "enableFTS": true
+        }
       ]
     ],
     "scheme": "ecolemanager",
     "extra": {
       "eas": {
-        "projectId": "YOUR_EAS_PROJECT_ID"
+        "projectId": "19990247-a07a-451c-b6f6-48c7aa88238c"
+      },
+      "router": {
+        "origin": false
       }
-    }
+    },
+    "owner": "safthcorps-team"
   }
 }

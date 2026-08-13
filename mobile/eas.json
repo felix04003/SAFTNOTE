@@ -14,14 +14,13 @@
     "preview": {
       "distribution": "internal",
       "android": {
-        "buildType": "apk",
-        "gradleCommand": ":app:assembleRelease"
+        "buildType": "apk"
       },
       "ios": {
         "simulator": false
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api-staging.ecolemanager.com/api/v1"
+        "EXPO_PUBLIC_API_URL": "http://TODO_REPLACE_WITH_VPS_IP:3000/api/v1"
       }
     },
     "production": {
@@ -30,7 +29,7 @@
         "gradleCommand": ":app:bundleRelease"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.ecolemanager.com/api/v1"
+        "EXPO_PUBLIC_API_URL": "https://TODO_REPLACE_WITH_YOUR_DOMAIN.com/api/v1"
       }
     }
   },

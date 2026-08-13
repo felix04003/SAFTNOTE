@@ -1,0 +1,8 @@
+dist/
+.expo/
+__tests__/
+node_modules/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
