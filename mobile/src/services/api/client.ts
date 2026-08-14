@@ -1,7 +1,6 @@
 // src/services/api/client.ts
 // Client HTTP avec gestion du JWT, retry et détection hors ligne
 
-import * as SecureStore from 'expo-secure-store';
 import * as Network from 'expo-network';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://api.ecolemanager.io/api/v1';

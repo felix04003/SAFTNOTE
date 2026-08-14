@@ -254,13 +254,16 @@ export async function ajouterOperationPendante(type: string, payload: object): P
   const { v4: uuid } = await import('react-native-uuid' as any).catch(() => ({ v4: () => Date.now().toString() }));
   await db.runAsync(
     `INSERT INTO operations_pending (id, type, payload) VALUES (?, ?, ?)`,
-    [Date.now().toString(), type, JSON.stringify(payload)]
+    [uuid() as string, type, JSON.stringify(payload)]
   );
 }
 
 export async function getOperationsPendantes(): Promise<any[]> {
   return getDB().getAllAsync(
-    `SELECT * FROM operations_pending WHERE statut='en_attente' ORDER BY created_at_local LIMIT 50`
+    `SELECT * FROM operations_pending
+       WHERE (statut = 'en_attente') OR (statut = 'erreur' AND tentatives < 5)
+       ORDER BY created_at_local
+       LIMIT 50`
   );
 }
 
