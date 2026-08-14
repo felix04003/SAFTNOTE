@@ -1,7 +1,7 @@
 // app/(app)/enseignant/_layout.tsx
 import { Tabs }       from 'expo-router';
 import { Ionicons }   from '@expo/vector-icons';
-import { COULEURS, TYPOGRAPHIE } from '../../../src/constants/theme';
+import { Colors } from '../../../src/utils/theme';
 
 const ONGLETS = [
   { name: 'index',       titre: 'Accueil',     icone: 'home'          },
@@ -16,17 +16,17 @@ export default function EnseignantLayout() {
     <Tabs
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarActiveTintColor:   COULEURS.vert,
-        tabBarInactiveTintColor: COULEURS.grisMoyen,
+        tabBarActiveTintColor:   Colors.primary,
+        tabBarInactiveTintColor: Colors.gray400,
         tabBarStyle: {
-          backgroundColor:  COULEURS.blanc,
-          borderTopColor:   COULEURS.grisClaire,
+          backgroundColor:  Colors.white,
+          borderTopColor:   Colors.gray200,
           borderTopWidth:   1,
           paddingBottom:    8,
           paddingTop:       6,
           height:           60,
         },
-        tabBarLabelStyle: { fontSize: TYPOGRAPHIE.xxs, fontWeight: '600' },
+        tabBarLabelStyle: { fontSize: 10, fontWeight: '600' },
         tabBarIcon: ({ color, size, focused }) => {
           const onglet = ONGLETS.find(o => o.name === route.name);
           const icone  = (onglet?.icone || 'home') + (focused ? '' : '-outline');

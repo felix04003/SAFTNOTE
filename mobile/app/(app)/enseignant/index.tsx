@@ -5,45 +5,48 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../../src/stores/authStore';
+import { useEdtStore } from '../../../src/stores/edtStore';
 import { syncService } from '../../../src/services/sync/syncService';
 import { getDB } from '../../../src/services/storage/database';
-import { Colors, Typography, Spacing, Radius, Shadow } from '../../../src/utils/theme';
+import { Colors, Typography, Spacing, Radius, Shadow, couleurMatiere } from '../../../src/utils/theme';
 import Carte from '../../../src/components/ui/Carte';
 import StatCard from '../../../src/components/ui/StatCard';
+import SyncStatus, { StatutSync } from '../../../src/components/ui/SyncStatus';
 
 type JourSemaine = 1|2|3|4|5;
 const JOURS = ['', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi'];
-const COULEURS_MATIERES: Record<string, string> = {
-  'Mathématiques': '#1A5276', 'Physique-Chimie': '#7D3C98', 'SVT': '#1E8449',
-  'Français': '#B7950B', 'Histoire-Géographie': '#935116', 'default': Colors.primary,
-};
 
 export default function TableauBordEnseignant() {
   const session   = useAuthStore(s => s.session);
   const router    = useRouter();
   const [stats,    setStats]    = useState({ nb_classes: 0, nb_evaluations: 0, notes_en_attente: 0 });
-  const [edt,      setEdt]      = useState<any[]>([]);
-  const [classes,  setClasses]  = useState<any[]>([]);
   const [refresh,  setRefresh]  = useState(false);
+  const { edt, chargerEdt }    = useEdtStore();
   const [jourActif, setJourActif] = useState<JourSemaine>((new Date().getDay() || 1) as JourSemaine);
+  const [statutSync, setStatutSync] = useState<StatutSync>('ok');
 
   useEffect(() => { charger(); }, []);
 
   async function charger() {
     const db = getDB();
-    const [edtRows, classesRows, notesRows] = await Promise.all([
-      db.getAllAsync('SELECT * FROM edt ORDER BY jour_semaine, heure_debut'),
-      db.getAllAsync('SELECT DISTINCT classe_id, classe FROM edt WHERE classe IS NOT NULL'),
+    const [notesRows] = await Promise.all([
       db.getAllAsync("SELECT COUNT(*) as count FROM notes WHERE synced=0"),
+      chargerEdt(),
     ]);
-    setEdt(edtRows as any[]);
-    setClasses(classesRows as any[]);
-    setStats({ nb_classes: (classesRows as any[]).length, nb_evaluations: 0, notes_en_attente: (notesRows as any[])[0]?.count || 0 });
+    const nbEnAttente = (notesRows as any[])[0]?.count || 0;
+    const edtFrais    = useEdtStore.getState().edt;
+    const nbClasses   = new Set(edtFrais.map((c: any) => c.classe_id).filter(Boolean)).size;
+    setStats({ nb_classes: nbClasses, nb_evaluations: 0, notes_en_attente: nbEnAttente });
+    setStatutSync(nbEnAttente > 0 ? 'en_attente' : 'ok');
   }
 
   async function handleRefresh() {
     setRefresh(true);
-    await syncService.syncComplete();
+    try {
+      await syncService.syncComplete();
+    } catch {
+      setStatutSync('erreur');
+    }
     await charger();
     setRefresh(false);
   }
@@ -71,6 +74,8 @@ export default function TableauBordEnseignant() {
             </View>
           </TouchableOpacity>
         </View>
+
+        <SyncStatus statut={statutSync} nbEnAttente={stats.notes_en_attente} onPresser={handleRefresh} />
 
         {/* Stats */}
         <View style={styles.statsRow}>
@@ -110,23 +115,28 @@ export default function TableauBordEnseignant() {
 
         {coursJour.length === 0
           ? <Carte><Text style={styles.aucun}>Aucun cours ce {JOURS[jourActif]}</Text></Carte>
-          : coursJour.map((c, i) => (
-            <TouchableOpacity key={i} activeOpacity={0.85} onPress={() => router.push({ pathname: '/(app)/enseignant/appel', params: { cours_id: c.id, classe: c.classe } })}>
-              <Carte style={{ ...styles.coursCard, borderLeftColor: COULEURS_MATIERES[c.matiere] || COULEURS_MATIERES.default }} padding={12}>
-                <View style={styles.coursLigne}>
-                  <View style={[styles.coursHeure, { backgroundColor: (COULEURS_MATIERES[c.matiere] || COULEURS_MATIERES.default) + '15' }]}>
-                    <Text style={[styles.coursHeureTxt, { color: COULEURS_MATIERES[c.matiere] || COULEURS_MATIERES.default }]}>{c.heure_debut?.slice(0,5)}</Text>
-                    <Text style={[styles.coursHeureFin, { color: COULEURS_MATIERES[c.matiere] || COULEURS_MATIERES.default }]}>{c.heure_fin?.slice(0,5)}</Text>
-                  </View>
-                  <View style={styles.coursInfo}>
-                    <Text style={styles.coursMatiere}>{c.matiere}</Text>
-                    <Text style={styles.coursClasse}>{c.classe}{c.salle ? ' · ' + c.salle : ''}</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={18} color={Colors.gray400} />
-                </View>
-              </Carte>
-            </TouchableOpacity>
-          ))
+          : <FlatList
+              data={coursJour}
+              scrollEnabled={false}
+              keyExtractor={(c) => c.id}
+              renderItem={({ item: c }) => (
+                <TouchableOpacity activeOpacity={0.85} onPress={() => router.push({ pathname: '/(app)/enseignant/appel', params: { cours_id: c.id, classe: c.classe } })}>
+                  <Carte style={{ ...styles.coursCard, borderLeftColor: couleurMatiere(c.matiere) }} padding={12}>
+                    <View style={styles.coursLigne}>
+                      <View style={[styles.coursHeure, { backgroundColor: couleurMatiere(c.matiere) + '15' }]}>
+                        <Text style={[styles.coursHeureTxt, { color: couleurMatiere(c.matiere) }]}>{c.heure_debut?.slice(0,5)}</Text>
+                        <Text style={[styles.coursHeureFin, { color: couleurMatiere(c.matiere) }]}>{c.heure_fin?.slice(0,5)}</Text>
+                      </View>
+                      <View style={styles.coursInfo}>
+                        <Text style={styles.coursMatiere}>{c.matiere}</Text>
+                        <Text style={styles.coursClasse}>{c.classe}{c.salle ? ' · ' + c.salle : ''}</Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={18} color={Colors.gray400} />
+                    </View>
+                  </Carte>
+                </TouchableOpacity>
+              )}
+            />
         }
       </ScrollView>
     </SafeAreaView>

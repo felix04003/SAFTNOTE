@@ -12,6 +12,7 @@ import Carte from '../../../src/components/ui/Carte';
 import Badge, { VARIANT_PRESENCE, LABEL_PRESENCE, VARIANT_MENTION } from '../../../src/components/ui/Badge';
 import NoteBulle from '../../../src/components/ui/NoteBulle';
 import StatCard from '../../../src/components/ui/StatCard';
+import SyncStatus, { StatutSync } from '../../../src/components/ui/SyncStatus';
 
 export default function TableauBordParent() {
   const session  = useAuthStore(s => s.session);
@@ -23,6 +24,7 @@ export default function TableauBordParent() {
   const [bulletins, setBulletins]      = useState<any[]>([]);
   const [moyennes, setMoyennes]        = useState<any[]>([]);
   const [refresh,  setRefresh]         = useState(false);
+  const [statutSync, setStatutSync]    = useState<StatutSync>('ok');
 
   useEffect(() => { charger(); }, []);
   useEffect(() => { if (enfantActif) chargerEnfant(enfantActif); }, [enfantActif]);
@@ -50,7 +52,12 @@ export default function TableauBordParent() {
 
   async function handleRefresh() {
     setRefresh(true);
-    await syncService.syncComplete();
+    try {
+      await syncService.syncComplete();
+      setStatutSync('ok');
+    } catch {
+      setStatutSync('erreur');
+    }
     await charger();
     if (enfantActif) await chargerEnfant(enfantActif);
     setRefresh(false);
@@ -80,6 +87,8 @@ export default function TableauBordParent() {
             </View>
           </TouchableOpacity>
         </View>
+
+        <SyncStatus statut={statutSync} onPresser={handleRefresh} />
 
         {/* Sélecteur enfant (multi-enfants) */}
         {enfants.length > 1 && (

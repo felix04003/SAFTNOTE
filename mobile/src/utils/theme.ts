@@ -136,3 +136,19 @@ export const couleurPresence: Record<string, string> = {
   dispense:    Colors.info,
   non_saisi:   Colors.gray300,
 };
+
+// Couleur par matière (source unique de vérité)
+export function couleurMatiere(matiere: string): string {
+  const map: Record<string, string> = {
+    'Mathématiques':        Colors.maths,
+    'Physique-Chimie':      Colors.physique,
+    'SVT':                  Colors.svt,
+    'Français':             Colors.francais,
+    'Histoire-Géographie':  Colors.histoire,
+    'Anglais':              Colors.anglais,
+    'Philosophie':          Colors.philosophie,
+    'EPS':                  Colors.eps,
+    'Technologie':          Colors.techno,
+  };
+  return map[matiere] ?? Colors.primary;
+}
