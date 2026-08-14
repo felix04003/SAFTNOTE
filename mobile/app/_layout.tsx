@@ -1,6 +1,6 @@
 // app/_layout.tsx
 import React, { useEffect } from 'react';
-import { Stack }         from 'expo-router';
+import { Stack, useRouter, useRootNavigationState } from 'expo-router';
 import { StatusBar }     from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import Toast             from 'react-native-toast-message';
@@ -8,23 +8,24 @@ import { useAuthStore }  from '../src/stores/authStore';
 import { ouvrirBD }      from '../src/services/storage/database';
 import { syncService }   from '../src/services/sync/syncService';
 import { authEventEmitter } from '../src/services/api/client';
-import { useRouter }     from 'expo-router';
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const router         = useRouter();
-  const chargerSession = useAuthStore(s => s.chargerSession);
-  const deconnexion    = useAuthStore(s => s.deconnexion);
+  const router          = useRouter();
+  const navigationState = useRootNavigationState();
+  const chargerSession  = useAuthStore(s => s.chargerSession);
+  const deconnexion     = useAuthStore(s => s.deconnexion);
+  const chargement      = useAuthStore(s => s.chargement);
+  const estConnecte     = useAuthStore(s => s.estConnecte);
+  const estParent       = useAuthStore(s => s.estParent);
 
+  // Init au démarrage
   useEffect(() => {
     async function init() {
       try {
-        // 1. Ouvrir la base SQLite locale
         await ouvrirBD();
-        // 2. Charger la session persistée
         await chargerSession();
-        // 3. Démarrer la sync automatique
         syncService.demarrer();
       } finally {
         SplashScreen.hideAsync();
@@ -32,7 +33,6 @@ export default function RootLayout() {
     }
     init();
 
-    // Écouter la déconnexion forcée (token expiré)
     const unsub = authEventEmitter.on('deconnexion', async () => {
       await deconnexion();
       router.replace('/auth/connexion');
@@ -43,6 +43,18 @@ export default function RootLayout() {
       unsub();
     };
   }, []);
+
+  // Redirection auth — uniquement quand le navigator est prêt ET la session chargée
+  useEffect(() => {
+    if (!navigationState?.key || chargement) return;
+    if (!estConnecte) {
+      router.replace('/auth/connexion');
+    } else if (estParent()) {
+      router.replace('/(app)/parent');
+    } else {
+      router.replace('/(app)/enseignant');
+    }
+  }, [navigationState?.key, chargement, estConnecte]);
 
   return (
     <>
