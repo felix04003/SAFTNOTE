@@ -1,22 +1,40 @@
 // src/components/ui/StatCard.tsx
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSpring } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Radius, Shadow, Spacing, Typography } from '../../utils/theme';
 
 interface Props {
-  titre:     string;
-  valeur:    string | number;
-  icone:     keyof typeof Ionicons.glyphMap;
-  couleur?:  string;
+  titre:      string;
+  valeur:     string | number;
+  icone:      keyof typeof Ionicons.glyphMap;
+  couleur?:   string;
   sousTitre?: string;
-  onPress?:  () => void;
+  onPress?:   () => void;
+  index?:     number;
 }
 
-export default function StatCard({ titre, valeur, icone, couleur = Colors.primary, sousTitre, onPress }: Props) {
+export default function StatCard({ titre, valeur, icone, couleur = Colors.primary, sousTitre, onPress, index = 0 }: Props) {
+  const translateY = useSharedValue(24);
+  const opacity    = useSharedValue(0);
+
+  useEffect(() => {
+    const delay = index * 120;
+    translateY.value = withDelay(delay, withSpring(0, { damping: 15, stiffness: 120 }));
+    opacity.value    = withDelay(delay, withSpring(1, { damping: 20 }));
+  }, []);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+    opacity:   opacity.value,
+    flex:      1,
+  }));
+
   const Wrapper: any = onPress ? TouchableOpacity : View;
 
   return (
+    <Animated.View style={animStyle}>
     <Wrapper onPress={onPress} activeOpacity={0.85} style={[styles.card, Shadow.sm]}>
       <View style={[styles.iconeContainer, { backgroundColor: couleur + '18' }]}>
         <Ionicons name={icone} size={22} color={couleur} />
@@ -25,6 +43,7 @@ export default function StatCard({ titre, valeur, icone, couleur = Colors.primar
       <Text style={styles.titre} numberOfLines={1}>{titre}</Text>
       {sousTitre && <Text style={styles.sous} numberOfLines={1}>{sousTitre}</Text>}
     </Wrapper>
+    </Animated.View>
   );
 }
 
@@ -36,6 +55,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     marginHorizontal: 4,
+    width: '100%',
   },
   iconeContainer: {
     width: 44, height: 44,

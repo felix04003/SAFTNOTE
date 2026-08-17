@@ -8,6 +8,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
 import { getDB, sauvegarderPresenceLocale, ajouterOperationPendante } from '../../../src/services/storage/database';
 import { enseignantApi } from '../../../src/services/api/client';
 import { syncService } from '../../../src/services/sync/syncService';
@@ -77,6 +78,7 @@ export default function AppelScreen() {
     setPresences(prev => prev.map(p =>
       p.inscription_id === inscriptionId ? { ...p, statut } : p
     ));
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }
 
   async function sauvegarder(cloturer = false) {
