@@ -13,6 +13,15 @@ import { Colors, Typography, Spacing, Radius, Shadow } from '../../src/utils/the
 
 type Mode = 'mdp' | 'otp_demander' | 'otp_valider';
 
+const PAYS = [
+  { code: 'SN', label: 'Sénégal',       prefixe: '+221' },
+  { code: 'CI', label: "Côte d'Ivoire", prefixe: '+225' },
+  { code: 'ML', label: 'Mali',           prefixe: '+223' },
+  { code: 'BF', label: 'Burkina Faso',  prefixe: '+226' },
+  { code: 'GN', label: 'Guinée',         prefixe: '+224' },
+  { code: 'CM', label: 'Cameroun',       prefixe: '+237' },
+] as const;
+
 export default function ConnexionScreen() {
   const router = useRouter();
   const connexionMDP = useAuthStore(s => s.connexionMDP);
@@ -25,6 +34,7 @@ export default function ConnexionScreen() {
   const [identifiant,   setIdentifiant]   = useState('');
   const [motDePasse,    setMotDePasse]    = useState('');
   const [voirMDP,       setVoirMDP]       = useState(false);
+  const [pays,      setPays]       = useState<typeof PAYS[number]>(PAYS[0]);
   const [telephone, setTelephone] = useState('');
   const [otp,       setOtp]       = useState('');
   const otpRefs = useRef<(TextInput | null)[]>([null, null, null, null, null, null]);
@@ -47,7 +57,7 @@ export default function ConnexionScreen() {
     if (!etablissement.trim() || !telephone.trim()) return setErreur('Établissement et téléphone requis');
     setLoading(true); clearErr();
     try {
-      await authApi.demanderOTP({ telephone: telephone.trim().startsWith('+') ? telephone.trim() : '+221' + telephone.trim(), etablissement_code: etablissement.trim().toUpperCase() });
+      await authApi.demanderOTP({ telephone: telephone.trim().startsWith('+') ? telephone.trim() : pays.prefixe + telephone.trim(), etablissement_code: etablissement.trim().toUpperCase() });
       setMode('otp_valider');
     } catch (err: any) { setErreur(err.message || 'Impossible d\'envoyer le code'); }
     finally { setLoading(false); }
@@ -57,7 +67,7 @@ export default function ConnexionScreen() {
     if (otp.length !== 6) return setErreur('Entrez les 6 chiffres du code');
     setLoading(true); clearErr();
     try {
-      await connexionOTP({ telephone: telephone.trim().startsWith('+') ? telephone.trim() : '+221' + telephone.trim(), code: otp, etablissement_code: etablissement.trim().toUpperCase() });
+      await connexionOTP({ telephone: telephone.trim().startsWith('+') ? telephone.trim() : pays.prefixe + telephone.trim(), code: otp, etablissement_code: etablissement.trim().toUpperCase() });
       router.replace('/(app)');
     } catch (err: any) { setErreur(err.message || 'Code incorrect ou expiré'); setOtp(''); }
     finally { setLoading(false); }
@@ -113,7 +123,15 @@ export default function ConnexionScreen() {
                 <Text style={styles.infoText}>Vous recevrez un code à 6 chiffres par SMS sur votre numéro enregistré.</Text>
                 <Text style={styles.label}>Numéro de téléphone</Text>
                 <View style={styles.inputContainer}>
-                  <Text style={styles.prefixe}>+221</Text>
+                  <TouchableOpacity
+                    style={styles.paysSelector}
+                    onPress={() => {
+                      const idx = PAYS.findIndex(p => p.code === pays.code);
+                      setPays(PAYS[(idx + 1) % PAYS.length]);
+                    }}>
+                    <Text style={styles.prefixe}>{pays.prefixe}</Text>
+                    <Ionicons name="chevron-down" size={12} color={Colors.gray500} />
+                  </TouchableOpacity>
                   <TextInput style={[styles.input, { flex: 1 }]} placeholder="77 000 00 00" placeholderTextColor={Colors.gray400} value={telephone} onChangeText={t => { setTelephone(t.replace(/\D/g, '')); clearErr(); }} keyboardType="phone-pad" maxLength={9} />
                 </View>
                 <TouchableOpacity style={[styles.boutonPrincipal, loading && styles.boutonDisabled]} onPress={handleDemanderOTP} disabled={loading} activeOpacity={0.85}>
@@ -175,8 +193,9 @@ const styles = StyleSheet.create({
   inputContainer: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: Colors.gray200, borderRadius: Radius.md, backgroundColor: Colors.gray50, paddingHorizontal: Spacing.sm, height: 50 },
   inputIcon: { marginRight: 8 },
   input: { flex: 1, fontSize: Typography.base, color: Colors.gray900 },
-  oeilBtn: { padding: 6 },
-  prefixe: { fontSize: Typography.base, color: Colors.gray600, marginRight: 8, fontWeight: Typography.medium },
+  oeilBtn:      { padding: 6 },
+  paysSelector: { flexDirection: 'row', alignItems: 'center', gap: 4, marginRight: 8 },
+  prefixe:      { fontSize: Typography.base, color: Colors.gray600, fontWeight: Typography.medium },
   infoText: { fontSize: Typography.sm, color: Colors.gray500, lineHeight: 20, marginVertical: 8 },
   boutonPrincipal: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.primary, borderRadius: Radius.md, height: 52, marginTop: Spacing.lg },
   boutonDisabled: { opacity: 0.6 },

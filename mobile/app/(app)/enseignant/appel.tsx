@@ -100,8 +100,11 @@ export default function AppelScreen() {
         await enseignantApi.saisirPresences(appelId, presences.map(p => ({
           inscription_id: p.inscription_id, statut: p.statut, minutes_retard: p.minutes_retard
         })), cloturer);
-        // Sync montante réussie — vider les opérations en attente
-        await db.runAsync("DELETE FROM operations_pending WHERE type='presences.saisir'");
+        // Sync montante réussie — vider les opérations de CET appel uniquement
+        await db.runAsync(
+          `DELETE FROM operations_pending WHERE type='presences.saisir' AND payload LIKE ?`,
+          [`%"appel_id":"${appelId}"%`]
+        );
       } catch {
         // Hors ligne — la sync montante enverra au prochain passage
       }

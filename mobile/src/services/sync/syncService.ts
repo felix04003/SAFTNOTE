@@ -92,12 +92,15 @@ class SyncService {
     for (let i = 0; i < operations.length; i += BATCH) {
       const batch = operations.slice(i, i + BATCH);
       try {
-        const ops = batch.map(op => ({
-          id:            op.id,
-          type:          op.type,
-          payload:       JSON.parse(op.payload),
-          cree_at_local: op.created_at_local,
-        }));
+        const ops = batch.flatMap(op => {
+          try {
+            return [{ id: op.id, type: op.type, payload: JSON.parse(op.payload), cree_at_local: op.created_at_local }];
+          } catch {
+            console.warn('[Sync] Payload corrompu ignoré', op.id);
+            return [];
+          }
+        });
+        if (ops.length === 0) continue;
 
         const res: any = await syncApi.envoyer(ops);
         const resultats: any[] = res.resultats || [];
@@ -119,6 +122,11 @@ class SyncService {
         echecs += batch.length;
       }
     }
+
+    // Dead-letter les opérations ayant échoué 5+ fois
+    await db.runAsync(
+      `UPDATE operations_pending SET statut='dead_letter' WHERE tentatives >= 5 AND statut != 'ok'`
+    );
 
     console.log('[Sync] ↑ Montante', { envoyees, echecs });
     return { envoyees, echecs };

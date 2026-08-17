@@ -4,6 +4,7 @@ import { View, Text, FlatList, TextInput, StyleSheet, TouchableOpacity, Alert, A
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Crypto from 'expo-crypto';
 import { getDB, sauvegarderNoteLocale, ajouterOperationPendante } from '../../../src/services/storage/database';
 import { enseignantApi } from '../../../src/services/api/client';
 import { Colors, Typography, Spacing, Radius, Shadow, couleurNote } from '../../../src/utils/theme';
@@ -69,7 +70,7 @@ export default function NotesSaisieScreen() {
     setSaving(true);
     try {
       const notesPayload = notes.map(n => ({
-        id:                Date.now().toString() + n.eleve_id,
+        id:                Crypto.randomUUID(),
         evaluation_id,
         eleve_id:          n.eleve_id,
         inscription_id:    n.inscription_id,
