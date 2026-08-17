@@ -12,6 +12,7 @@ import { Colors, Typography, Spacing, Radius, Shadow, couleurMatiere } from '../
 import Carte from '../../../src/components/ui/Carte';
 import StatCard from '../../../src/components/ui/StatCard';
 import SyncStatus, { StatutSync } from '../../../src/components/ui/SyncStatus';
+import EmptyState from '../../../src/components/ui/EmptyState';
 
 type JourSemaine = 1|2|3|4|5;
 const JOURS = ['', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi'];
@@ -79,8 +80,8 @@ export default function TableauBordEnseignant() {
 
         {/* Stats */}
         <View style={styles.statsRow}>
-          <StatCard titre="Classes" valeur={stats.nb_classes} icone="school-outline" couleur={Colors.primary} />
-          <StatCard titre="À synchroniser" valeur={stats.notes_en_attente} icone="cloud-upload-outline" couleur={stats.notes_en_attente > 0 ? Colors.warning : Colors.success} onPress={stats.notes_en_attente > 0 ? handleRefresh : undefined} />
+          <StatCard titre="Classes" valeur={stats.nb_classes} icone="school-outline" couleur={Colors.primary} index={0} />
+          <StatCard titre="À synchroniser" valeur={stats.notes_en_attente} icone="cloud-upload-outline" couleur={stats.notes_en_attente > 0 ? Colors.warning : Colors.success} onPress={stats.notes_en_attente > 0 ? handleRefresh : undefined} index={1} />
         </View>
 
         {/* Actions rapides */}
@@ -114,7 +115,7 @@ export default function TableauBordEnseignant() {
         </ScrollView>
 
         {coursJour.length === 0
-          ? <Carte><Text style={styles.aucun}>Aucun cours ce {JOURS[jourActif]}</Text></Carte>
+          ? <EmptyState icone="calendar-outline" titre={`Aucun cours ce ${JOURS[jourActif]}`} sousTitre="Votre emploi du temps est libre pour cette journée." />
           : <FlatList
               data={coursJour}
               scrollEnabled={false}
@@ -173,5 +174,4 @@ const styles = StyleSheet.create({
   coursInfo: { flex: 1 },
   coursMatiere: { fontSize: Typography.base, fontWeight: Typography.semibold, color: Colors.gray900 },
   coursClasse:  { fontSize: Typography.xs,   color: Colors.gray500, marginTop: 2 },
-  aucun: { textAlign: 'center', color: Colors.gray400, fontSize: Typography.sm, padding: Spacing.sm },
 });

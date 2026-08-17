@@ -15,6 +15,7 @@ import { syncService } from '../../../src/services/sync/syncService';
 import { Colors, Typography, Spacing, Radius, Shadow } from '../../../src/utils/theme';
 import Entete from '../../../src/components/ui/Entete';
 import { VARIANT_PRESENCE, LABEL_PRESENCE } from '../../../src/components/ui/Badge';
+import EmptyState from '../../../src/components/ui/EmptyState';
 
 type Statut = 'present' | 'absent' | 'retard' | 'dispense' | 'non_saisi';
 const STATUTS: { code: Statut; label: string; couleur: string; icone: string }[] = [
@@ -202,7 +203,11 @@ export default function AppelScreen() {
         renderItem={renderEleve}
         contentContainerStyle={styles.liste}
         showsVerticalScrollIndicator={false}
-        ListEmptyComponent={<Text style={styles.empty}>Aucun élève{recherche ? ' trouvé' : ''}</Text>}
+        ListEmptyComponent={
+          recherche
+            ? <EmptyState icone="search-outline" titre="Aucun élève trouvé" sousTitre={`Aucun résultat pour "${recherche}"`} action={{ label: 'Effacer la recherche', onPress: () => setRecherche('') }} />
+            : <EmptyState icone="people-outline" titre="Aucun élève" sousTitre="La liste de présences est vide pour ce cours." />
+        }
       />
 
       {/* Boutons d\'action */}
@@ -243,7 +248,6 @@ const styles = StyleSheet.create({
   eleveNom: { fontSize: Typography.sm, fontWeight: Typography.medium, color: Colors.gray900, flex: 1 },
   statutsRow: { flexDirection: 'row', gap: 6 },
   statutBtn: { width: 34, height: 34, borderRadius: 17, borderWidth: 1.5, borderColor: Colors.gray200, alignItems: 'center', justifyContent: 'center' },
-  empty: { textAlign: 'center', color: Colors.gray400, marginTop: Spacing.xl, fontSize: Typography.sm },
   footer: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', gap: 10,
     padding: Spacing.md, paddingBottom: Spacing.lg, backgroundColor: Colors.white,
     borderTopWidth: 1, borderTopColor: Colors.gray100 },

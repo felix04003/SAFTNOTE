@@ -13,6 +13,7 @@ import Badge, { VARIANT_PRESENCE, LABEL_PRESENCE, VARIANT_MENTION } from '../../
 import NoteBulle from '../../../src/components/ui/NoteBulle';
 import StatCard from '../../../src/components/ui/StatCard';
 import SyncStatus, { StatutSync } from '../../../src/components/ui/SyncStatus';
+import EmptyState from '../../../src/components/ui/EmptyState';
 
 export default function TableauBordParent() {
   const session  = useAuthStore(s => s.session);
@@ -127,9 +128,9 @@ export default function TableauBordParent() {
             {/* Stats rapides */}
             <View style={styles.statsRow}>
               <StatCard titre="Absences" valeur={nbAbsents} icone="warning-outline" couleur={nbAbsents > 3 ? Colors.danger : Colors.warning}
-                onPress={() => router.push({ pathname: '/(app)/parent/absences', params: { eleve_id: enfantActif } })} />
+                onPress={() => router.push({ pathname: '/(app)/parent/absences', params: { eleve_id: enfantActif } })} index={0} />
               <StatCard titre="Notes" valeur={notesRec.length} icone="document-text-outline" couleur={Colors.blue}
-                onPress={() => router.push({ pathname: '/(app)/parent/notes', params: { eleve_id: enfantActif } })} />
+                onPress={() => router.push({ pathname: '/(app)/parent/notes', params: { eleve_id: enfantActif } })} index={1} />
             </View>
 
             {/* Dernières absences */}
@@ -202,13 +203,12 @@ export default function TableauBordParent() {
             )}
 
             {absences.length === 0 && notesRec.length === 0 && (
-              <Carte>
-                <View style={styles.emptyState}>
-                  <Ionicons name="sync-outline" size={40} color={Colors.gray300} />
-                  <Text style={styles.emptyTxt}>Données en cours de chargement…</Text>
-                  <Text style={styles.emptySous}>Tirez vers le bas pour actualiser</Text>
-                </View>
-              </Carte>
+              <EmptyState
+                icone="sync-outline"
+                titre="Données en cours de chargement…"
+                sousTitre="Tirez vers le bas pour actualiser"
+                action={{ label: 'Actualiser', onPress: handleRefresh }}
+              />
             )}
           </>
         )}
@@ -258,7 +258,4 @@ const styles = StyleSheet.create({
   matiereRang:   { fontSize: Typography.xs, color: Colors.gray400 },
   matiereNote:   { paddingHorizontal: 12, paddingVertical: 4, borderRadius: Radius.full },
   matiereNoteTxt:{ fontSize: Typography.sm, fontWeight: Typography.bold },
-  emptyState:    { alignItems: 'center', gap: 8, padding: Spacing.lg },
-  emptyTxt:      { fontSize: Typography.sm, color: Colors.gray500, fontWeight: Typography.medium },
-  emptySous:     { fontSize: Typography.xs, color: Colors.gray400 },
 });
