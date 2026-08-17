@@ -25,13 +25,17 @@ export default function TableauBordEnseignant() {
   const { edt, chargerEdt }    = useEdtStore();
   const [jourActif, setJourActif] = useState<JourSemaine>((new Date().getDay() || 1) as JourSemaine);
   const [statutSync, setStatutSync] = useState<StatutSync>('ok');
+  const [absJour, setAbsJour] = useState<number[]>([0,0,0,0,0,0,0]);
 
   useEffect(() => { charger(); }, []);
 
   async function charger() {
     const db = getDB();
-    const [notesRows] = await Promise.all([
+    const [notesRows, absRows] = await Promise.all([
       db.getAllAsync("SELECT COUNT(*) as count FROM notes WHERE synced=0"),
+      db.getAllAsync(
+        "SELECT date_cours, COUNT(*) as nb FROM presences WHERE statut='absent' AND date_cours >= date('now','-6 days') GROUP BY date_cours ORDER BY date_cours"
+      ),
       chargerEdt(),
     ]);
     const nbEnAttente = (notesRows as any[])[0]?.count || 0;
@@ -39,6 +43,15 @@ export default function TableauBordEnseignant() {
     const nbClasses   = new Set(edtFrais.map((c: any) => c.classe_id).filter(Boolean)).size;
     setStats({ nb_classes: nbClasses, nb_evaluations: 0, notes_en_attente: nbEnAttente });
     setStatutSync(nbEnAttente > 0 ? 'en_attente' : 'ok');
+    // Sparkline : 7 jours glissants (index 0 = il y a 6 jours, 6 = aujourd'hui)
+    const map: Record<string, number> = {};
+    (absRows as any[]).forEach(r => { map[r.date_cours] = r.nb; });
+    const today = new Date();
+    const vals = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(today); d.setDate(today.getDate() - (6 - i));
+      return map[d.toISOString().slice(0, 10)] || 0;
+    });
+    setAbsJour(vals);
   }
 
   async function handleRefresh() {
@@ -83,6 +96,28 @@ export default function TableauBordEnseignant() {
           <StatCard titre="Classes" valeur={stats.nb_classes} icone="school-outline" couleur={Colors.primary} index={0} />
           <StatCard titre="À synchroniser" valeur={stats.notes_en_attente} icone="cloud-upload-outline" couleur={stats.notes_en_attente > 0 ? Colors.warning : Colors.success} onPress={stats.notes_en_attente > 0 ? handleRefresh : undefined} index={1} />
         </View>
+
+        {/* Sparkline absences 7 jours */}
+        {absJour.some(v => v > 0) && (
+          <Carte style={styles.sparklineCarte} padding={12}>
+            <Text style={styles.sparklineTitre}>Absences — 7 derniers jours</Text>
+            <View style={styles.sparklineRow}>
+              {absJour.map((v, i) => {
+                const max = Math.max(...absJour, 1);
+                const pct = v / max;
+                const isToday = i === 6;
+                return (
+                  <View key={i} style={styles.sparklineCol}>
+                    <View style={styles.sparklineBarBg}>
+                      <View style={[styles.sparklineBar, { height: `${Math.max(pct * 100, 4)}%`, backgroundColor: isToday ? Colors.danger : Colors.danger + '60' }]} />
+                    </View>
+                    <Text style={[styles.sparklineVal, isToday && { color: Colors.danger, fontWeight: Typography.bold }]}>{v > 0 ? v : ''}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </Carte>
+        )}
 
         {/* Actions rapides */}
         <Text style={styles.sectionTitre}>Actions rapides</Text>
@@ -161,6 +196,13 @@ const styles = StyleSheet.create({
   action: { width: '47%', borderRadius: Radius.md, borderWidth: 1.5, padding: Spacing.md, alignItems: 'center', gap: 8 },
   actionIcon: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
   actionLabel: { fontSize: Typography.sm, fontWeight: Typography.semibold, textAlign: 'center' },
+  sparklineCarte: { marginBottom: Spacing.md },
+  sparklineTitre: { fontSize: Typography.xs, fontWeight: Typography.semibold, color: Colors.gray500, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.4 },
+  sparklineRow:   { flexDirection: 'row', alignItems: 'flex-end', height: 48, gap: 4 },
+  sparklineCol:   { flex: 1, alignItems: 'center', height: '100%' },
+  sparklineBarBg: { flex: 1, width: '100%', justifyContent: 'flex-end' },
+  sparklineBar:   { width: '100%', borderRadius: 3, minHeight: 2 },
+  sparklineVal:   { fontSize: 9, color: Colors.gray400, marginTop: 3 },
   joursScroll:  { marginBottom: Spacing.sm },
   jourBtn:      { paddingHorizontal: 14, paddingVertical: 8, borderRadius: Radius.full, marginRight: 8, backgroundColor: Colors.white, borderWidth: 1.5, borderColor: Colors.gray200 },
   jourBtnActif: { backgroundColor: Colors.primary, borderColor: Colors.primary },
