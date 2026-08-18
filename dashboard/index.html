@@ -167,11 +167,10 @@
     <!-- ═══ PAGE EDT ═══ -->
     <div class="page" id="page-edt">
       <div class="ph">
-        <div><div class="ph-titre">Emploi du temps</div><div class="ph-sous">Semaine du 24 au 28 février 2025</div></div>
+        <div><div class="ph-titre">Emploi du temps</div><div class="ph-sous" id="ph-sous-edt">Sélectionnez une classe</div></div>
         <div style="display:flex;gap:9px;align-items:center">
-          <select class="fs" style="width:150px" id="sel-classe-edt"><option value="">Choisir classe…</option></select>
-          <button class="btn btn-l">← Préc.</button><button class="btn btn-l">Suiv. →</button>
-          <button class="btn btn-p">+ Ajouter cours</button>
+          <select class="fs" style="width:180px" id="sel-classe-edt"><option value="">Choisir classe…</option></select>
+          <button class="btn btn-p" id="btn-edt-ajouter" style="display:none" onclick="PageEDT.ouvrirModalCreneau()">+ Ajouter un créneau</button>
         </div>
       </div>
       <div class="carte"><div class="cb" style="padding:14px"><div id="edt-grid"></div></div></div>
@@ -684,6 +683,46 @@
     <div class="mf">
       <button class="btn btn-l" onclick="closeModal('m-coefficient')">Annuler</button>
       <button id="btn-assigner-coefficient" class="btn btn-p" onclick="PageParametres.assignerCoefficient()">Assigner</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL CRÉNEAU EDT -->
+<div class="mo" id="m-creneau">
+  <div class="modal" style="max-width:460px">
+    <div class="mh">
+      <span style="font-size:19px">🗓️</span>
+      <span class="mt" id="m-creneau-titre">Nouveau créneau</span>
+      <button class="mc" onclick="closeModal('m-creneau')">✕</button>
+    </div>
+    <div class="mb">
+      <input type="hidden" id="m-creneau-id">
+      <div class="fr">
+        <div class="fg"><label class="fl">Jour *</label>
+          <select id="m-creneau-jour" class="fs">
+            <option value="1">Lundi</option>
+            <option value="2">Mardi</option>
+            <option value="3">Mercredi</option>
+            <option value="4">Jeudi</option>
+            <option value="5">Vendredi</option>
+            <option value="6">Samedi</option>
+          </select>
+        </div>
+        <div class="fg"><label class="fl">Plage horaire *</label>
+          <select id="m-creneau-plage" class="fs"><option value="">Chargement…</option></select>
+        </div>
+      </div>
+      <div class="fg"><label class="fl">Matière / Enseignant *</label>
+        <select id="m-creneau-affectation" class="fs"><option value="">Chargement…</option></select>
+      </div>
+      <div class="fg"><label class="fl">Salle <span style="color:var(--g400)">(optionnel)</span></label>
+        <input id="m-creneau-salle" class="fi" placeholder="Salle 12">
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-d" id="btn-supprimer-creneau" style="display:none;margin-right:auto" onclick="PageEDT.supprimerCreneau()">🗑 Supprimer</button>
+      <button class="btn btn-l" onclick="closeModal('m-creneau')">Annuler</button>
+      <button id="btn-creneau-save" class="btn btn-p" onclick="PageEDT.sauvegarderCreneau()">Créer</button>
     </div>
   </div>
 </div>
