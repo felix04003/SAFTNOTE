@@ -131,6 +131,9 @@ export const enseignantApi = {
   ouvrirAppel: (data: { emploi_du_temps_id: string; date_cours: string }) =>
     api.post('/appels', data),
 
+  getCoursAppel: (emploiDuTempsId: string, dateCours: string) =>
+    api.get(`/appels/cours?emploi_du_temps_id=${emploiDuTempsId}&date_cours=${dateCours}`),
+
   saisirPresences: (appelId: string, presences: any[], cloturer = true) =>
     api.put(`/appels/${appelId}/presences`, { presences, cloturer }),
 };

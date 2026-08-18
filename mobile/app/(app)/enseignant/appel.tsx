@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
-import { getDB, sauvegarderPresenceLocale, ajouterOperationPendante } from '../../../src/services/storage/database';
+import { getDB, sauvegarderPresenceLocale, ajouterOperationPendante, populerPresencesLocales } from '../../../src/services/storage/database';
 import { enseignantApi } from '../../../src/services/api/client';
 import { syncService } from '../../../src/services/sync/syncService';
 import { Colors, Typography, Spacing, Radius, Shadow } from '../../../src/utils/theme';
@@ -68,6 +68,17 @@ export default function AppelScreen() {
         }
       }
       setAppelId(appId);
+
+      // Peupler les présences locales depuis le serveur (effectif réel de la
+      // classe) — rien ne les pousse via la sync périodique. Best-effort :
+      // si hors ligne, on retombe sur ce qui est déjà en local.
+      try {
+        const cours: any = await enseignantApi.getCoursAppel(cours_id, dateAujourd);
+        if (cours?.eleves?.length) {
+          await populerPresencesLocales(appId, cours.eleves);
+        }
+      } catch { /* hors ligne — on utilise le cache local existant */ }
+
       // Charger les présences depuis SQLite
       const rows: any[] = await db.getAllAsync(
         'SELECT * FROM presences WHERE appel_id=? ORDER BY eleve_nom, eleve_prenom', [appId]

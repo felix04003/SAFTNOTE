@@ -236,6 +236,23 @@ export async function sauvegarderNoteLocale(note: {
   );
 }
 
+// Peuple les présences locales à l'ouverture d'un appel (GET /appels/cours
+// renvoie l'effectif réel de la classe — la table locale est vide avant ça,
+// aucune sync ne pousse les présences).
+export async function populerPresencesLocales(appelId: string, eleves: {
+  inscription_id: string; eleve_id: string; nom: string; prenom: string;
+  statut: string; minutes_retard: number;
+}[]): Promise<void> {
+  const db = getDB();
+  for (const e of eleves) {
+    await db.runAsync(
+      `INSERT OR IGNORE INTO presences (id, appel_id, inscription_id, eleve_id, eleve_nom, eleve_prenom, statut, minutes_retard, synced)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+      [`${appelId}_${e.inscription_id}`, appelId, e.inscription_id, e.eleve_id, e.nom, e.prenom, e.statut, e.minutes_retard]
+    );
+  }
+}
+
 export async function sauvegarderPresenceLocale(p: {
   id: string; appel_id: string; inscription_id: string; eleve_id: string;
   eleve_nom: string; eleve_prenom: string;
