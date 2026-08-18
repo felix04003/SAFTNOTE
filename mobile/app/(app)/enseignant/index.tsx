@@ -126,7 +126,7 @@ export default function TableauBordEnseignant() {
             { icon: 'checkmark-circle-outline', label: 'Faire l\'appel', couleur: Colors.accent, route: '/(app)/enseignant/appel' },
             { icon: 'create-outline',           label: 'Saisir notes',   couleur: Colors.blue,   route: '/(app)/enseignant/notes-saisie' },
             { icon: 'bar-chart-outline',        label: 'Moyennes',       couleur: Colors.primary, route: '/(app)/enseignant/moyennes' },
-            { icon: 'document-text-outline',    label: 'Bulletins',      couleur: Colors.success, route: '/(app)/enseignant/bulletins' },
+            { icon: 'people-outline',            label: 'Classes',        couleur: Colors.success, route: '/(app)/enseignant/classes' },
           ].map(a => (
             <TouchableOpacity key={a.label} style={[styles.action, { borderColor: a.couleur + '30', backgroundColor: a.couleur + '0C' }]}
               onPress={() => router.push(a.route as any)} activeOpacity={0.8}>

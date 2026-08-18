@@ -9,7 +9,7 @@ const TABS = [
   { name: 'notes-saisie', titre: 'Notes',   icone: 'create'           },
   { name: 'evaluations',  titre: 'Évals',   icone: 'bar-chart'        },
 ];
-const HIDDEN = ['classes', 'moyennes', 'bulletins'];
+const HIDDEN = ['classes', 'moyennes'];
 
 export default function EnseignantLayout() {
   return (
@@ -41,7 +41,6 @@ export default function EnseignantLayout() {
     >
       <Tabs.Screen name="classes"   options={{ href: null }} />
       <Tabs.Screen name="moyennes"  options={{ href: null }} />
-      <Tabs.Screen name="bulletins" options={{ href: null }} />
     </Tabs>
   );
 }
