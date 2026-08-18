@@ -80,9 +80,11 @@ router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) =>
           .join('affectations_enseignants as ae', 'ae.id', 'edt.affectation_id')
           .join('plages_horaires as ph', 'ph.id', 'edt.plage_id')
           .join('matieres as m', 'm.id', 'ae.matiere_id')
+          .join('classes as c', 'c.id', 'ae.classe_id')
+          .join('niveaux as n', 'n.id', 'c.niveau_id')
           .where({ 'ae.enseignant_id': enseignantId })
           .where('edt.updated_at', '>', syncDepuis)
-          .select('edt.id', 'edt.jour_semaine', 'edt.salle', 'ph.heure_debut', 'ph.heure_fin', 'm.nom as matiere', 'ae.classe_id'),
+          .select('edt.id', 'edt.jour_semaine', 'edt.salle', 'ph.heure_debut', 'ph.heure_fin', 'm.nom as matiere', 'ae.classe_id', db.raw("CONCAT(n.nom, ' ', c.nom) as classe")),
       ]);
 
       payload = { classes, eleves, evaluations, notes, edt };
