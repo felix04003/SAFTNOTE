@@ -276,6 +276,19 @@
               </div>
             </div>
           </div>
+          <!-- Coefficients -->
+          <div class="carte" style="margin-top:18px">
+            <div class="ch">
+              <span>⚖️</span>
+              <span class="ct">Coefficients</span>
+              <button class="btn btn-p btn-sm" onclick="PageParametres.ouvrirModalCoefficient()" style="margin-left:auto">+ Assigner un coefficient</button>
+            </div>
+            <div class="cb">
+              <div id="param-coefficients-liste" style="min-height:40px">
+                <div style="color:var(--g400);font-size:13px;padding:10px">Chargement…</div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -640,6 +653,37 @@
     <div class="mf">
       <button class="btn btn-l" onclick="closeModal('m-matiere')">Annuler</button>
       <button id="btn-creer-matiere" class="btn btn-p" onclick="PageParametres.creerMatiere()">Créer la matière</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL ASSIGNER UN COEFFICIENT -->
+<div class="mo" id="m-coefficient">
+  <div class="modal" style="max-width:460px">
+    <div class="mh">
+      <span style="font-size:19px">⚖️</span>
+      <span class="mt">Assigner un coefficient</span>
+      <button class="mc" onclick="closeModal('m-coefficient')">✕</button>
+    </div>
+    <div class="mb">
+      <div class="fg"><label class="fl">Niveau *</label>
+        <select id="m-coef-niveau" class="fs"><option value="">Chargement des niveaux…</option></select>
+      </div>
+      <div class="fg"><label class="fl">Matière *</label>
+        <select id="m-coef-matiere" class="fs"><option value="">Chargement des matières…</option></select>
+      </div>
+      <div class="fr">
+        <div class="fg"><label class="fl">Coefficient *</label><input id="m-coef-coefficient" class="fi" type="number" min="0.5" max="10" step="0.5" value="1"></div>
+        <div class="fg">
+          <label class="fl">Obligatoire</label>
+          <select id="m-coef-obligatoire" class="fs"><option value="true">Oui</option><option value="false">Non</option></select>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--g400);margin-top:2px">Séries (filières) non gérées dans cet écran — coefficient appliqué au niveau seul.</div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-l" onclick="closeModal('m-coefficient')">Annuler</button>
+      <button id="btn-assigner-coefficient" class="btn btn-p" onclick="PageParametres.assignerCoefficient()">Assigner</button>
     </div>
   </div>
 </div>

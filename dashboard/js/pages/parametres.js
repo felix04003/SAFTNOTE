@@ -12,6 +12,7 @@ var PageParametres = {
       console.warn('PageParametres: fallback statique —', e.message);
     }
     await this.chargerMatieres();
+    await this.chargerCoefficients();
   },
 
   remplirFormulaire: function(etab) {
@@ -70,6 +71,7 @@ var PageParametres = {
     try {
       var res = await Api.get('/configs/matieres');
       var matieres = res.data || [];
+      this.matieresCache = matieres;
 
       // Extraire les disciplines uniques pour le select du modal m-matiere
       var discSel = document.getElementById('m-mat-discipline');
@@ -136,6 +138,96 @@ var PageParametres = {
       toast('Erreur : ' + (e.message || 'Création échouée'), 'd');
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = 'Créer la matière'; }
+    }
+  },
+
+  // ── Coefficients ────────────────────────────────────────────────
+
+  async chargerCoefficients() {
+    var liste = document.getElementById('param-coefficients-liste');
+    if (!liste) return;
+    liste.innerHTML = '<div style="color:var(--g400);font-size:13px;padding:10px">Chargement…</div>';
+    try {
+      var res = await Api.get('/configs/coefficients');
+      var niveaux = (res.data && res.data.niveaux) || [];
+      this.niveauxCoefCache = niveaux;
+
+      if (!niveaux.length) {
+        liste.innerHTML = '<div style="color:var(--g400);font-size:13px;padding:10px">Aucun coefficient configuré — cliquez sur « + Assigner un coefficient » pour commencer.</div>';
+        return;
+      }
+      liste.innerHTML = niveaux.map(function(n) {
+        var lignes = n.matieres.map(function(m) {
+          return '<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0 5px 14px;font-size:12.5px">' +
+            '<span>' + escapeHtml(m.matiere) + (m.serie ? ' <span style="color:var(--g400)">(' + escapeHtml(m.serie) + ')</span>' : '') + '</span>' +
+            '<span class="badge bo" style="font-size:10px">coef. ' + escapeHtml(String(m.coefficient)) + '</span>' +
+          '</div>';
+        }).join('');
+        return '<div style="padding:6px 0;border-bottom:1px solid var(--g100)">' +
+          '<div style="font-size:12px;font-weight:700;color:var(--g500)">' + escapeHtml(n.niveau) + '</div>' +
+          lignes +
+        '</div>';
+      }).join('');
+    } catch (e) {
+      liste.innerHTML = '<div style="color:var(--rouge);font-size:13px;padding:10px">Impossible de charger les coefficients</div>';
+    }
+  },
+
+  async ouvrirModalCoefficient() {
+    var niveauSel  = document.getElementById('m-coef-niveau');
+    var matiereSel = document.getElementById('m-coef-matiere');
+
+    if (matiereSel) {
+      var matieres = this.matieresCache || [];
+      matiereSel.innerHTML = matieres.length
+        ? matieres.map(function(m) { return '<option value="' + escapeHtml(m.id) + '">' + escapeHtml(m.nom) + '</option>'; }).join('')
+        : '<option value="">Aucune matière — créez-en une d\'abord</option>';
+    }
+
+    if (niveauSel) {
+      niveauSel.innerHTML = '<option value="">Chargement des niveaux…</option>';
+      try {
+        var res = await Api.get('/niveaux');
+        var niveaux = res.data || [];
+        this.niveauxCache = niveaux;
+        niveauSel.innerHTML = niveaux.length
+          ? niveaux.map(function(n) { return '<option value="' + escapeHtml(n.id) + '">' + escapeHtml(n.nom) + '</option>'; }).join('')
+          : '<option value="">Aucun niveau configuré</option>';
+      } catch (e) {
+        niveauSel.innerHTML = '<option value="">Erreur de chargement</option>';
+      }
+    }
+
+    openModal('m-coefficient');
+  },
+
+  async assignerCoefficient() {
+    var niveauId      = document.getElementById('m-coef-niveau')?.value;
+    var matiereId     = document.getElementById('m-coef-matiere')?.value;
+    var coefficient   = parseFloat(document.getElementById('m-coef-coefficient')?.value);
+    var estObligatoire = document.getElementById('m-coef-obligatoire')?.value === 'true';
+
+    if (!niveauId)  return toast('Le niveau est obligatoire', 'w');
+    if (!matiereId) return toast('La matière est obligatoire', 'w');
+    if (!coefficient || coefficient < 0.5 || coefficient > 10) return toast('Coefficient invalide (0.5 à 10)', 'w');
+
+    var btn = document.getElementById('btn-assigner-coefficient');
+    if (btn) { btn.disabled = true; btn.textContent = 'Assignation…'; }
+
+    try {
+      await Api.post('/configs/coefficients', {
+        matiere_id: matiereId,
+        niveau_id: niveauId,
+        coefficient: coefficient,
+        est_obligatoire: estObligatoire,
+      });
+      closeModal('m-coefficient');
+      toast('Coefficient assigné ✓', 's');
+      await this.chargerCoefficients();
+    } catch (e) {
+      toast('Erreur : ' + (e.message || 'Assignation échouée'), 'd');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Assigner'; }
     }
   },
 
