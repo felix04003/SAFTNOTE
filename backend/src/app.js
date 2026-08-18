@@ -31,6 +31,7 @@ const syncRouter           = require('./domains/sync.routes');
 const notificationsRouter  = require('./domains/notifications.routes');
 const rgpdRouter           = require('./domains/02-acteurs/auth/rgpd.routes');
 const { initPurgeWorker, stopPurgeWorker } = require('./workers/purge.worker');
+const { initQueues } = require('./infrastructure/queue/bullmq');
 
 // ── App ──────────────────────────────────────────────────────────
 const app = express();
@@ -247,6 +248,8 @@ async function start() {
       logger.info('✓ Redis connecté');
       initPurgeWorker();
       logger.info('✓ Worker de purge initialisé');
+      initQueues();
+      logger.info('✓ Files d\'attente (notifications, moyennes, bulletins) initialisées');
     } else {
       logger.warn('⚠ Redis non configuré — cache, queues et purge désactivés');
     }
