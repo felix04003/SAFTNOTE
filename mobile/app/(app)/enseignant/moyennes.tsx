@@ -152,7 +152,7 @@ const styles = StyleSheet.create({
   resumeBar:     { flexDirection: 'row', paddingHorizontal: Spacing.md, paddingBottom: Spacing.sm, gap: 6 },
   resumeItem:    { flex: 1, borderRadius: Radius.sm, paddingVertical: 8, alignItems: 'center' },
   resumeNum:     { fontSize: Typography.lg, fontWeight: Typography.bold },
-  resumeLbl:     { fontSize: Typography.xs - 1, color: Colors.gray500, marginTop: 1, textAlign: 'center' },
+  resumeLbl:     { fontSize: Typography.xs, color: Colors.gray500, marginTop: 1, textAlign: 'center' },
   liste:         { paddingHorizontal: Spacing.md, paddingBottom: 40 },
   ligne:         { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.white, borderRadius: Radius.md, paddingVertical: 12, paddingHorizontal: Spacing.md, marginBottom: 6, gap: 12 },
   premiereLigne: { borderWidth: 1.5, borderColor: Colors.primary + '30' },

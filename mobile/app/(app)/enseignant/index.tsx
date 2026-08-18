@@ -202,7 +202,7 @@ const styles = StyleSheet.create({
   sparklineCol:   { flex: 1, alignItems: 'center', height: '100%' },
   sparklineBarBg: { flex: 1, width: '100%', justifyContent: 'flex-end' },
   sparklineBar:   { width: '100%', borderRadius: 3, minHeight: 2 },
-  sparklineVal:   { fontSize: 9, color: Colors.gray400, marginTop: 3 },
+  sparklineVal:   { fontSize: Typography.xs, color: Colors.gray400, marginTop: 3 },
   joursScroll:  { marginBottom: Spacing.sm },
   jourBtn:      { paddingHorizontal: 14, paddingVertical: 8, borderRadius: Radius.full, marginRight: 8, backgroundColor: Colors.white, borderWidth: 1.5, borderColor: Colors.gray200 },
   jourBtnActif: { backgroundColor: Colors.primary, borderColor: Colors.primary },

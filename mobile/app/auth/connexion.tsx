@@ -209,5 +209,5 @@ const styles = StyleSheet.create({
   successText: { fontSize: Typography.sm, color: Colors.success, fontWeight: Typography.medium },
   erreurContainer: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: Colors.dangerLight, borderRadius: Radius.sm, padding: Spacing.sm, marginTop: Spacing.sm },
   erreurText: { fontSize: Typography.sm, color: Colors.danger, flex: 1 },
-  footer: { textAlign: 'center', fontSize: 10, color: Colors.white + '66', marginTop: Spacing.sm },
+  footer: { textAlign: 'center', fontSize: Typography.xs, color: Colors.white + '66', marginTop: Spacing.sm },
 });

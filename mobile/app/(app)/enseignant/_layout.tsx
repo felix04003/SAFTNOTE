@@ -1,7 +1,7 @@
 // app/(app)/enseignant/_layout.tsx
 import { Tabs }     from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors }   from '../../../src/utils/theme';
+import { Colors, Typography } from '../../../src/utils/theme';
 
 const TABS = [
   { name: 'index',        titre: 'Accueil', icone: 'home'             },
@@ -30,7 +30,7 @@ export default function EnseignantLayout() {
             paddingTop:      6,
             height:          60,
           },
-          tabBarLabelStyle: { fontSize: 10, fontWeight: '600' as const },
+          tabBarLabelStyle: { fontSize: Typography.xs, fontWeight: '600' as const },
           tabBarIcon: ({ color, size, focused }) => {
             const icone = (tab?.icone || 'home') + (focused ? '' : '-outline');
             return <Ionicons name={icone as any} size={size} color={color} />;

@@ -79,7 +79,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
   sous: {
-    fontSize: Typography.xs - 1,
+    fontSize: Typography.xs,
     color: Colors.accent,
     marginTop: 2,
   },

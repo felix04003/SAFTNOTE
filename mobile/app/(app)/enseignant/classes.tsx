@@ -241,7 +241,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 8, alignItems: 'center',
   },
   moyNum:     { fontSize: Typography.lg, fontWeight: Typography.bold },
-  moyLabel:   { fontSize: Typography.xs - 1, color: Colors.gray400 },
+  moyLabel:   { fontSize: Typography.xs, color: Colors.gray400 },
   classeStats:{
     flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap',
     paddingHorizontal: Spacing.md, paddingVertical: 10, gap: 12,
