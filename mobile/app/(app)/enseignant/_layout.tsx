@@ -38,6 +38,10 @@ export default function EnseignantLayout() {
           tabBarLabel: tab?.titre || '',
         };
       }}
-    />
+    >
+      <Tabs.Screen name="classes"   options={{ href: null }} />
+      <Tabs.Screen name="moyennes"  options={{ href: null }} />
+      <Tabs.Screen name="bulletins" options={{ href: null }} />
+    </Tabs>
   );
 }
