@@ -245,12 +245,11 @@ async function start() {
     if (process.env.REDIS_URL || process.env.REDIS_HOST) {
       await connectRedis();
       logger.info('✓ Redis connecté');
+      initPurgeWorker();
+      logger.info('✓ Worker de purge initialisé');
     } else {
-      logger.warn('⚠ Redis non configuré — cache et queues désactivés');
+      logger.warn('⚠ Redis non configuré — cache, queues et purge désactivés');
     }
-
-    initPurgeWorker();
-    logger.info('✓ Worker de purge initialisé');
 
     const PORT = parseInt(process.env.PORT) || 3000;
     app.listen(PORT, () => {
