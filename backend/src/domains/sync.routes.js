@@ -180,8 +180,29 @@ router.post('/sync/operations', authentifier, isolerEtablissement,
 
           case 'notes.saisir': {
             const { evaluation_id, eleve_id, inscription_id, valeur, est_absent, absence_justifiee } = op.payload;
+
+            // notes.eleve_id référence eleves.id, mais le payload mobile suit
+            // la même convention que le reste de l'API (utilisateurs.id — voir
+            // GET /sync ci-dessus, section "eleves" pour l'enseignant, qui
+            // renvoie u.id). Sans résolution, violation de la contrainte FK
+            // notes_eleve_id_fkey sur CHAQUE note saisie hors-ligne pour un
+            // élève pas déjà présent dans la table notes (reproduit en
+            // direct : "insert or update on table notes violates foreign
+            // key constraint notes_eleve_id_fkey"). On accepte les deux
+            // formats pour ne pas casser un éventuel appel qui enverrait
+            // déjà eleves.id (ex: re-sync d'une note déjà reçue via GET /sync).
+            const eleveRow = await db('eleves')
+              .where({ utilisateur_id: eleve_id })
+              .orWhere({ id: eleve_id })
+              .first('id');
+
+            if (!eleveRow) {
+              resultats.push({ op_id: op.id, statut: 'erreur', code: 'ELEVE_INTROUVABLE' });
+              break;
+            }
+
             await db('notes')
-              .insert({ id: uuid(), evaluation_id, eleve_id, inscription_id, valeur, est_absent, absence_justifiee, saisie_par: req.session.utilisateur_id })
+              .insert({ id: uuid(), evaluation_id, eleve_id: eleveRow.id, inscription_id, valeur, est_absent, absence_justifiee, saisie_par: req.session.utilisateur_id })
               .onConflict(['evaluation_id', 'eleve_id'])
               .merge(['valeur', 'est_absent', 'absence_justifiee', 'saisie_par', 'saisie_at']);
             resultats.push({ op_id: op.id, statut: 'ok' });
@@ -196,9 +217,14 @@ router.post('/sync/operations', authentifier, isolerEtablissement,
               resultats.push({ op_id: op.id, statut: 'erreur', code: 'APPEL_CLOTURE' });
               break;
             }
+            // presences n'a pas de colonne updated_at — modifie_at (voir
+            // migration 011 / GET /sync ci-dessus qui utilise déjà
+            // COALESCE(modifie_at, saisie_at)). Reproduit en direct :
+            // "column \"updated_at\" of relation \"presences\" does not
+            // exist" sur CHAQUE presences.saisir envoyée par le mobile.
             await db('presences')
               .where({ appel_id, inscription_id })
-              .update({ statut, minutes_retard: minutes_retard || 0, updated_at: db.raw('NOW()') });
+              .update({ statut, minutes_retard: minutes_retard || 0, modifie_at: db.raw('NOW()') });
             resultats.push({ op_id: op.id, statut: 'ok' });
             break;
           }
