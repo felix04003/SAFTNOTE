@@ -174,16 +174,21 @@ router.put('/evaluations/:evaluation_id/notes', auth, isoler, perm('notes.saisir
           'a.etablissement_id':     req.etablissement_id,
           'ev.notes_publiees':      false, // Interdit de modifier des notes publiées sans permission
         })
-        .first('ev.id', 'ae.matiere_id', 'ae.classe_id');
+        .first('ev.id', 'ev.affectation_id', 'ae.matiere_id', 'ae.classe_id');
 
       if (!evaluation) {
         throw ApiError.nonTrouve('Évaluation introuvable ou notes déjà publiées');
       }
 
       // Un enseignant ne peut saisir que sur ses propres affectations
+      // (affectations_enseignants.enseignant_id référence enseignants.id, PAS
+      //  utilisateurs.id — il faut passer par enseignants.utilisateur_id pour
+      //  comparer à req.session.utilisateur_id, et comparer l'affectation à
+      //  evaluation.affectation_id, pas à evaluation.id).
       if (req.session.roles.includes('enseignant') && !req.session.roles.includes('directeur')) {
-        const affectation = await db('affectations_enseignants')
-          .where({ id: evaluation.id, enseignant_id: req.session.utilisateur_id })
+        const affectation = await db('affectations_enseignants as ae')
+          .join('enseignants as ens', 'ens.id', 'ae.enseignant_id')
+          .where({ 'ae.id': evaluation.affectation_id, 'ens.utilisateur_id': req.session.utilisateur_id })
           .first();
         if (!affectation) throw ApiError.interdit('Cette évaluation ne vous appartient pas');
       }
@@ -197,7 +202,7 @@ router.put('/evaluations/:evaluation_id/notes', auth, isoler, perm('notes.saisir
           valeur:            n.est_absent && !n.absence_justifiee ? 0 : (n.valeur ?? null),
           est_absent:        n.est_absent,
           absence_justifiee: n.absence_justifiee,
-          appreciation:      n.appreciation,
+          appreciation:      n.appreciation ?? null,
           saisie_par:        req.session.utilisateur_id,
         }));
 
