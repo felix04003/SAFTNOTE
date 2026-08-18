@@ -123,7 +123,7 @@ router.put('/configs/coefficients', auth, isoler, perm('config.coefficients'),
 
       logger.info('Coefficients modifiés', { nb: req.body.modifications.length, par: req.session.utilisateur_id });
 
-      try { await invalidatePattern(`coefficients:${req.etablissement_id}`); } catch { /* Redis down */ }
+      try { await invalidatePattern(`coefficients:${req.etablissement_id}:*`); } catch { /* Redis down */ }
 
       return ok(res, { message: `${req.body.modifications.length} coefficients modifiés` });
     } catch (err) { next(err); }
@@ -193,7 +193,7 @@ router.post('/configs/coefficients', auth, isoler, perm('config.coefficients'),
         .returning('*');
 
       logger.info('Configuration coefficient créée', { id: config.id, matiere_id, niveau_id, serie_id: serie_id || null });
-      try { await invalidatePattern(`coefficients:${req.etablissement_id}`); } catch { /* Redis down */ }
+      try { await invalidatePattern(`coefficients:${req.etablissement_id}:*`); } catch { /* Redis down */ }
 
       return cree(res, config);
     } catch (err) { next(err); }
