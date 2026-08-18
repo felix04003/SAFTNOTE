@@ -96,6 +96,53 @@ describe('Configs Routes', () => {
     });
   });
 
+  // ── POST /configs/coefficients ──────────────────────────────────
+  describe('POST /configs/coefficients', () => {
+    const NIVEAU_ID = 'aaaaaaaa-1111-1111-1111-111111111111';
+
+    test('crée une configuration coefficient pour une matière/niveau', async () => {
+      db.mockReturnValueOnce(mockQuery({ id: IDS.annee }));                 // année courante
+      db.mockReturnValueOnce(mockQuery({ id: IDS.matiere }));               // matière trouvée
+      db.mockReturnValueOnce(mockQuery({ id: NIVEAU_ID }));                 // niveau trouvé
+      db.mockReturnValueOnce(mockQuery(null));                              // pas de doublon
+      db.mockReturnValueOnce(mockQuery([{ id: 'config-1', matiere_id: IDS.matiere, niveau_id: NIVEAU_ID, coefficient: '3.00' }])); // insert returning
+
+      const res = await request(app)
+        .post('/configs/coefficients')
+        .send({ matiere_id: IDS.matiere, niveau_id: NIVEAU_ID, coefficient: 3 })
+        .expect(201);
+
+      expect(res.body.succes).toBe(true);
+      expect(res.body.data.id).toBe('config-1');
+    });
+
+    test('retourne 404 si la matière n\'appartient pas à l\'établissement', async () => {
+      db.mockReturnValueOnce(mockQuery({ id: IDS.annee }));                 // année courante
+      db.mockReturnValueOnce(mockQuery(null));                              // matière introuvable
+
+      const res = await request(app)
+        .post('/configs/coefficients')
+        .send({ matiere_id: IDS.matiere, niveau_id: NIVEAU_ID })
+        .expect(404);
+
+      expect(res.body.code).toBe('RESSOURCE_INTROUVABLE');
+    });
+
+    test('retourne 422 si une configuration existe déjà (matière/niveau/série)', async () => {
+      db.mockReturnValueOnce(mockQuery({ id: IDS.annee }));                 // année courante
+      db.mockReturnValueOnce(mockQuery({ id: IDS.matiere }));               // matière trouvée
+      db.mockReturnValueOnce(mockQuery({ id: NIVEAU_ID }));                 // niveau trouvé
+      db.mockReturnValueOnce(mockQuery({ id: 'existing-config' }));         // doublon détecté
+
+      const res = await request(app)
+        .post('/configs/coefficients')
+        .send({ matiere_id: IDS.matiere, niveau_id: NIVEAU_ID })
+        .expect(422);
+
+      expect(res.body.code).toBe('VALIDATION_ECHOUEE');
+    });
+  });
+
   // ── GET /configs/matieres ───────────────────────────────────────
   describe('GET /configs/matieres', () => {
     test('retourne la liste des matières de l\'établissement', async () => {

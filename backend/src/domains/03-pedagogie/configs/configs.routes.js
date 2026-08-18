@@ -131,6 +131,76 @@ router.put('/configs/coefficients', auth, isoler, perm('config.coefficients'),
 );
 
 // ═════════════════════════════════════════════════════════════════
+// POST /configs/coefficients — Créer une configuration coefficient
+// (matière x niveau x série optionnelle) pour l'année courante
+// ═════════════════════════════════════════════════════════════════
+router.post('/configs/coefficients', auth, isoler, perm('config.coefficients'),
+  valider(z.object({
+    matiere_id:          z.string().uuid(),
+    niveau_id:           z.string().uuid(),
+    serie_id:            z.string().uuid().nullable().optional(),
+    coefficient:         z.number().min(0.5).max(10).default(1),
+    est_eliminatoire:    z.boolean().default(false),
+    seuil_eliminatoire:  z.number().min(0).max(20).nullable().optional(),
+    nb_devoirs_periode:  z.number().int().min(1).max(5).nullable().optional(),
+    nb_compos_periode:   z.number().int().min(0).max(3).nullable().optional(),
+    est_obligatoire:     z.boolean().default(true),
+  })),
+  async (req, res, next) => {
+    try {
+      const db = getDB();
+      const { matiere_id, niveau_id, serie_id, ...champs } = req.body;
+
+      const annee = await db('annees_scolaires')
+        .where({ etablissement_id: req.etablissement_id, est_courante: true })
+        .first('id');
+      if (!annee) throw ApiError.nonTrouve('Aucune année scolaire courante');
+
+      const matiere = await db('matieres')
+        .where({ id: matiere_id, etablissement_id: req.etablissement_id })
+        .first('id');
+      if (!matiere) throw ApiError.nonTrouve('Matière introuvable');
+
+      const niveau = await db('niveaux')
+        .where({ id: niveau_id, etablissement_id: req.etablissement_id })
+        .first('id');
+      if (!niveau) throw ApiError.nonTrouve('Niveau introuvable');
+
+      // NB : contrairement à l'hypothèse initiale du plan, `series` porte
+      // bien une colonne etablissement_id (vérifié via \d series) — la
+      // vérification d'appartenance est donc possible et appliquée ici.
+      if (serie_id) {
+        const serie = await db('series')
+          .where({ id: serie_id, etablissement_id: req.etablissement_id })
+          .first('id');
+        if (!serie) throw ApiError.nonTrouve('Série introuvable');
+      }
+
+      // Contrainte UNIQUE (niveau_id, matiere_id, serie_id, annee_scolaire_id)
+      // ne bloque pas les doublons quand serie_id est NULL (deux NULL ne sont
+      // pas égaux pour Postgres) — vérification applicative explicite.
+      const existant = await db('configs_matieres_niveau')
+        .where({ niveau_id, matiere_id, annee_scolaire_id: annee.id })
+        .whereRaw('serie_id IS NOT DISTINCT FROM ?', [serie_id || null])
+        .first('id');
+      if (existant) throw ApiError.validationEchouee('Une configuration existe déjà pour cette matière/niveau/série');
+
+      const [config] = await db('configs_matieres_niveau')
+        .insert({
+          id: uuid(), niveau_id, matiere_id, serie_id: serie_id || null,
+          annee_scolaire_id: annee.id, ...champs,
+        })
+        .returning('*');
+
+      logger.info('Configuration coefficient créée', { id: config.id, matiere_id, niveau_id, serie_id: serie_id || null });
+      try { await invalidatePattern(`coefficients:${req.etablissement_id}`); } catch { /* Redis down */ }
+
+      return cree(res, config);
+    } catch (err) { next(err); }
+  }
+);
+
+// ═════════════════════════════════════════════════════════════════
 // GET /configs/matieres — Liste des matières de l'établissement
 // ═════════════════════════════════════════════════════════════════
 async function fetchMatieres(db, etablissementId, actifSeulement) {
