@@ -54,7 +54,11 @@ var Auth = {
     var greetEl = document.getElementById('greeting-name');
 
     if (nameEl) nameEl.textContent = (user.prenom || '') + ' ' + (user.nom || '');
-    if (roleEl) roleEl.textContent = user.role || 'Utilisateur';
+    var ROLE_LABELS = {
+      enseignant: 'Enseignant(e)', parent: 'Parent', directeur: 'Directeur / Directrice',
+      censeur: 'Censeur / Censeure', admin: 'Administrateur(trice)', super_admin: 'Super Administrateur'
+    };
+    if (roleEl) roleEl.textContent = ROLE_LABELS[user.role] || user.role || 'Utilisateur';
     if (avatarEl) avatarEl.textContent = init2((user.prenom || 'U') + ' ' + (user.nom || ''));
     if (etabEl) etabEl.textContent = user.etablissement_nom || 'EcoleManager';
     if (greetEl) greetEl.textContent = 'Bonjour, ' + (user.prenom || 'Utilisateur') + ' \uD83D\uDC4B';

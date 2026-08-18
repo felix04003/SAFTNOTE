@@ -165,7 +165,7 @@ router.post('/auth/connexion', limiterAuth, valider(schemaConnexion), async (req
         nom:             utilisateur.nom,
         prenom:          utilisateur.prenom,
         email:           utilisateur.email,
-        role:            roleRow?.libelle || roleRow?.code || 'Utilisateur',
+        role:            roleRow?.code || 'utilisateur',
         etablissement_id: etablissement.id,
         etablissement_nom: etablissement.nom,
       },
