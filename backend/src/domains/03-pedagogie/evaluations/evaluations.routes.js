@@ -8,6 +8,7 @@ const { getDB }          = require('../../../infrastructure/database/pool');
 const { authentifier }   = require('../../../middleware/auth.middleware');
 const { exigerPermission, isolerEtablissement } = require('../../../middleware/permission.middleware');
 const { valider }        = require('../../../middleware/validate.middleware');
+const { autoriserAccesEleve } = require('../../../middleware/acces-eleve.middleware');
 const { ok, cree, liste } = require('../../../utils/reponse');
 const ApiError           = require('../../../utils/ApiError');
 const logger             = require('../../../utils/logger');
@@ -275,19 +276,27 @@ router.put('/evaluations/:evaluation_id/publier', auth, isoler, perm('notes.publ
 });
 
 // ── GET /eleves/:eleve_id/notes ──────────────────────────────────
-router.get('/eleves/:eleve_id/notes', auth, isoler, perm('notes.voir_classe'), async (req, res, next) => {
+// notes.voir_eleve (pas notes.voir_classe, réservée à la liste de
+// classe d'un enseignant) — consultation du dossier d'UN élève,
+// utilisée par le parent depuis mobile et par le staff d'établissement.
+// :eleve_id suit la convention de ce domaine (eleves.routes.js) :
+// c'est utilisateurs.id, pas eleves.id — d'où le join eleves+utilisateurs
+// pour résoudre vers notes.eleve_id (qui référence bien eleves.id).
+router.get('/eleves/:eleve_id/notes', auth, isoler, autoriserAccesEleve('notes.voir_eleve'), async (req, res, next) => {
   try {
     const db = getDB();
     const { periode_id, matiere_id, depuis } = req.query;
 
     let query = db('notes as n')
+      .join('eleves as el',                    'el.id', 'n.eleve_id')
       .join('evaluations as ev',              'ev.id', 'n.evaluation_id')
       .join('affectations_enseignants as ae',  'ae.id', 'ev.affectation_id')
       .join('matieres as m',                   'm.id', 'ae.matiere_id')
+      .leftJoin('disciplines_matieres as dm',  'dm.id', 'm.discipline_id')
       .join('periodes as p',                   'p.id', 'ev.periode_id')
       .join('annees_scolaires as a',           'a.id', 'p.annee_scolaire_id')
       .where({
-        'n.eleve_id':         req.params.eleve_id,
+        'el.utilisateur_id':  req.params.eleve_id,
         'a.etablissement_id': req.etablissement_id,
         'ev.notes_publiees':  true,
       })
@@ -300,7 +309,7 @@ router.get('/eleves/:eleve_id/notes', auth, isoler, perm('notes.voir_classe'), a
     const notes = await query.select(
       'n.id', 'n.valeur', 'n.est_absent', 'n.appreciation',
       'ev.type', 'ev.numero', 'ev.date_evaluation',
-      'm.nom as matiere', 'm.couleur_affichage', 'p.numero as trimestre'
+      'm.nom as matiere', 'dm.couleur_affichage', 'p.numero as trimestre'
     );
 
     return liste(res, notes);

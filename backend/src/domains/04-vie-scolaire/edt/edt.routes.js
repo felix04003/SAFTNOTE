@@ -35,6 +35,7 @@ async function fetchEdtClasse(db, classeId, etablissementId, semaine) {
   let query = db('emplois_du_temps as edt')
     .join('affectations_enseignants as ae', 'ae.id', 'edt.affectation_id')
     .join('matieres as m',        'm.id',  'ae.matiere_id')
+    .leftJoin('disciplines_matieres as dm', 'dm.id', 'm.discipline_id')
     .join('plages_horaires as ph', 'ph.id', 'edt.plage_id')
     .join('enseignants as ens',    'ens.id', 'ae.enseignant_id')
     .join('utilisateurs as u',     'u.id',   'ens.utilisateur_id')
@@ -44,7 +45,7 @@ async function fetchEdtClasse(db, classeId, etablissementId, semaine) {
       'edt.id as creneau_id', 'edt.jour_semaine',
       'ph.numero as plage_numero', 'ph.libelle as plage_libelle',
       'ph.heure_debut', 'ph.heure_fin', 'ph.est_pause',
-      'm.nom as matiere', 'm.nom_court as matiere_court', 'm.couleur_affichage',
+      'm.nom as matiere', 'm.nom_court as matiere_court', 'dm.couleur_affichage',
       db.raw("CONCAT(u.prenom, ' ', u.nom) as enseignant"),
       'edt.salle', 'ae.id as affectation_id'
     );
@@ -106,6 +107,7 @@ async function fetchEdtEnseignant(db, enseignantId, etablissementId, semaine) {
     .join('classes as c',          'c.id',  'ae.classe_id')
     .join('niveaux as n',          'n.id',  'c.niveau_id')
     .join('matieres as m',         'm.id',  'ae.matiere_id')
+    .leftJoin('disciplines_matieres as dm', 'dm.id', 'm.discipline_id')
     .join('plages_horaires as ph', 'ph.id', 'edt.plage_id')
     .where({ 'ae.enseignant_id': enseignantId, 'ae.annee_scolaire_id': annee.id, 'edt.actif': true })
     .orderBy(['edt.jour_semaine', 'ph.heure_debut'])
@@ -114,7 +116,7 @@ async function fetchEdtEnseignant(db, enseignantId, etablissementId, semaine) {
       'ph.numero as plage_numero', 'ph.libelle as plage_libelle',
       'ph.heure_debut', 'ph.heure_fin', 'ph.est_pause',
       db.raw("CONCAT(n.nom, ' ', c.nom) as classe"), 'c.id as classe_id',
-      'm.nom as matiere', 'm.nom_court as matiere_court', 'm.couleur_affichage',
+      'm.nom as matiere', 'm.nom_court as matiere_court', 'dm.couleur_affichage',
       'edt.salle', 'ae.id as affectation_id'
     );
 

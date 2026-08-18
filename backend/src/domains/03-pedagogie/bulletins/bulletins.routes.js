@@ -159,7 +159,7 @@ router.get('/bulletins/:id', auth, isoler, perm('bulletins.voir'), async (req, r
         .where({ 'mm.inscription_id': bulletin.inscription_id, 'mm.periode_id': bulletin.periode_id })
         .orderBy(['dm.ordre', 'm.nom'])
         .select(
-          'm.nom as matiere', 'm.code as matiere_code', 'm.couleur_affichage',
+          'm.nom as matiere', 'm.code as matiere_code', 'dm.couleur_affichage',
           'dm.nom as discipline',
           'mm.moyenne', 'mm.coefficient', 'mm.points',
           'mm.somme_notes_devoirs', 'mm.nb_devoirs_comptes',

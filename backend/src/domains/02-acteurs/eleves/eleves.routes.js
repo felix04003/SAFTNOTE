@@ -12,6 +12,7 @@ const { ok, cree, liste, paginee, getPagination } = require('../../../utils/repo
 const ApiError       = require('../../../utils/ApiError');
 const { invalidatePattern } = require('../../../infrastructure/cache/redis');
 const { preparerDonneesMediacles, selecteursMedicaux } = require('../../../utils/medical-crypto');
+const { autoriserAccesEleve } = require('../../../middleware/acces-eleve.middleware');
 
 const router = express.Router();
 const auth   = authentifier;
@@ -239,7 +240,11 @@ router.get('/eleves/:eleve_id', auth, isoler, perm('eleves.voir'), async (req, r
 
 // ── GET /eleves/:eleve_id/tableau-de-bord ────────────────────────
 // Endpoint le plus consulté depuis l'app mobile — optimisé
-router.get('/eleves/:eleve_id/tableau-de-bord', auth, isoler, perm('eleves.voir'), async (req, res, next) => {
+// Le rôle parent n'a jamais eu la permission 'eleves.voir' (réservée au
+// staff) : cette route bloquait donc systématiquement le tableau de bord
+// parent en 403. autoriserAccesEleve() laisse passer un parent lié à cet
+// élève précis, ou le staff via la permission 'eleves.voir'.
+router.get('/eleves/:eleve_id/tableau-de-bord', auth, isoler, autoriserAccesEleve('eleves.voir'), async (req, res, next) => {
   try {
     const db = getDB();
 
@@ -267,8 +272,10 @@ router.get('/eleves/:eleve_id/tableau-de-bord', auth, isoler, perm('eleves.voir'
     // Lancer toutes les requêtes en parallèle
     const [moyennesRecentes, absencesTotal, notesRecentes, edt] = await Promise.all([
       // Moyennes par matière — période courante
+      // couleur_affichage vit sur disciplines_matieres, pas matieres — jointure requise
       db('moyennes_matieres as mm')
         .join('matieres as m',  'm.id',  'mm.matiere_id')
+        .leftJoin('disciplines_matieres as dm', 'dm.id', 'm.discipline_id')
         .join('periodes as p',  'p.id',  'mm.periode_id')
         .join('annees_scolaires as a', 'a.id', 'p.annee_scolaire_id')
         .where({
@@ -276,7 +283,7 @@ router.get('/eleves/:eleve_id/tableau-de-bord', auth, isoler, perm('eleves.voir'
           'a.est_courante':    true,
         })
         .orderBy('p.numero')
-        .select('m.nom as matiere', 'm.couleur_affichage', 'mm.moyenne', 'mm.rang_dans_classe', 'p.numero as trimestre'),
+        .select('m.nom as matiere', 'dm.couleur_affichage', 'mm.moyenne', 'mm.rang_dans_classe', 'p.numero as trimestre'),
 
       // Total absences
       db('recapitulatifs_absences as ra')
@@ -294,27 +301,31 @@ router.get('/eleves/:eleve_id/tableau-de-bord', auth, isoler, perm('eleves.voir'
         .first(),
 
       // 5 dernières notes publiées
+      // notes.eleve_id référence eleves.id, pas utilisateurs.id — on filtre
+      // par inscription_id (déjà résolu ci-dessus) plutôt que de comparer
+      // n.eleve_id à req.params.eleve_id (deux espaces d'UUID différents).
       db('notes as n')
         .join('evaluations as ev',              'ev.id',  'n.evaluation_id')
         .join('affectations_enseignants as ae',  'ae.id',  'ev.affectation_id')
         .join('matieres as m',                   'm.id',   'ae.matiere_id')
         .where({
-          'n.eleve_id':        req.params.eleve_id,
+          'n.inscription_id':  inscription.inscription_id,
           'ev.notes_publiees': true,
         })
         .orderBy('ev.date_evaluation', 'desc')
         .limit(5)
         .select('m.nom as matiere', 'ev.type', 'n.valeur', 'ev.date_evaluation'),
 
-      // EDT de la semaine
+      // EDT de la semaine — couleur_affichage vit sur disciplines_matieres
       db('emplois_du_temps as edt')
         .join('affectations_enseignants as ae', 'ae.id', 'edt.affectation_id')
         .join('matieres as m',   'm.id',  'ae.matiere_id')
+        .leftJoin('disciplines_matieres as dm', 'dm.id', 'm.discipline_id')
         .join('plages_horaires as ph', 'ph.id', 'edt.plage_id')
         .where({ 'edt.classe_id': inscription.classe_id })
         .orderBy(['edt.jour_semaine', 'ph.heure_debut'])
         .select(
-          'edt.jour_semaine', 'm.nom as matiere', 'm.couleur_affichage',
+          'edt.jour_semaine', 'm.nom as matiere', 'dm.couleur_affichage',
           'ph.heure_debut', 'ph.heure_fin', 'edt.salle'
         ),
     ]);
@@ -331,7 +342,14 @@ router.get('/eleves/:eleve_id/tableau-de-bord', auth, isoler, perm('eleves.voir'
 });
 
 // ── GET /eleves/:eleve_id/absences ──────────────────────────────
-router.get('/eleves/:eleve_id/absences', auth, isoler, perm('absences.voir_eleve'), async (req, res, next) => {
+// Colonnes réelles de `presences` : pas de `justification` ni de
+// `created_at`/`updated_at` — ce sont `commentaire_justif`, `saisie_at`,
+// `modifie_at` (même classe de bug déjà corrigée ailleurs dans
+// appels.routes.js/sync.routes.js lors de la session précédente, mais
+// jamais portée jusqu'ici). i.eleve_id référence eleves.id, alors que
+// :eleve_id (convention de ce domaine) est utilisateurs.id — d'où le
+// join eleves pour résoudre correctement.
+router.get('/eleves/:eleve_id/absences', auth, isoler, autoriserAccesEleve('absences.voir_eleve'), async (req, res, next) => {
   try {
     const db = getDB();
     const { depuis } = req.query; // Filtre optionnel pour sync offline
@@ -342,18 +360,18 @@ router.get('/eleves/:eleve_id/absences', auth, isoler, perm('absences.voir_eleve
       .join('affectations_enseignants as ae', 'ae.id', 'edt.affectation_id')
       .join('matieres as m',             'm.id',   'ae.matiere_id')
       .join('inscriptions as i',         'i.id',   'pr.inscription_id')
+      .join('eleves as el',              'el.id',  'i.eleve_id')
       .where({
-        'i.eleve_id': req.params.eleve_id,
-        'pr.statut':  'absent',
+        'el.utilisateur_id': req.params.eleve_id,
+        'pr.statut':         'absent',
       })
-      .whereNot({ 'pr.statut': 'present' })
       .orderBy('ap.date_cours', 'desc')
       .select(
         'ap.date_cours', 'm.nom as matiere', 'pr.statut',
-        'pr.est_justifie', 'pr.justification', 'pr.created_at'
+        'pr.est_justifie', 'pr.commentaire_justif as justification', 'pr.saisie_at as created_at'
       );
 
-    if (depuis) query = query.where('pr.updated_at', '>', depuis);
+    if (depuis) query = query.where('pr.modifie_at', '>', depuis);
 
     const absences = await query.limit(100);
     return liste(res, absences);
