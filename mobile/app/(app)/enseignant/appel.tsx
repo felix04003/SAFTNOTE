@@ -9,6 +9,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
+import Toast from 'react-native-toast-message';
 import { getDB, sauvegarderPresenceLocale, ajouterOperationPendante } from '../../../src/services/storage/database';
 import { enseignantApi } from '../../../src/services/api/client';
 import { syncService } from '../../../src/services/sync/syncService';
@@ -117,8 +118,7 @@ export default function AppelScreen() {
           { text: 'OK', onPress: () => router.back() }
         ]);
       } else {
-        // Feedback toast
-        Alert.alert('Sauvegardé', 'Les présences ont été enregistrées.');
+        Toast.show({ type: 'success', text1: 'Sauvegardé', text2: 'Les présences ont été enregistrées.' });
       }
     } finally { setSaving(false); }
   }
