@@ -26,7 +26,21 @@ BEGIN
 
     SELECT id INTO v_role_enseignant FROM roles WHERE code = 'enseignant';
     SELECT id INTO v_role_parent     FROM roles WHERE code = 'parent';
-    SELECT id INTO v_matiere_id      FROM matieres WHERE nom = 'Mathématiques' LIMIT 1;
+
+    -- Matière 'Mathématiques' scopée à TEST_LBD (v_etab_id) — NE PAS
+    -- retirer le filtre etablissement_id : `matieres.code` n'est unique
+    -- que par établissement, donc un `LIMIT 1` sans filtre peut piocher
+    -- la ligne d'un tout autre établissement (bug corrigé en migration
+    -- 016_fix_seed_matiere_cross_etablissement.sql, sur données déjà
+    -- insérées via une exécution antérieure de ce fichier).
+    INSERT INTO matieres (id, etablissement_id, nom, nom_court, code, compte_dans_moyenne)
+    VALUES (uuid_generate_v4(), v_etab_id, 'Mathématiques', 'Maths', 'MATH', TRUE)
+    ON CONFLICT (etablissement_id, code) DO NOTHING;
+
+    SELECT id INTO v_matiere_id
+    FROM matieres
+    WHERE etablissement_id = v_etab_id AND code = 'MATH';
+
     SELECT e.id INTO v_eleve_id
         FROM eleves e
         JOIN inscriptions i ON i.eleve_id = e.id
