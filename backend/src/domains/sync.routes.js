@@ -30,6 +30,11 @@ router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) =>
     let payload = {};
 
     if (isEnseignant) {
+      // affectations_enseignants.enseignant_id référence enseignants.id, pas
+      // utilisateurs.id (ce sont deux UUID distincts) — on résout une fois.
+      const enseignantRow = await db('enseignants').where({ utilisateur_id }).first('id');
+      const enseignantId = enseignantRow?.id ?? null;
+
       // Payload enseignant : ses classes + élèves + évaluations + notes + EDT
       const [classes, eleves, evaluations, notes, edt] = await Promise.all([
         // Classes de l'enseignant
@@ -37,18 +42,19 @@ router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) =>
           .join('classes as c', 'c.id', 'ae.classe_id')
           .join('niveaux as n', 'n.id', 'c.niveau_id')
           .join('annees_scolaires as a', 'a.id', 'ae.annee_scolaire_id')
-          .where({ 'ae.enseignant_id': utilisateur_id, 'a.est_courante': true })
+          .where({ 'ae.enseignant_id': enseignantId, 'a.est_courante': true })
           .select('c.id', db.raw("CONCAT(n.nom, ' ', c.nom) as libelle"), 'c.effectif_max'),
 
         // Élèves modifiés depuis la dernière sync
+        // (inscriptions.eleve_id référence eleves.id, pas utilisateurs.id)
         db('inscriptions as i')
-          .join('utilisateurs as u', 'u.id', 'i.eleve_id')
-          .join('eleves as e', 'e.utilisateur_id', 'u.id')
+          .join('eleves as e', 'e.id', 'i.eleve_id')
+          .join('utilisateurs as u', 'u.id', 'e.utilisateur_id')
           .join('classes as c', 'c.id', 'i.classe_id')
           .join('niveaux as n', 'n.id', 'c.niveau_id')
           .join('annees_scolaires as a', 'a.id', 'i.annee_scolaire_id')
           .join('affectations_enseignants as ae', 'ae.classe_id', 'i.classe_id')
-          .where({ 'ae.enseignant_id': utilisateur_id, 'a.est_courante': true, 'i.statut': 'actif' })
+          .where({ 'ae.enseignant_id': enseignantId, 'a.est_courante': true, 'i.statut': 'actif' })
           .where('u.updated_at', '>', syncDepuis)
           .select('u.id', 'u.nom', 'u.prenom', 'u.photo_url', 'e.matricule', 'i.id as inscription_id', db.raw("CONCAT(n.nom, ' ', c.nom) as classe"))
           .distinct(),
@@ -57,7 +63,7 @@ router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) =>
         db('evaluations as ev')
           .join('affectations_enseignants as ae', 'ae.id', 'ev.affectation_id')
           .join('matieres as m', 'm.id', 'ae.matiere_id')
-          .where({ 'ae.enseignant_id': utilisateur_id })
+          .where({ 'ae.enseignant_id': enseignantId })
           .where('ev.updated_at', '>', syncDepuis)
           .select('ev.id', 'ev.type', 'ev.numero', 'ev.titre', 'ev.date_evaluation', 'ev.note_max', 'ev.notes_publiees', 'ev.affectation_id', 'm.nom as matiere'),
 
@@ -65,7 +71,7 @@ router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) =>
         db('notes as n')
           .join('evaluations as ev', 'ev.id', 'n.evaluation_id')
           .join('affectations_enseignants as ae', 'ae.id', 'ev.affectation_id')
-          .where({ 'ae.enseignant_id': utilisateur_id })
+          .where({ 'ae.enseignant_id': enseignantId })
           .where('n.saisie_at', '>', syncDepuis)
           .select('n.id', 'n.evaluation_id', 'n.eleve_id', 'n.valeur', 'n.est_absent', 'n.absence_justifiee'),
 
@@ -74,7 +80,7 @@ router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) =>
           .join('affectations_enseignants as ae', 'ae.id', 'edt.affectation_id')
           .join('plages_horaires as ph', 'ph.id', 'edt.plage_id')
           .join('matieres as m', 'm.id', 'ae.matiere_id')
-          .where({ 'ae.enseignant_id': utilisateur_id })
+          .where({ 'ae.enseignant_id': enseignantId })
           .where('edt.updated_at', '>', syncDepuis)
           .select('edt.id', 'edt.jour_semaine', 'edt.salle', 'ph.heure_debut', 'ph.heure_fin', 'm.nom as matiere', 'ae.classe_id'),
       ]);
@@ -85,8 +91,10 @@ router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) =>
       // Payload parent : enfants + notes publiées + absences + bulletins + EDT
       const [enfants, notes, absences, bulletins, edt] = await Promise.all([
         // Enfants du parent
+        // (parents_eleves.eleve_id référence eleves.id, pas utilisateurs.id)
         db('parents_eleves as pe')
-          .join('utilisateurs as u', 'u.id', 'pe.eleve_id')
+          .join('eleves as el', 'el.id', 'pe.eleve_id')
+          .join('utilisateurs as u', 'u.id', 'el.utilisateur_id')
           .join('inscriptions as i', 'i.eleve_id', 'pe.eleve_id')
           .join('classes as c', 'c.id', 'i.classe_id')
           .join('niveaux as n', 'n.id', 'c.niveau_id')
@@ -114,7 +122,9 @@ router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) =>
           .join('matieres as m', 'm.id', 'ae.matiere_id')
           .where({ 'pe.parent_id': utilisateur_id })
           .whereNot({ 'pr.statut': 'present' })
-          .where('pr.updated_at', '>', syncDepuis)
+          // presences n'a pas de colonne updated_at — saisie_at (création) +
+          // modifie_at (nullable, mis à jour seulement si modifié après coup)
+          .where(db.raw('COALESCE(pr.modifie_at, pr.saisie_at) > ?', [syncDepuis]))
           .select('i.eleve_id', 'pr.statut', 'pr.est_justifie', 'a.date_cours', 'm.nom as matiere'),
 
         // Bulletins disponibles
