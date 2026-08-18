@@ -564,9 +564,16 @@ describe('Workflow 5 — Notes : POST /evaluations + PUT notes + PUT publier', (
       classe_id: IDS.classe,
     }));
 
-    // 2. db.transaction
+    // 2. db.transaction — trx('eleves').whereIn(...).select(...) résout
+    // utilisateurs.id -> eleves.id (voir evaluations.routes.js) avant le
+    // upsert ; sans ce mock, trx('eleves') renvoie undefined et l'appel
+    // à .whereIn() plante en 500 (mock resté figé sur l'ancienne implé
+    // qui n'interrogeait pas la table eleves).
     db.transaction.mockImplementation(async (fn) => {
-      const trx = jest.fn();
+      const trx = jest.fn(() => mockQuery([
+        { id: 'eeeeeeee-1111-1111-1111-111111111111', utilisateur_id: IDS.eleve },
+        { id: 'eeeeeeee-2222-2222-2222-222222222222', utilisateur_id: IDS.utilisateur },
+      ]));
       trx.raw = jest.fn().mockResolvedValue(undefined); // UPSERT notes
       await fn(trx);
     });
