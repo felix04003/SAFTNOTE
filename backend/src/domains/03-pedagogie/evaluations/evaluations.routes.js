@@ -195,17 +195,32 @@ router.put('/evaluations/:evaluation_id/notes', auth, isoler, perm('notes.saisir
       }
 
       await db.transaction(async trx => {
-        const notesAInserer = req.body.notes.map(n => ({
-          id:                uuid(),
-          evaluation_id:     req.params.evaluation_id,
-          eleve_id:          n.eleve_id,
-          inscription_id:    n.inscription_id,
-          valeur:            n.est_absent && !n.absence_justifiee ? 0 : (n.valeur ?? null),
-          est_absent:        n.est_absent,
-          absence_justifiee: n.absence_justifiee,
-          appreciation:      n.appreciation ?? null,
-          saisie_par:        req.session.utilisateur_id,
-        }));
+        // req.body.notes[].eleve_id suit la convention API de ce domaine
+        // (utilisateurs.id — voir eleves.routes.js, GET /classes/:id/eleves,
+        // qui est la source de ces IDs côté dashboard/mobile). notes.eleve_id
+        // référence eleves.id : il faut résoudre l'un vers l'autre avant
+        // d'insérer, sinon violation de contrainte FK sur CHAQUE saisie
+        // (reproduit en direct : "REFERENCE_INVALIDE" sur toute sauvegarde
+        // de notes depuis le dashboard, qui envoie bien utilisateurs.id ici).
+        const utilisateurIds = [...new Set(req.body.notes.map(n => n.eleve_id))];
+        const elevesRows = await trx('eleves').whereIn('utilisateur_id', utilisateurIds).select('id', 'utilisateur_id');
+        const eleveIdParUtilisateurId = new Map(elevesRows.map(e => [e.utilisateur_id, e.id]));
+
+        const notesAInserer = req.body.notes
+          .filter(n => eleveIdParUtilisateurId.has(n.eleve_id))
+          .map(n => ({
+            id:                uuid(),
+            evaluation_id:     req.params.evaluation_id,
+            eleve_id:          eleveIdParUtilisateurId.get(n.eleve_id),
+            inscription_id:    n.inscription_id,
+            valeur:            n.est_absent && !n.absence_justifiee ? 0 : (n.valeur ?? null),
+            est_absent:        n.est_absent,
+            absence_justifiee: n.absence_justifiee,
+            appreciation:      n.appreciation ?? null,
+            saisie_par:        req.session.utilisateur_id,
+          }));
+
+        if (!notesAInserer.length) return;
 
         // Upsert : INSERT ou UPDATE si la note existe déjà
         await trx.raw(
