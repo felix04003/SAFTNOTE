@@ -8,7 +8,7 @@ const { getDB }      = require('../../../infrastructure/database/pool');
 const { authentifier } = require('../../../middleware/auth.middleware');
 const { exigerPermission, isolerEtablissement } = require('../../../middleware/permission.middleware');
 const { valider }    = require('../../../middleware/validate.middleware');
-const { ok, cree, vide } = require('../../../utils/reponse');
+const { ok, cree, vide, liste } = require('../../../utils/reponse');
 const ApiError       = require('../../../utils/ApiError');
 const logger         = require('../../../utils/logger');
 const { getOrSet, invalidatePattern } = require('../../../infrastructure/cache/redis');
@@ -19,6 +19,31 @@ const perm   = exigerPermission;
 const isoler = isolerEtablissement;
 
 const JOURS_NOMS = { 1: 'Lundi', 2: 'Mardi', 3: 'Mercredi', 4: 'Jeudi', 5: 'Vendredi', 6: 'Samedi' };
+
+// ═════════════════════════════════════════════════════════════════
+// GET /plages-horaires — Liste des plages horaires de l'établissement
+// (nécessaire au formulaire de création de créneau EDT — aucune route
+// ne l'exposait jusqu'ici, cf. plan M2)
+// ═════════════════════════════════════════════════════════════════
+router.get('/plages-horaires', auth, isoler, perm('edt.voir'), async (req, res, next) => {
+  try {
+    const db = getDB();
+    const cle = `plages_horaires:${req.etablissement_id}`;
+
+    const fetchPlages = () => db('plages_horaires')
+      .where({ etablissement_id: req.etablissement_id })
+      .orderBy('numero')
+      .select('id', 'numero', 'libelle', 'heure_debut', 'heure_fin', 'est_pause');
+
+    let plages;
+    try {
+      plages = await getOrSet(cle, fetchPlages, 3600);
+    } catch {
+      plages = await fetchPlages();
+    }
+    return liste(res, plages);
+  } catch (err) { next(err); }
+});
 
 // ═════════════════════════════════════════════════════════════════
 // GET /edt/classe/:classeId — EDT d'une classe (semaine)

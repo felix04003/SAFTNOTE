@@ -46,6 +46,24 @@ describe('EDT Routes', () => {
     getDB.mockReturnValue(db);
   });
 
+  // ── GET /plages-horaires ────────────────────────────────────────
+  describe('GET /plages-horaires', () => {
+    test('retourne les plages horaires triées par numéro', async () => {
+      const plages = [
+        { id: IDS.plage, numero: 1, libelle: '8h-9h', heure_debut: '08:00:00', heure_fin: '09:00:00', est_pause: false },
+      ];
+      db.mockReturnValueOnce(mockQuery(plages));
+
+      const res = await request(app)
+        .get('/plages-horaires')
+        .expect(200);
+
+      expect(res.body.succes).toBe(true);
+      expect(res.body.data).toHaveLength(1);
+      expect(res.body.data[0].numero).toBe(1);
+    });
+  });
+
   // ── GET /edt/classe/:classeId ───────────────────────────────────
   describe('GET /edt/classe/:classeId', () => {
     test('retourne l\'EDT d\'une classe organisé par jour', async () => {
