@@ -2,7 +2,7 @@
 import React, { useState, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator,
+  ScrollView, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useRouter }       from 'expo-router';
 import { Ionicons }        from '@expo/vector-icons';
@@ -10,6 +10,7 @@ import { SafeAreaView }    from 'react-native-safe-area-context';
 import { useAuthStore }    from '../../src/stores/authStore';
 import { authApi }         from '../../src/services/api/client';
 import { Colors, Typography, Spacing, Radius, Shadow } from '../../src/utils/theme';
+import Bouton               from '../../src/components/ui/Bouton';
 
 type Mode = 'mdp' | 'otp_demander' | 'otp_valider';
 
@@ -112,9 +113,7 @@ export default function ConnexionScreen() {
                   <TextInput style={[styles.input, { flex: 1 }]} placeholder="Votre mot de passe" placeholderTextColor={Colors.gray400} value={motDePasse} onChangeText={t => { setMotDePasse(t); clearErr(); }} secureTextEntry={!voirMDP} />
                   <TouchableOpacity onPress={() => setVoirMDP(!voirMDP)} style={styles.oeilBtn}><Ionicons name={voirMDP ? 'eye-off-outline' : 'eye-outline'} size={18} color={Colors.gray400} /></TouchableOpacity>
                 </View>
-                <TouchableOpacity style={[styles.boutonPrincipal, loading && styles.boutonDisabled]} onPress={handleConnexionMDP} disabled={loading} activeOpacity={0.85}>
-                  {loading ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.boutonLabel}>Se connecter</Text>}
-                </TouchableOpacity>
+                <Bouton label="Se connecter" onPress={handleConnexionMDP} chargement={loading} pleineLargeur style={styles.boutonPrincipal} />
               </>
             )}
 
@@ -134,9 +133,7 @@ export default function ConnexionScreen() {
                   </TouchableOpacity>
                   <TextInput style={[styles.input, { flex: 1 }]} placeholder="77 000 00 00" placeholderTextColor={Colors.gray400} value={telephone} onChangeText={t => { setTelephone(t.replace(/\D/g, '')); clearErr(); }} keyboardType="phone-pad" maxLength={9} />
                 </View>
-                <TouchableOpacity style={[styles.boutonPrincipal, loading && styles.boutonDisabled]} onPress={handleDemanderOTP} disabled={loading} activeOpacity={0.85}>
-                  {loading ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.boutonLabel}>Recevoir le code SMS</Text>}
-                </TouchableOpacity>
+                <Bouton label="Recevoir le code SMS" onPress={handleDemanderOTP} chargement={loading} pleineLargeur style={styles.boutonPrincipal} />
               </>
             )}
 
@@ -154,9 +151,7 @@ export default function ConnexionScreen() {
                       onKeyPress={({nativeEvent}) => { if(nativeEvent.key==='Backspace'&&!otp[i]&&i>0) otpRefs.current[i-1]?.focus(); }} />
                   ))}
                 </View>
-                <TouchableOpacity style={[styles.boutonPrincipal, (loading||otp.length!==6)&&styles.boutonDisabled]} onPress={handleValiderOTP} disabled={loading||otp.length!==6} activeOpacity={0.85}>
-                  {loading ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.boutonLabel}>Valider le code</Text>}
-                </TouchableOpacity>
+                <Bouton label="Valider le code" onPress={handleValiderOTP} chargement={loading} desactive={otp.length !== 6} pleineLargeur style={styles.boutonPrincipal} />
                 <TouchableOpacity onPress={() => setMode('otp_demander')} style={styles.renvoyerBtn}><Text style={styles.renvoyerLabel}>Renvoyer le code</Text></TouchableOpacity>
               </>
             )}
@@ -197,9 +192,7 @@ const styles = StyleSheet.create({
   paysSelector: { flexDirection: 'row', alignItems: 'center', gap: 4, marginRight: 8 },
   prefixe:      { fontSize: Typography.base, color: Colors.gray600, fontWeight: Typography.medium },
   infoText: { fontSize: Typography.sm, color: Colors.gray500, lineHeight: 20, marginVertical: 8 },
-  boutonPrincipal: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.primary, borderRadius: Radius.md, height: 52, marginTop: Spacing.lg },
-  boutonDisabled: { opacity: 0.6 },
-  boutonLabel: { fontSize: Typography.md, fontWeight: Typography.bold, color: Colors.white },
+  boutonPrincipal: { marginTop: Spacing.lg },
   otpContainer: { flexDirection: 'row', gap: 10, justifyContent: 'center', marginVertical: 8 },
   otpInput: { width: 46, height: 56, borderWidth: 2, borderColor: Colors.gray200, borderRadius: Radius.md, textAlign: 'center', fontSize: Typography.xl, fontWeight: Typography.bold, color: Colors.gray900, backgroundColor: Colors.gray50 },
   otpInputRempli: { borderColor: Colors.primary, backgroundColor: Colors.primaryBg },
