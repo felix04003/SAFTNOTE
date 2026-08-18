@@ -171,26 +171,73 @@ router.post('/eleves', auth, isoler, perm('eleves.creer'),
           statut:           'actif',
         });
 
-        // Créer le parent si fourni
+        // Créer le parent si fourni — ou réutiliser un parent existant.
+        // utilisateurs.telephone est UNIQUE au niveau BASE (pas juste par
+        // établissement) : un même numéro sert à un parent pour TOUS ses
+        // enfants, y compris plusieurs enfants dans le MÊME établissement
+        // (cas très courant — fratrie). Sans ce contrôle, l'inscription
+        // du 2e enfant plantait sur la contrainte unique avec une erreur
+        // générique "DOUBLON" (reproduit en direct : 2 POST /eleves avec
+        // le même parent.telephone → 201 puis 409 sur le 2e).
         if (req.body.parent) {
-          const parentId = uuid();
-          await trx('utilisateurs').insert({
-            id:               parentId,
-            etablissement_id: req.etablissement_id,
-            nom:              req.body.parent.nom,
-            prenom:           req.body.parent.prenom,
-            telephone:        req.body.parent.telephone,
-            actif:            true,
-          });
+          const parentExistant = await trx('utilisateurs')
+            .where({ telephone: req.body.parent.telephone })
+            .first('id', 'etablissement_id');
 
-          const roleParent = await trx('roles').where({ code: 'parent' }).first('id');
-          await trx('utilisateur_roles').insert({
-            id:               uuid(),
-            utilisateur_id:   parentId,
-            role_id:          roleParent.id,
-            etablissement_id: req.etablissement_id,
-          });
+          let parentId;
 
+          if (parentExistant) {
+            if (parentExistant.etablissement_id !== req.etablissement_id) {
+              throw ApiError.validationEchouee(
+                'Ce numéro de téléphone est déjà utilisé par un compte dans un autre établissement'
+              );
+            }
+            parentId = parentExistant.id;
+
+            const aDejaRoleParent = await trx('utilisateur_roles as ur')
+              .join('roles as r', 'r.id', 'ur.role_id')
+              .where({ 'ur.utilisateur_id': parentId, 'ur.etablissement_id': req.etablissement_id, 'r.code': 'parent' })
+              .first('ur.id');
+
+            if (!aDejaRoleParent) {
+              const roleParent = await trx('roles').where({ code: 'parent' }).first('id');
+              await trx('utilisateur_roles').insert({
+                id:               uuid(),
+                utilisateur_id:   parentId,
+                role_id:          roleParent.id,
+                etablissement_id: req.etablissement_id,
+              });
+            }
+          } else {
+            parentId = uuid();
+            await trx('utilisateurs').insert({
+              id:               parentId,
+              etablissement_id: req.etablissement_id,
+              nom:              req.body.parent.nom,
+              prenom:           req.body.parent.prenom,
+              telephone:        req.body.parent.telephone,
+              actif:            true,
+            });
+
+            const roleParent = await trx('roles').where({ code: 'parent' }).first('id');
+            await trx('utilisateur_roles').insert({
+              id:               uuid(),
+              utilisateur_id:   parentId,
+              role_id:          roleParent.id,
+              etablissement_id: req.etablissement_id,
+            });
+
+            // Initialiser les préférences de notification (une seule fois
+            // par utilisateur — notifications_preferences.utilisateur_id
+            // est UNIQUE, donc jamais réinsérée pour un parent existant)
+            await trx('notifications_preferences').insert({
+              id:             uuid(),
+              utilisateur_id: parentId,
+              canal_prefere:  'sms',
+            });
+          }
+
+          // Un seul contact principal par élève (idx_contact_principal_unique)
           await trx('parents_eleves').insert({
             id:                   uuid(),
             parent_id:            parentId,
@@ -199,13 +246,6 @@ router.post('/eleves', auth, isoler, perm('eleves.creer'),
             est_contact_principal: true,
             peut_voir_notes:      true,
             peut_voir_absences:   true,
-          });
-
-          // Initialiser les préférences de notification
-          await trx('notifications_preferences').insert({
-            id:             uuid(),
-            utilisateur_id: parentId,
-            canal_prefere:  'sms',
           });
         }
 

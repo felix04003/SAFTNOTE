@@ -465,15 +465,17 @@ describe('Workflow 4 — POST /eleves', () => {
       trx.mockReturnValueOnce(mockQuery(undefined));
       // 6. INSERT inscriptions
       trx.mockReturnValueOnce(mockQuery(undefined));
-      // 7. INSERT utilisateurs (parent)
+      // 7. SELECT utilisateurs WHERE telephone (parent existant ?) -> aucun
       trx.mockReturnValueOnce(mockQuery(undefined));
-      // 8. SELECT role 'parent'
+      // 8. INSERT utilisateurs (parent)
+      trx.mockReturnValueOnce(mockQuery(undefined));
+      // 9. SELECT role 'parent'
       trx.mockReturnValueOnce(mockQuery({ id: 'role-parent-001' }));
-      // 9. INSERT utilisateur_roles parent
-      trx.mockReturnValueOnce(mockQuery(undefined));
-      // 10. INSERT parents_eleves
+      // 10. INSERT utilisateur_roles parent
       trx.mockReturnValueOnce(mockQuery(undefined));
       // 11. INSERT notifications_preferences
+      trx.mockReturnValueOnce(mockQuery(undefined));
+      // 12. INSERT parents_eleves
       trx.mockReturnValueOnce(mockQuery(undefined));
 
       return fn(trx);
