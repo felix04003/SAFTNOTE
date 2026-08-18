@@ -121,7 +121,7 @@ router.get('/appels/cours', auth, isoler, perm('absences.faire_appel'), async (r
         'i.statut':            'actif',
       })
       .orderBy(['u.nom', 'u.prenom'])
-      .select('i.id as inscription_id', 'u.nom', 'u.prenom');
+      .select('i.id as inscription_id', 'i.eleve_id', 'u.nom', 'u.prenom');
 
     // Si un appel existe, récupérer les statuts de présence
     const presencesMap = {};
@@ -138,6 +138,7 @@ router.get('/appels/cours', auth, isoler, perm('absences.faire_appel'), async (r
       const p = presencesMap[i.inscription_id] || { statut: 'non_saisi', minutes_retard: 0 };
       return {
         inscription_id: i.inscription_id,
+        eleve_id:       i.eleve_id,
         nom:            i.nom,
         prenom:         i.prenom,
         statut:         p.statut,
@@ -185,11 +186,11 @@ router.put('/appels/:appel_id/presences', auth, isoler, perm('absences.faire_app
           await trx('presences')
             .where({ appel_id: req.params.appel_id, inscription_id: p.inscription_id })
             .update({
-              statut:         p.statut,
-              minutes_retard: p.minutes_retard || 0,
-              est_justifie:   p.est_justifie || false,
-              justification:  p.justification,
-              updated_at:     trx.raw('NOW()'),
+              statut:              p.statut,
+              minutes_retard:      p.minutes_retard || 0,
+              est_justifie:        p.est_justifie || false,
+              commentaire_justif:  p.justification,
+              modifie_at:          trx.raw('NOW()'),
             });
 
           // Collecter les absences non justifiées pour notification
