@@ -210,20 +210,51 @@ async function notifsParent(db, utilisateurId, etablissementId) {
 
 // ── Route ──────────────────────────────────────────────────────
 
+const ROLES_ADMIN_LIKE = ['directeur', 'censeur', 'admin', 'super_admin'];
+
 router.get('/notifications', auth, isoler, async function(req, res, next) {
   const db     = getDB();
   const userId = req.session.utilisateur_id;
   const etabId = req.etablissement_id;
-  const role   = req.session.role;
+  const roles  = req.session.roles || [];   // tableau complet — pas roles[0]
 
   try {
-    let raw;
-    if (role === 'parent') {
-      raw = await notifsParent(db, userId, etabId);
-    } else if (role === 'enseignant') {
-      raw = await notifsEnseignant(db, userId, etabId);
-    } else {
-      raw = await notifsAdmin(db, etabId);
+    // Un compte cumulant plusieurs rôles (ex: enseignant + parent dans le
+    // même établissement — le schéma le permet, cf. contrainte unique sur
+    // utilisateur_roles(utilisateur_id, role_id, etablissement_id)) doit
+    // voir l'union des catégories pertinentes à CHACUN de ses rôles, pas
+    // seulement celles d'un "rôle principal" choisi arbitrairement par
+    // l'ordre de retour SQL (ancien bug : req.session.role, singulier).
+    const parties = [];
+    if (roles.includes('parent'))     parties.push(notifsParent(db, userId, etabId));
+    if (roles.includes('enseignant')) parties.push(notifsEnseignant(db, userId, etabId));
+    if (roles.some(r => ROLES_ADMIN_LIKE.includes(r))) parties.push(notifsAdmin(db, etabId));
+
+    // Aucun rôle connu (ex: un compte "eleve" seul, sans parent/enseignant/
+    // admin) — préserve le comportement pré-existant qui basculait sur la
+    // branche admin par défaut. Ce comportement pour le rôle eleve seul est
+    // potentiellement un bug distinct (déjà noté au passage précédent) mais
+    // volontairement hors périmètre ici : ne pas le changer sans l'avoir
+    // vérifié séparément en exécution réelle.
+    if (parties.length === 0) parties.push(notifsAdmin(db, etabId));
+
+    const resultats = await Promise.all(parties);
+    // Fusion par clé réellement présente (pas les 5 clés systématiquement) :
+    // notifsEnseignant() ne renvoie que { appelsManques, notes } et
+    // notifsParent() ne renvoie pas appelsManques — une fusion à 5 clés
+    // fixes rendrait `raw.absences` toujours défini (même vide `[]`, donc
+    // "truthy") pour un enseignant seul, faisant apparaître une catégorie
+    // "Absences injustifiées : 0" hors sujet qui n'existait pas avant ce
+    // fix. En ne fusionnant que les clés effectivement renvoyées par au
+    // moins une branche exécutée, un rôle unique retrouve exactement les
+    // catégories qu'il avait avant (2 pour enseignant, 4 pour parent, 5
+    // pour admin) et un compte multi-rôle obtient l'union correcte,
+    // notes/etc. fusionnées si plusieurs branches renvoient la même clé.
+    const raw = {};
+    for (const r of resultats) {
+      for (const cle of Object.keys(r)) {
+        raw[cle] = [...(raw[cle] || []), ...r[cle]];
+      }
     }
 
     const categories = [];
