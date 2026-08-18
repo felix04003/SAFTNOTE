@@ -80,7 +80,7 @@ export default function ConnexionScreen() {
           <View style={styles.hero}>
             <View style={styles.logoContainer}><Ionicons name="school" size={52} color={Colors.white} /></View>
             <Text style={styles.appName}>EcoleManager</Text>
-            <Text style={styles.tagline}>Afrique de l\'Ouest · Systèmes Francophones</Text>
+            <Text style={styles.tagline}>Afrique de l'Ouest · Systèmes Francophones</Text>
           </View>
 
           <View style={[styles.carte, Shadow.lg]}>
@@ -168,7 +168,7 @@ export default function ConnexionScreen() {
               </View>
             )}
           </View>
-          <Text style={styles.footer}>Gestion Scolaire · Afrique de l\'Ouest · v1.0</Text>
+          <Text style={styles.footer}>Gestion Scolaire · Afrique de l'Ouest · v1.0</Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
