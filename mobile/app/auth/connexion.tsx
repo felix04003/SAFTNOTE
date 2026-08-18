@@ -111,7 +111,7 @@ export default function ConnexionScreen() {
                 <View style={styles.inputContainer}>
                   <Ionicons name="key-outline" size={18} color={Colors.gray400} style={styles.inputIcon} />
                   <TextInput style={[styles.input, { flex: 1 }]} placeholder="Votre mot de passe" placeholderTextColor={Colors.gray400} value={motDePasse} onChangeText={t => { setMotDePasse(t); clearErr(); }} secureTextEntry={!voirMDP} />
-                  <TouchableOpacity onPress={() => setVoirMDP(!voirMDP)} style={styles.oeilBtn}><Ionicons name={voirMDP ? 'eye-off-outline' : 'eye-outline'} size={18} color={Colors.gray400} /></TouchableOpacity>
+                  <TouchableOpacity onPress={() => setVoirMDP(!voirMDP)} style={styles.oeilBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}><Ionicons name={voirMDP ? 'eye-off-outline' : 'eye-outline'} size={18} color={Colors.gray400} /></TouchableOpacity>
                 </View>
                 <Bouton label="Se connecter" onPress={handleConnexionMDP} chargement={loading} pleineLargeur style={styles.boutonPrincipal} />
               </>
@@ -152,7 +152,7 @@ export default function ConnexionScreen() {
                   ))}
                 </View>
                 <Bouton label="Valider le code" onPress={handleValiderOTP} chargement={loading} desactive={otp.length !== 6} pleineLargeur style={styles.boutonPrincipal} />
-                <TouchableOpacity onPress={() => setMode('otp_demander')} style={styles.renvoyerBtn}><Text style={styles.renvoyerLabel}>Renvoyer le code</Text></TouchableOpacity>
+                <TouchableOpacity onPress={() => setMode('otp_demander')} style={styles.renvoyerBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}><Text style={styles.renvoyerLabel}>Renvoyer le code</Text></TouchableOpacity>
               </>
             )}
 

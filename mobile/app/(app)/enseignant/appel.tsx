@@ -142,7 +142,7 @@ export default function AppelScreen() {
           {STATUTS.map(s => (
             <TouchableOpacity key={s.code} onPress={() => changerStatut(p.inscription_id, s.code)}
               style={[styles.statutBtn, p.statut === s.code && { backgroundColor: s.couleur + '20', borderColor: s.couleur }]}
-              hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
+              hitSlop={{ top: 8, bottom: 8, left: 3, right: 3 }}>
               <Ionicons name={s.icone as any} size={20} color={p.statut === s.code ? s.couleur : Colors.gray300} />
             </TouchableOpacity>
           ))}

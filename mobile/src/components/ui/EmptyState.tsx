@@ -20,7 +20,7 @@ export default function EmptyState({ icone, titre, sousTitre, action }: Props) {
       <Text style={s.titre}>{titre}</Text>
       {sousTitre && <Text style={s.sous}>{sousTitre}</Text>}
       {action && (
-        <TouchableOpacity onPress={action.onPress} style={s.btn}>
+        <TouchableOpacity onPress={action.onPress} style={s.btn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Text style={s.btnLbl}>{action.label}</Text>
         </TouchableOpacity>
       )}

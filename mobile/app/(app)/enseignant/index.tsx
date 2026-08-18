@@ -143,7 +143,8 @@ export default function TableauBordEnseignant() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.joursScroll}>
           {([1,2,3,4,5] as JourSemaine[]).map(j => (
             <TouchableOpacity key={j} onPress={() => setJourActif(j)}
-              style={[styles.jourBtn, j === jourActif && styles.jourBtnActif]}>
+              style={[styles.jourBtn, j === jourActif && styles.jourBtnActif]}
+              hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
               <Text style={[styles.jourLabel, j === jourActif && styles.jourLabelActif]}>{JOURS[j].slice(0,3)}</Text>
             </TouchableOpacity>
           ))}
