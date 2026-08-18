@@ -231,12 +231,13 @@ router.get('/notifications', auth, isoler, async function(req, res, next) {
     if (roles.some(r => ROLES_ADMIN_LIKE.includes(r))) parties.push(notifsAdmin(db, etabId));
 
     // Aucun rôle connu (ex: un compte "eleve" seul, sans parent/enseignant/
-    // admin) — préserve le comportement pré-existant qui basculait sur la
-    // branche admin par défaut. Ce comportement pour le rôle eleve seul est
-    // potentiellement un bug distinct (déjà noté au passage précédent) mais
-    // volontairement hors périmètre ici : ne pas le changer sans l'avoir
-    // vérifié séparément en exécution réelle.
-    if (parties.length === 0) parties.push(notifsAdmin(db, etabId));
+    // admin) — NE PAS retomber sur la branche admin : confirmé en exécution
+    // réelle que ça exposait les absences injustifiées, appels manqués,
+    // notes et incidents disciplinaires de TOUT l'établissement à un simple
+    // compte élève (créé via POST /eleves avec un numéro de téléphone,
+    // connexion OTP). `parties` reste vide → payload vide ci-dessous,
+    // aucune catégorie n'est renvoyée tant qu'une vraie vue "notifications
+    // élève" n'est pas définie et implémentée séparément.
 
     const resultats = await Promise.all(parties);
     // Fusion par clé réellement présente (pas les 5 clés systématiquement) :

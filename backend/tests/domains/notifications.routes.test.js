@@ -118,27 +118,22 @@ describe('Notifications Routes', () => {
     });
   });
 
-  // ── Rôle eleve seul (comportement pré-existant préservé) ──────────
+  // ── Rôle eleve seul (aucune branche dédiée) ────────────────────────
+  // Vérifié en exécution réelle (élève de test connecté par OTP) que le
+  // fallback admin exposait les absences/appels manqués/notes/incidents
+  // de TOUT l'établissement à un simple compte élève. Corrigé : aucune
+  // branche ne matche → payload vide, pas de fuite.
   describe('GET /notifications — rôle eleve seul (aucune branche dédiée)', () => {
-    test('bascule sur la branche admin par défaut, comme avant m1', async () => {
+    test('ne renvoie aucune catégorie — pas de fallback admin', async () => {
       mockSessionOverride = {
         utilisateur_id: IDS.eleve, etablissement_id: IDS.etablissement,
         roles: ['eleve'], role: 'eleve',
       };
 
-      db.mockReturnValueOnce(mockQuery([]));
-      db.mockReturnValueOnce(mockQuery([]));
-      db.mockReturnValueOnce(mockQuery([]));
-      db.mockReturnValueOnce(mockQuery([]));
-      db.mockReturnValueOnce(mockQuery([]));
-
       const res = await request(app).get('/notifications').expect(200);
 
-      const types = res.body.data.categories.map(c => c.type);
-      expect(types).toEqual([
-        'appels_manques', 'absences_injustifiees', 'notes_publiees',
-        'bulletins_disponibles', 'incidents_discipline',
-      ]);
+      expect(res.body.data.categories).toEqual([]);
+      expect(res.body.data.total).toBe(0);
     });
   });
 });
