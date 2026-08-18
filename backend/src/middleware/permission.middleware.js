@@ -92,7 +92,19 @@ async function isolerEtablissement(req, res, next) {
 
     const { etablissement_id, roles } = req.session;
 
-    // Les super_admins traversent sans vérification
+    // Poser req.etablissement_id immédiatement : POST /auth/connexion exige
+    // toujours un etablissement_code et résout la session dans cet
+    // établissement (cf. auth.routes.js) — même un super_admin est rattaché
+    // à un établissement "domicile" et n'a aucun mécanisme de bascule
+    // cross-établissement au login aujourd'hui. req.session.etablissement_id
+    // est donc déjà la bonne valeur pour TOUS les rôles, y compris super_admin.
+    req.etablissement_id = etablissement_id;
+
+    // Les super_admins traversent la vérification de propriété de ressource
+    // ci-dessous sans contrôle (mais gardent req.etablissement_id posé plus
+    // haut, sinon les routes qui lisent exclusivement req.etablissement_id —
+    // ex. discipline.routes.js, configs.routes.js — reçoivent `undefined` et
+    // Knex rejette la requête avec "Undefined binding(s) detected" (500)).
     if (roles.includes('super_admin')) return next();
 
     const db = getDB();
@@ -152,9 +164,6 @@ async function isolerEtablissement(req, res, next) {
         return next(ApiError.nonTrouve('Ressource introuvable'));
       }
     }
-
-    // Passer l'etablissement_id dans req pour usage dans les handlers
-    req.etablissement_id = etablissement_id;
 
     next();
 
