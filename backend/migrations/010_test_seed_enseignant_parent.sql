@@ -111,13 +111,24 @@ BEGIN
         -- ── 5. Emploi du temps — tous les jours ouvrés (1=lundi..5=vendredi) ──
         -- Couvre tous les jours pour que le dashboard enseignant affiche
         -- toujours un cours, quel que soit le jour de test.
+        --
+        -- ATTENTION : ON CONFLICT (..., date_debut_validite) ne fonctionne
+        -- PAS ici — date_debut_validite est NULL, et NULL n'est jamais égal
+        -- à NULL pour la déduplication d'une contrainte UNIQUE en Postgres.
+        -- Chaque ré-exécution de ce fichier (relance de conteneur Postgres
+        -- avec migrations/ monté en docker-entrypoint-initdb.d, ou run
+        -- manuel répété) créait donc un doublon silencieux à chaque fois,
+        -- constaté en direct : 2 lignes identiques par jour ouvré. D'où le
+        -- WHERE NOT EXISTS explicite plutôt que ON CONFLICT.
         FOR v_jour IN 1..5 LOOP
             INSERT INTO emplois_du_temps (
                 id, classe_id, affectation_id, plage_id, jour_semaine, salle
-            ) VALUES (
-                uuid_generate_v4(), v_classe_id, v_affectation_id, v_plage_id, v_jour, 'Salle 12'
             )
-            ON CONFLICT (classe_id, plage_id, jour_semaine, date_debut_validite) DO NOTHING;
+            SELECT uuid_generate_v4(), v_classe_id, v_affectation_id, v_plage_id, v_jour, 'Salle 12'
+            WHERE NOT EXISTS (
+                SELECT 1 FROM emplois_du_temps
+                WHERE classe_id = v_classe_id AND plage_id = v_plage_id AND jour_semaine = v_jour
+            );
         END LOOP;
     END IF;
 
