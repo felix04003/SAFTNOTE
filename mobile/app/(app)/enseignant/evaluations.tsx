@@ -106,7 +106,9 @@ export default function EvaluationsScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.evalMatiere}>{e.matiere}</Text>
-              <Text style={styles.evalClasse}>{e.classe} · {e.date_evaluation}</Text>
+              <Text style={styles.evalClasse}>
+                {e.classe} · {new Date(e.date_evaluation).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+              </Text>
               {e.titre && <Text style={styles.evalTitre}>{e.titre}</Text>}
             </View>
             <View style={styles.evalDroite}>
