@@ -168,7 +168,8 @@ export default function NotesSaisieScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <Entete titre={matiere || 'Saisie notes'} sousTitre={`${classe} · ${type_eval || 'Devoir'} · /${noteMax}`} retour />
+      <Entete titre={matiere || 'Saisie notes'}
+        sousTitre={[classe, type_eval || 'Devoir', `/${noteMax}`].filter(Boolean).join(' · ')} retour />
 
       <View style={styles.barre}>
         <Text style={styles.barreItem}><Text style={styles.barreNum}>{nbSaisies}</Text> notés</Text>

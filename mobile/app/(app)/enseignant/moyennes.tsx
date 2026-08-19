@@ -116,7 +116,7 @@ export default function MoyennesScreen() {
         keyExtractor={m => m.eleve_id}
         contentContainerStyle={styles.liste}
         showsVerticalScrollIndicator={false}
-        ListEmptyComponent={<Text style={styles.empty}>Aucune donnée · Saisissez et publiez des notes d\'abord</Text>}
+        ListEmptyComponent={<Text style={styles.empty}>Aucune donnée · Saisissez et publiez des notes d'abord</Text>}
         renderItem={({ item: m, index }) => (
           <View style={[styles.ligne, Shadow.sm, index === 0 && styles.premiereLigne]}>
             <View style={styles.rang}>
