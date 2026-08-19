@@ -7,7 +7,7 @@
   --orange:#E07B39;--orange-lt:#FDF2E9;--orange-dk:#C4622A;
   --bleu:#1A5276;--rouge:#C0392B;--rouge-lt:#FDEDEC;
   --success:#27AE60;--success-lt:#EAFAF1;--warning:#F39C12;--warning-lt:#FEF9E7;
-  --blanc:#FFF;--bg:#F4F5F0;--bg2:#ECEEE8;
+  --blanc:#FFF;--bg:#F5F5F0;--bg2:#ECEEE8;
   --g100:#F3F4F6;--g200:#E5E7EB;--g300:#D1D5DB;--g400:#9CA3AF;--g500:#6B7280;--g700:#374151;--g900:#111827;
   --sidebar-w:256px;--header-h:64px;
   --r:12px;--rs:8px;--rl:20px;
@@ -260,20 +260,20 @@ td.nc{font-weight:600;color:var(--g900)}
 .edt-eleve-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--bg)}
 .edt-eleve-nom{font-size:14px;font-weight:600;flex:1}
 .edt-eleve-btns{display:flex;gap:4px}
-.edt-btn-present{background:#e6f4ed;color:#1a7a46;border:1.5px solid #b2ddc8}
-.edt-btn-present.actif{background:#1a7a46;color:#fff}
-.edt-btn-absent{background:#fde8e8;color:#c0392b;border:1.5px solid #f5b5b5}
-.edt-btn-absent.actif{background:#c0392b;color:#fff}
-.edt-btn-retard{background:#fef3e2;color:#b7670a;border:1.5px solid #f5d8a0}
-.edt-btn-retard.actif{background:#b7670a;color:#fff}
+.edt-btn-present{background:#e6f4ed;color:var(--success);border:1.5px solid #b2ddc8}
+.edt-btn-present.actif{background:var(--success);color:#fff}
+.edt-btn-absent{background:#fde8e8;color:var(--rouge);border:1.5px solid #f5b5b5}
+.edt-btn-absent.actif{background:var(--rouge);color:#fff}
+.edt-btn-retard{background:#fef3e2;color:var(--warning);border:1.5px solid #f5d8a0}
+.edt-btn-retard.actif{background:var(--warning);color:#fff}
 .edt-retard-input{width:64px;padding:4px 6px;border:1px solid var(--bord);border-radius:var(--rs);font-size:13px}
 .edt-badge-saisis{font-size:12px;color:var(--gris);margin-bottom:12px}
 .edt-cloture-btn{width:100%;margin-top:16px}
 
 /* EDT DRAWER — Historique badges */
-.badge-present{background:#e6f4ed;color:#1a7a46;padding:2px 8px;border-radius:20px;font-size:12px}
-.badge-absent{background:#fde8e8;color:#c0392b;padding:2px 8px;border-radius:20px;font-size:12px}
-.badge-retard{background:#fef3e2;color:#b7670a;padding:2px 8px;border-radius:20px;font-size:12px}
+.badge-present{background:#e6f4ed;color:var(--success);padding:2px 8px;border-radius:20px;font-size:12px}
+.badge-absent{background:#fde8e8;color:var(--rouge);padding:2px 8px;border-radius:20px;font-size:12px}
+.badge-retard{background:#fef3e2;color:var(--warning);padding:2px 8px;border-radius:20px;font-size:12px}
 .badge-sorti{background:#f0f0f0;color:#666;padding:2px 8px;border-radius:20px;font-size:12px}
 .badge-dispense{background:#e8f0fe;color:#1a56cc;padding:2px 8px;border-radius:20px;font-size:12px}
 .badge-nonsaisi{background:#f5f5f5;color:#aaa;padding:2px 8px;border-radius:20px;font-size:12px}
