@@ -220,11 +220,21 @@ router.post('/auth/otp/demander', limiterAuth, valider(schemaOtpDemander), async
       expire_at:     db.raw("NOW() + INTERVAL '10 minutes'"),
     });
 
-    // En dev : log le code UNIQUEMENT en mode test (jamais en dev ordinaire)
-    if (process.env.NODE_ENV === 'test' && !process.env.AT_API_KEY) {
-      logger.warn('⚠️  SMS non configuré — CODE OTP (test uniquement) : ' + code, { telephone });
+    // Sans clé SMS configurée (dev local ou test) : logger le code plutôt
+    // que de tenter un envoi réel qui échouera toujours faute de credentials.
+    // L'ancienne condition (NODE_ENV==='test' uniquement) laissait passer un
+    // vrai appel réseau en dev normal, dont l'échec (réponse gateway
+    // non-JSON) faisait fuiter son message brut tel quel dans la réponse
+    // HTTP — affiché littéralement dans la bannière d'erreur de l'app.
+    if (!process.env.AT_API_KEY) {
+      logger.warn('⚠️  SMS non configuré — CODE OTP (dev/test uniquement) : ' + code, { telephone });
     } else {
-      await envoyerOTP(telephone, code, etablissement.nom);
+      try {
+        await envoyerOTP(telephone, code, etablissement.nom);
+      } catch (smsErr) {
+        logger.error('Échec envoi SMS OTP', { telephone, error: smsErr.message });
+        throw ApiError.erreurServeur('Échec de l\'envoi du SMS — réessayez dans quelques instants.');
+      }
     }
 
     logger.info('OTP envoyé', { telephone, etablissement_id: etablissement.id });
