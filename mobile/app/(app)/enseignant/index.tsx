@@ -124,7 +124,7 @@ export default function TableauBordEnseignant() {
         <View style={styles.actionsGrid}>
           {[
             { icon: 'checkmark-circle-outline', label: 'Faire l\'appel', couleur: Colors.accent, route: '/(app)/enseignant/appel' },
-            { icon: 'create-outline',           label: 'Saisir notes',   couleur: Colors.blue,   route: '/(app)/enseignant/notes-saisie' },
+            { icon: 'create-outline',           label: 'Saisir notes',   couleur: Colors.blue,   route: '/(app)/enseignant/evaluations' },
             { icon: 'bar-chart-outline',        label: 'Moyennes',       couleur: Colors.primary, route: '/(app)/enseignant/moyennes' },
             { icon: 'people-outline',            label: 'Classes',        couleur: Colors.success, route: '/(app)/enseignant/classes' },
           ].map(a => (

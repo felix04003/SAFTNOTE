@@ -6,10 +6,14 @@ import { Colors, Typography } from '../../../src/utils/theme';
 const TABS = [
   { name: 'index',        titre: 'Accueil', icone: 'home'             },
   { name: 'appel',        titre: 'Appel',   icone: 'checkmark-circle' },
-  { name: 'notes-saisie', titre: 'Notes',   icone: 'create'           },
   { name: 'evaluations',  titre: 'Évals',   icone: 'bar-chart'        },
 ];
-const HIDDEN = ['classes', 'moyennes'];
+// notes-saisie a besoin d'un evaluation_id (matière/classe/barème) pour être
+// utile — il n'y a pas de "notes du jour" par défaut comme pour l'appel.
+// En onglet direct, il s'affichait avec des paramètres undefined (voir
+// audit VANGUARD). Seul chemin d'accès désormais : evaluations.tsx → tap
+// sur une évaluation → push avec les params.
+const HIDDEN = ['classes', 'moyennes', 'notes-saisie'];
 
 export default function EnseignantLayout() {
   return (
