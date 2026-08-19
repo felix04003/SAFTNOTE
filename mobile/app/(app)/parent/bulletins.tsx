@@ -57,7 +57,7 @@ export default function BulletinsScreen() {
               <View style={styles.infoItem}>
                 <Ionicons name="trophy-outline" size={16} color={Colors.accent} />
                 <Text style={styles.infoLabel}>Rang</Text>
-                <Text style={styles.infoValeur}>{b.rang || '—'}<Text style={styles.infoSur}>/{b.rang_sur}</Text></Text>
+                <Text style={styles.infoValeur}>{b.rang || '—'}<Text style={styles.infoSur}>/{b.rang_sur || '—'}</Text></Text>
               </View>
             </View>
             <TouchableOpacity

@@ -42,7 +42,8 @@ export default function AbsencesScreen() {
       </View>
       <View style={styles.filtres}>
         {(['toutes', 'injustifiees'] as const).map(f => (
-          <TouchableOpacity key={f} style={[styles.filtreBtn, filtre === f && styles.filtreBtnActif]} onPress={() => setFiltre(f)}>
+          <TouchableOpacity key={f} style={[styles.filtreBtn, filtre === f && styles.filtreBtnActif]} onPress={() => setFiltre(f)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text style={[styles.filtreLabel, filtre === f && styles.filtreLabelActif]}>
               {f === 'toutes' ? 'Toutes' : 'Non justifiées'}
             </Text>
