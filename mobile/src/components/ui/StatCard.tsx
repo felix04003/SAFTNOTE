@@ -28,13 +28,12 @@ export default function StatCard({ titre, valeur, icone, couleur = Colors.primar
   const animStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
     opacity:   opacity.value,
-    flex:      1,
   }));
 
   const Wrapper: any = onPress ? TouchableOpacity : View;
 
   return (
-    <Animated.View style={animStyle}>
+    <Animated.View style={[styles.animWrap, animStyle]}>
     <Wrapper onPress={onPress} activeOpacity={0.85} style={[styles.card, Shadow.sm]}>
       <View style={[styles.iconeContainer, { backgroundColor: couleur + '18' }]}>
         <Ionicons name={icone} size={22} color={couleur} />
@@ -48,6 +47,7 @@ export default function StatCard({ titre, valeur, icone, couleur = Colors.primar
 }
 
 const styles = StyleSheet.create({
+  animWrap: { flex: 1 },
   card: {
     backgroundColor: Colors.white,
     borderRadius: Radius.md,

@@ -159,32 +159,8 @@ export default function ClassesEnseignantScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      {/* Résumé global */}
-      <View style={styles.resumeBar}>
-        <StatCard titre="Classes" valeur={classes.length} icone="school-outline" couleur={Colors.primary} />
-        <StatCard titre="Élèves suivis" valeur={totalEleves} icone="people-outline" couleur={Colors.blue} />
-      </View>
-
-      {/* Recherche */}
-      <View style={styles.rechercheRow}>
-        <View style={styles.rechercheContainer}>
-          <Ionicons name="search-outline" size={16} color={Colors.gray400} />
-          <TextInput
-            style={styles.rechercheInput}
-            placeholder="Rechercher une classe…"
-            placeholderTextColor={Colors.gray400}
-            value={recherche}
-            onChangeText={setRecherche}
-          />
-          {recherche.length > 0 && (
-            <TouchableOpacity onPress={() => setRecherche('')}>
-              <Ionicons name="close-circle" size={16} color={Colors.gray400} />
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-
       <FlatList
+        style={styles.flatlist}
         data={filtrees}
         keyExtractor={c => c.classe_id}
         renderItem={renderClasse}
@@ -197,6 +173,34 @@ export default function ClassesEnseignantScreen() {
             colors={[Colors.primary]}
             tintColor={Colors.primary}
           />
+        }
+        ListHeaderComponent={
+          <>
+            {/* Résumé global */}
+            <View style={styles.resumeBar}>
+              <StatCard titre="Classes" valeur={classes.length} icone="school-outline" couleur={Colors.primary} index={0} />
+              <StatCard titre="Élèves suivis" valeur={totalEleves} icone="people-outline" couleur={Colors.blue} index={1} />
+            </View>
+
+            {/* Recherche */}
+            <View style={styles.rechercheRow}>
+              <View style={styles.rechercheContainer}>
+                <Ionicons name="search-outline" size={16} color={Colors.gray400} />
+                <TextInput
+                  style={styles.rechercheInput}
+                  placeholder="Rechercher une classe…"
+                  placeholderTextColor={Colors.gray400}
+                  value={recherche}
+                  onChangeText={setRecherche}
+                />
+                {recherche.length > 0 && (
+                  <TouchableOpacity onPress={() => setRecherche('')}>
+                    <Ionicons name="close-circle" size={16} color={Colors.gray400} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          </>
         }
         ListEmptyComponent={
           <View style={styles.empty}>
@@ -214,8 +218,8 @@ export default function ClassesEnseignantScreen() {
 
 const styles = StyleSheet.create({
   safe:       { flex: 1, backgroundColor: Colors.background },
-  resumeBar:  { flexDirection: 'row', paddingHorizontal: Spacing.md, paddingTop: Spacing.md },
-  rechercheRow: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm },
+  resumeBar:  { flexDirection: 'row', paddingTop: Spacing.md },
+  rechercheRow: { paddingVertical: Spacing.sm },
   rechercheContainer: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: Colors.white, borderRadius: Radius.md,
@@ -223,6 +227,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.gray200,
   },
   rechercheInput: { flex: 1, fontSize: Typography.sm, color: Colors.gray900 },
+  flatlist:   { flex: 1 },
   liste:      { paddingHorizontal: Spacing.md, paddingBottom: 40, gap: 10 },
   classeCard: { overflow: 'hidden', ...Shadow.sm },
   classeHeader: {
