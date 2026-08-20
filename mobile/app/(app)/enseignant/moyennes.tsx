@@ -50,10 +50,10 @@ export default function MoyennesScreen() {
       FROM eleves e
       JOIN evaluations ev ON ev.classe=?
       LEFT JOIN notes n ON n.eleve_id=e.id AND n.evaluation_id=ev.id
-      WHERE ev.matiere=? AND ev.notes_publiees=1
+      WHERE e.classe=? AND ev.matiere=? AND ev.notes_publiees=1
       GROUP BY e.id
       ORDER BY moyenne DESC NULLS LAST, e.nom
-    `, [classeActif, matiereActif]);
+    `, [classeActif, classeActif, matiereActif]);
     setMoyennes(rows.map((r, i) => ({ ...r, rang: i + 1 })));
   }
 

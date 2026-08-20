@@ -34,7 +34,11 @@ export default function TableauBordEnseignant() {
     const [notesRows, absRows] = await Promise.all([
       db.getAllAsync("SELECT COUNT(*) as count FROM notes WHERE synced=0"),
       db.getAllAsync(
-        "SELECT date_cours, COUNT(*) as nb FROM presences WHERE statut='absent' AND date_cours >= date('now','-6 days') GROUP BY date_cours ORDER BY date_cours"
+        `SELECT a.date_cours as date_cours, COUNT(*) as nb
+         FROM presences p
+         JOIN appels a ON a.id = p.appel_id
+         WHERE p.statut='absent' AND a.date_cours >= date('now','-6 days')
+         GROUP BY a.date_cours ORDER BY a.date_cours`
       ),
       chargerEdt(),
     ]);

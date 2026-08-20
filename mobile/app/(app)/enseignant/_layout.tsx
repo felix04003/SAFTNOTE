@@ -43,8 +43,9 @@ export default function EnseignantLayout() {
         };
       }}
     >
-      <Tabs.Screen name="classes"   options={{ href: null }} />
-      <Tabs.Screen name="moyennes"  options={{ href: null }} />
+      <Tabs.Screen name="classes"      options={{ href: null }} />
+      <Tabs.Screen name="moyennes"     options={{ href: null }} />
+      <Tabs.Screen name="notes-saisie" options={{ href: null }} />
     </Tabs>
   );
 }
