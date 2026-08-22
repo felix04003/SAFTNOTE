@@ -36,7 +36,8 @@ export default function NotesSaisieScreen() {
               n.valeur, n.est_absent, n.absence_justifiee
        FROM eleves e
        LEFT JOIN notes n ON n.eleve_id=e.id AND n.evaluation_id=?
-       ORDER BY e.nom, e.prenom`, [evaluation_id]
+       WHERE e.classe=?
+       ORDER BY e.nom, e.prenom`, [evaluation_id, classe]
     );
     setNotes(eleves.map(e => ({
       eleve_id:         e.id,
@@ -125,12 +126,13 @@ export default function NotesSaisieScreen() {
             <Text style={styles.absentLabel}>Absent</Text>
             <TouchableOpacity
               style={[styles.justifBtn, n.absence_justifiee && styles.justifBtnActif]}
-              onPress={() => majNote(n.eleve_id, 'absence_justifiee', !n.absence_justifiee)}>
+              onPress={() => majNote(n.eleve_id, 'absence_justifiee', !n.absence_justifiee)}
+              hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}>
               <Text style={[styles.justifLabel, n.absence_justifiee && styles.justifLabelActif]}>
                 {n.absence_justifiee ? 'Justifié' : 'Injustifié'}
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => majNote(n.eleve_id, 'est_absent', false)}>
+            <TouchableOpacity onPress={() => majNote(n.eleve_id, 'est_absent', false)} hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}>
               <Ionicons name="close-circle" size={20} color={Colors.danger} />
             </TouchableOpacity>
           </View>

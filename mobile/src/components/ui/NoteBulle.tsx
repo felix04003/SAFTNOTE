@@ -10,7 +10,7 @@ interface Props {
 }
 
 const TAILLES = {
-  sm: { bulle: 36, texte: 13, sous: 10 },
+  sm: { bulle: 36, texte: 13, sous: 11 },
   md: { bulle: 52, texte: 18, sous: 11 },
   lg: { bulle: 70, texte: 24, sous: 13 },
 };

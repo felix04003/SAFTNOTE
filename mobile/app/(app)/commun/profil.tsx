@@ -26,8 +26,12 @@ export default function ProfilScreen() {
   }
 
   async function handleSync() {
-    const res = await syncService.syncComplete();
-    Alert.alert('Synchronisation', 'Données mises à jour avec succès.');
+    try {
+      await syncService.syncComplete();
+      Alert.alert('Synchronisation', 'Données mises à jour avec succès.');
+    } catch {
+      Alert.alert('Synchronisation impossible', 'Vérifiez votre connexion et réessayez.');
+    }
   }
 
   const ROLE_LABELS: Record<string, string> = {
@@ -53,7 +57,7 @@ export default function ProfilScreen() {
             { icon: 'sync-outline', label: 'Synchroniser maintenant', onPress: handleSync, couleur: Colors.primary },
             { icon: 'information-circle-outline', label: 'Version 1.0.0', couleur: Colors.gray400 },
           ].map((item, i) => (
-            <TouchableOpacity key={i} style={[styles.menuItem, i > 0 && styles.menuSep]} onPress={item.onPress}>
+            <TouchableOpacity key={i} style={[styles.menuItem, i > 0 && styles.menuSep]} onPress={item.onPress} hitSlop={{ top: 6, bottom: 6, left: 0, right: 0 }}>
               <Ionicons name={item.icon as any} size={20} color={item.couleur} />
               <Text style={[styles.menuLabel, { color: item.couleur }]}>{item.label}</Text>
               {item.onPress && <Ionicons name="chevron-forward" size={16} color={Colors.gray300} />}
