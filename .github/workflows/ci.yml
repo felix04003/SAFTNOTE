@@ -68,6 +68,31 @@ jobs:
         run: docker build -t ecolemanager-api:ci ./backend
 
   # ──────────────────────────────────────────────────────
+  #  Mobile : Tests unitaires (couche offline SQLite/sync/API)
+  # ──────────────────────────────────────────────────────
+  mobile-test:
+    name: Mobile — Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Tests unitaires
+        run: npm run test:ci
+
+  # ──────────────────────────────────────────────────────
   #  Mobile : TypeScript check
   # ──────────────────────────────────────────────────────
   mobile-typecheck:
@@ -98,7 +123,7 @@ jobs:
   mobile-eas-build:
     name: Mobile — EAS Build (Android)
     runs-on: ubuntu-latest
-    needs: [backend-lint-test, mobile-typecheck]
+    needs: [backend-lint-test, mobile-typecheck, mobile-test]
     if: startsWith(github.ref, 'refs/tags/v')
 
     defaults:

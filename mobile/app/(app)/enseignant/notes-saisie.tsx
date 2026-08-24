@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Crypto from 'expo-crypto';
 import { getDB, sauvegarderNoteLocale, ajouterOperationPendante } from '../../../src/services/storage/database';
+import { getElevesEvaluation } from '../../../src/services/storage/queries';
 import { enseignantApi } from '../../../src/services/api/client';
 import { Colors, Typography, Spacing, Radius, Shadow, couleurNote } from '../../../src/utils/theme';
 import Entete from '../../../src/components/ui/Entete';
@@ -31,14 +32,7 @@ export default function NotesSaisieScreen() {
   async function charger() {
     const db = getDB();
     // Charger les élèves avec leurs notes existantes
-    const eleves: any[] = await db.getAllAsync(
-      `SELECT e.id, e.nom, e.prenom, e.inscription_id,
-              n.valeur, n.est_absent, n.absence_justifiee
-       FROM eleves e
-       LEFT JOIN notes n ON n.eleve_id=e.id AND n.evaluation_id=?
-       WHERE e.classe=?
-       ORDER BY e.nom, e.prenom`, [evaluation_id, classe]
-    );
+    const eleves = await getElevesEvaluation(db, evaluation_id, classe);
     setNotes(eleves.map(e => ({
       eleve_id:         e.id,
       inscription_id:   e.inscription_id,

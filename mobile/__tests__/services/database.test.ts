@@ -20,7 +20,12 @@ const mockDb = {
 };
 
 jest.mock('expo-sqlite', () => ({
-  openDatabaseAsync: jest.fn().mockResolvedValue(mockDb),
+  // IMPORTANT : ne pas faire `.mockResolvedValue(mockDb)` ici — le factory de
+  // jest.mock() est hoisté par babel au-dessus de la déclaration `const mockDb`
+  // (transformée en `var` par la transpilation CommonJS), donc `mockDb` vaudrait
+  // encore `undefined` au moment où `.mockResolvedValue()` capture sa valeur.
+  // On référence `mockDb` paresseusement (à l'appel) pour éviter ce piège.
+  openDatabaseAsync: jest.fn(() => Promise.resolve(mockDb)),
 }));
 
 // ── Import sous test (apres les mocks) ───────────────────────────
@@ -177,7 +182,7 @@ describe('operations pendantes', () => {
     const result = await getOperationsPendantes();
     expect(result).toEqual(ops);
     const sql = mockGetAllAsync.mock.calls[0][0] as string;
-    expect(sql).toContain("statut='en_attente'");
+    expect(sql).toContain("statut = 'en_attente'");
   });
 
   it('marquerOperationSynced met a jour le statut', async () => {

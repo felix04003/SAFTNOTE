@@ -3,6 +3,7 @@
 // Stratégie offline-first : toutes les données critiques sont stockées localement
 
 import * as SQLite from 'expo-sqlite';
+import { insererOperationPendante, getOperationsPendantesDb, marquerOperationSyncedDb } from './queries';
 
 let db: SQLite.SQLiteDatabase;
 
@@ -22,9 +23,11 @@ export function getDB(): SQLite.SQLiteDatabase {
   return db;
 }
 
-// ── Création du schéma local ────────────────────────────────────
-async function creerTables() {
-  await db.execAsync(`
+// ── Schéma local — source unique de vérité ───────────────────────
+// Utilisé à la fois par creerTables() (app, via expo-sqlite) et par les
+// helpers de test (mobile/__tests__/helpers/seedDb.ts, via better-sqlite3).
+// Ne JAMAIS dupliquer ce DDL ailleurs.
+export const SCHEMA_SQL = `
     -- Session utilisateur
     CREATE TABLE IF NOT EXISTS session (
       id               TEXT PRIMARY KEY,
@@ -188,7 +191,10 @@ async function creerTables() {
     CREATE INDEX IF NOT EXISTS idx_absences_eleve     ON absences(eleve_id);
     CREATE INDEX IF NOT EXISTS idx_notes_parent_eleve ON notes_parent(eleve_id);
     CREATE INDEX IF NOT EXISTS idx_ops_statut         ON operations_pending(statut);
-  `);
+  `;
+
+async function creerTables() {
+  await db.execAsync(SCHEMA_SQL);
 }
 
 // ── Helpers génériques ───────────────────────────────────────────
@@ -269,23 +275,13 @@ export async function sauvegarderPresenceLocale(p: {
 export async function ajouterOperationPendante(type: string, payload: object): Promise<void> {
   const db = getDB();
   const { v4: uuid } = await import('react-native-uuid' as any).catch(() => ({ v4: () => Date.now().toString() }));
-  await db.runAsync(
-    `INSERT INTO operations_pending (id, type, payload) VALUES (?, ?, ?)`,
-    [uuid() as string, type, JSON.stringify(payload)]
-  );
+  await insererOperationPendante(db, uuid() as string, type, JSON.stringify(payload));
 }
 
 export async function getOperationsPendantes(): Promise<any[]> {
-  return getDB().getAllAsync(
-    `SELECT * FROM operations_pending
-       WHERE (statut = 'en_attente') OR (statut = 'erreur' AND tentatives < 5)
-       ORDER BY created_at_local
-       LIMIT 50`
-  );
+  return getOperationsPendantesDb(getDB());
 }
 
 export async function marquerOperationSynced(id: string): Promise<void> {
-  await getDB().runAsync(
-    `UPDATE operations_pending SET statut='envoyé' WHERE id=?`, [id]
-  );
+  await marquerOperationSyncedDb(getDB(), id);
 }

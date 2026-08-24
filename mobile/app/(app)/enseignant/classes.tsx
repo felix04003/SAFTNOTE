@@ -9,6 +9,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getDB } from '../../../src/services/storage/database';
+import { getClassesDepuisEdt, getNbElevesClasse, getNbAbsencesJourClasse, getMoyenneClasse } from '../../../src/services/storage/queries';
 import { syncService } from '../../../src/services/sync/syncService';
 import { Colors, Typography, Spacing, Radius, Shadow } from '../../../src/utils/theme';
 import Carte from '../../../src/components/ui/Carte';
@@ -36,33 +37,14 @@ export default function ClassesEnseignantScreen() {
     const db = getDB();
 
     // Récupérer les classes depuis l'EDT local
-    const rows: any[] = await db.getAllAsync(`
-      SELECT
-        classe_id,
-        classe,
-        COUNT(DISTINCT matiere) AS nb_matieres
-      FROM edt
-      WHERE classe IS NOT NULL AND classe_id IS NOT NULL
-      GROUP BY classe_id, classe
-      ORDER BY classe
-    `);
+    const rows = await getClassesDepuisEdt(db);
 
     // Pour chaque classe, récupérer stats complémentaires
     const stats: ClasseStats[] = await Promise.all(rows.map(async (r) => {
       const [elevesRow, absRow, moyRow] = await Promise.all([
-        db.getFirstAsync<{ count: number }>(
-          `SELECT COUNT(*) as count FROM eleves WHERE classe=?`, [r.classe]
-        ),
-        db.getFirstAsync<{ count: number }>(
-          `SELECT COUNT(*) as count FROM absences a
-           JOIN eleves e ON e.id = a.eleve_id
-           WHERE e.classe=? AND a.date_cours=date('now') AND a.est_justifie=0`, [r.classe]
-        ),
-        db.getFirstAsync<{ moy: number | null }>(
-          `SELECT AVG(m.moyenne) as moy FROM moyennes m
-           JOIN eleves e ON e.id = m.eleve_id
-           WHERE e.classe=?`, [r.classe]
-        ),
+        getNbElevesClasse(db, r.classe),
+        getNbAbsencesJourClasse(db, r.classe),
+        getMoyenneClasse(db, r.classe),
       ]);
       return {
         classe_id:       r.classe_id,

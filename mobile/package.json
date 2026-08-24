@@ -9,7 +9,8 @@
     "ios": "expo start --ios",
     "build:android": "eas build --platform android",
     "build:ios": "eas build --platform ios",
-    "test": "jest --watchAll"
+    "test": "jest --watchAll",
+    "test:ci": "jest --watchAll=false"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.0.0",
@@ -52,16 +53,22 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.0",
+    "@types/better-sqlite3": "^7.6.11",
     "@types/jest": "^29.5.14",
     "@types/react": "~18.3.12",
     "@types/react-test-renderer": "^18.3.0",
+    "better-sqlite3": "^9.6.0",
     "jest": "^29.7.0",
     "jest-expo": "~52.0.0",
     "react-test-renderer": "18.3.1",
     "typescript": "^5.3.3"
   },
   "jest": {
-    "preset": "jest-expo"
+    "preset": "jest-expo",
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "<rootDir>/__tests__/helpers/"
+    ]
   },
   "expo": {
     "install": {

@@ -4,6 +4,7 @@ import { View, Text, FlatList, StyleSheet, TouchableOpacity, ScrollView } from '
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getDB } from '../../../src/services/storage/database';
+import { getClassesDistinctes, getMatieresClasse, getMoyennesClasseMatiere } from '../../../src/services/storage/queries';
 import { Colors, Typography, Spacing, Radius, Shadow, couleurNote } from '../../../src/utils/theme';
 import Entete from '../../../src/components/ui/Entete';
 import NoteBulle from '../../../src/components/ui/NoteBulle';
@@ -27,14 +28,14 @@ export default function MoyennesScreen() {
 
   async function chargerClasses() {
     const db  = getDB();
-    const cls: any[] = await db.getAllAsync('SELECT DISTINCT classe_id, classe FROM edt WHERE classe IS NOT NULL ORDER BY classe');
+    const cls = await getClassesDistinctes(db);
     setClasses(cls);
     if (cls.length > 0) setClasseActif(cls[0].classe);
   }
 
   async function chargerMatieres(classe: string) {
     const db  = getDB();
-    const mat: any[] = await db.getAllAsync('SELECT DISTINCT matiere FROM evaluations WHERE classe=? ORDER BY matiere', [classe]);
+    const mat = await getMatieresClasse(db, classe);
     const mats = mat.map(m => m.matiere);
     setMatieres(mats);
     if (mats.length > 0) setMatiereActif(mats[0]);
@@ -43,17 +44,7 @@ export default function MoyennesScreen() {
   async function calculerMoyennes() {
     const db = getDB();
     // Récupérer tous les élèves de la classe avec leurs notes
-    const rows: any[] = await db.getAllAsync(`
-      SELECT e.id AS eleve_id, e.nom, e.prenom,
-             COUNT(n.id) AS nb_notes,
-             AVG(CASE WHEN n.est_absent=0 AND n.valeur IS NOT NULL THEN n.valeur END) AS moyenne
-      FROM eleves e
-      JOIN evaluations ev ON ev.classe=?
-      LEFT JOIN notes n ON n.eleve_id=e.id AND n.evaluation_id=ev.id
-      WHERE e.classe=? AND ev.matiere=? AND ev.notes_publiees=1
-      GROUP BY e.id
-      ORDER BY moyenne DESC NULLS LAST, e.nom
-    `, [classeActif, classeActif, matiereActif]);
+    const rows = await getMoyennesClasseMatiere(db, classeActif, matiereActif);
     setMoyennes(rows.map((r, i) => ({ ...r, rang: i + 1 })));
   }
 

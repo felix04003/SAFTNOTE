@@ -8,6 +8,7 @@ import { useAuthStore } from '../../../src/stores/authStore';
 import { useEdtStore } from '../../../src/stores/edtStore';
 import { syncService } from '../../../src/services/sync/syncService';
 import { getDB } from '../../../src/services/storage/database';
+import { getNbNotesEnAttente, getSparklineAbsences } from '../../../src/services/storage/queries';
 import { Colors, Typography, Spacing, Radius, Shadow, couleurMatiere } from '../../../src/utils/theme';
 import Carte from '../../../src/components/ui/Carte';
 import StatCard from '../../../src/components/ui/StatCard';
@@ -32,14 +33,8 @@ export default function TableauBordEnseignant() {
   async function charger() {
     const db = getDB();
     const [notesRows, absRows] = await Promise.all([
-      db.getAllAsync("SELECT COUNT(*) as count FROM notes WHERE synced=0"),
-      db.getAllAsync(
-        `SELECT a.date_cours as date_cours, COUNT(*) as nb
-         FROM presences p
-         JOIN appels a ON a.id = p.appel_id
-         WHERE p.statut='absent' AND a.date_cours >= date('now','-6 days')
-         GROUP BY a.date_cours ORDER BY a.date_cours`
-      ),
+      getNbNotesEnAttente(db),
+      getSparklineAbsences(db),
       chargerEdt(),
     ]);
     const nbEnAttente = (notesRows as any[])[0]?.count || 0;
