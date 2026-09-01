@@ -37,7 +37,7 @@ var PageParBulletins = {
       }).join('');
 
     } catch (e) {
-      liste.innerHTML = '<div style="text-align:center;padding:40px;color:var(--rouge)">' + (e.message || 'Erreur de chargement') + '</div>';
+      liste.innerHTML = '<div style="text-align:center;padding:40px;color:var(--rouge)">' + escapeHtml(e.message || 'Erreur de chargement') + '</div>';
     }
   },
 
@@ -48,11 +48,11 @@ var PageParBulletins = {
     var matiereRows = (b.matieres || []).map(function(m) {
       var moy = m.moyenne != null ? m.moyenne : '—';
       return '<tr>' +
-        '<td class="nc">' + (m.matiere || '—') + '</td>' +
+        '<td class="nc">' + escapeHtml(m.matiere || '—') + '</td>' +
         '<td style="text-align:center">' + (m.coefficient || 1) + '</td>' +
         '<td style="text-align:center;font-weight:700;color:' + _parCn(m.moyenne) + '">' + moy + '</td>' +
         '<td style="text-align:center;font-size:12px;color:var(--g500)">' + (m.rang_dans_classe ? m.rang_dans_classe + 'e' : '—') + '</td>' +
-        '<td style="font-size:12px;color:var(--g500)">' + (m.appreciation_enseignant || '') + '</td>' +
+        '<td style="font-size:12px;color:var(--g500)">' + escapeHtml(m.appreciation_enseignant || '') + '</td>' +
       '</tr>';
     }).join('');
 
@@ -61,9 +61,9 @@ var PageParBulletins = {
     return '<div class="carte" style="margin-bottom:16px">' +
       '<div class="ch" style="cursor:pointer" onclick="document.getElementById(\'' + detailId + '\').style.display = document.getElementById(\'' + detailId + '\').style.display === \'none\' ? \'\' : \'none\'">' +
         '<span>📄</span>' +
-        '<span class="ct">' + (b.periode || 'Trimestre ' + b.trimestre) + '</span>' +
+        '<span class="ct">' + escapeHtml(b.periode || ('Trimestre ' + b.trimestre)) + '</span>' +
         '<span style="font-size:13px;font-weight:800;color:var(--vert)">' + (b.moyenne_generale != null ? b.moyenne_generale + '/20' : '') + '</span>' +
-        '<span class="badge" style="background:var(--g100);color:' + couleurMention + ';border:1px solid ' + couleurMention + '">' + mention + '</span>' +
+        '<span class="badge" style="background:var(--g100);color:' + couleurMention + ';border:1px solid ' + couleurMention + '">' + escapeHtml(mention) + '</span>' +
         (b.rang ? '<span style="font-size:12px;color:var(--g400)">' + b.rang + 'e / ' + b.rang_sur + '</span>' : '') +
         '<span style="margin-left:auto;font-size:12px;color:var(--g400)">▾</span>' +
       '</div>' +
@@ -78,10 +78,10 @@ var PageParBulletins = {
           '<tbody>' + matiereRows + '</tbody>' +
         '</table></div>' +
         (b.appreciation_conseil
-          ? '<div style="padding:12px 18px;border-top:1px solid var(--g100);font-size:13px;color:var(--g700)"><b>Conseil de classe :</b> ' + b.appreciation_conseil + (b.decision_conseil ? ' — <b>' + b.decision_conseil + '</b>' : '') + '</div>'
+          ? '<div style="padding:12px 18px;border-top:1px solid var(--g100);font-size:13px;color:var(--g700)"><b>Conseil de classe :</b> ' + escapeHtml(b.appreciation_conseil) + (b.decision_conseil ? ' \u2014 <b>' + escapeHtml(b.decision_conseil) + '</b>' : '') + '</div>'
           : '') +
-        (b.bulletin_url
-          ? '<div style="padding:12px 18px;border-top:1px solid var(--g100)"><a href="' + b.bulletin_url + '" target="_blank" class="btn btn-l btn-sm">📥 Télécharger le bulletin PDF</a></div>'
+        (b.bulletin_url && /^https?:\/\//.test(b.bulletin_url)
+          ? '<div style="padding:12px 18px;border-top:1px solid var(--g100)"><a href="' + escapeHtml(b.bulletin_url) + '" target="_blank" class="btn btn-l btn-sm">\uD83D\uDCE5 T\u00E9l\u00E9charger le bulletin PDF</a></div>'
           : '') +
       '</div>' +
     '</div>';

@@ -2,6 +2,7 @@
 
 var PageEnsDashboard = {
   _classes: [],
+  _creneaux: [],
 
   async init() {
     var user = Auth.getUser();
@@ -55,13 +56,15 @@ var PageEnsDashboard = {
         el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--g400);font-size:13px">Aucun cours aujourd\'hui 🎉</div>';
         return;
       }
+      PageEnsDashboard._creneaux = creneaux;
       el.innerHTML = creneaux.map(function(c) {
+        var creneauId = escapeHtml(String(c.creneau_id || ''));
         return '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--g100)">' +
           '<div>' +
-            '<div style="font-weight:600;font-size:13px">' + (c.matiere || '—') + ' · <span style="color:var(--g500)">' + (c.classe || '') + '</span></div>' +
-            '<div style="font-size:11.5px;color:var(--g400);margin-top:2px">' + (c.heure_debut || '') + ' – ' + (c.heure_fin || '') + (c.salle ? ' · ' + c.salle : '') + '</div>' +
+            '<div style="font-weight:600;font-size:13px">' + escapeHtml(c.matiere || '\u2014') + ' \xb7 <span style="color:var(--g500)">' + escapeHtml(c.classe || '') + '</span></div>' +
+            '<div style="font-size:11.5px;color:var(--g400);margin-top:2px">' + escapeHtml((c.heure_debut || '') + ' \u2013 ' + (c.heure_fin || '')) + (c.salle ? ' \xb7 ' + escapeHtml(c.salle) : '') + '</div>' +
           '</div>' +
-          '<button class="btn btn-p btn-sm" onclick="PageEnsAppel.lancerDepuisCreneau(\'' + c.creneau_id + '\',\'' + (c.matiere || '').replace(/'/g, "\\'") + '\',\'' + (c.classe || '').replace(/'/g, "\\'") + '\',\'' + (c.classe_id || '') + '\')">Faire l\'appel</button>' +
+          '<button class="btn btn-p btn-sm" onclick="PageEnsDashboard._lancerAppel(\'' + creneauId + '\')">Faire l\'appel</button>' +
         '</div>';
       }).join('');
     } catch (e) {
@@ -81,18 +84,23 @@ var PageEnsDashboard = {
         return;
       }
       el.innerHTML = evals.map(function(ev) {
-        var titre = (ev.matiere || '—') + ' — ' + (ev.classe || '');
+        var evalId = escapeHtml(String(ev.id || ''));
         return '<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--g100)">' +
           '<div>' +
-            '<div style="font-weight:600;font-size:13px">' + (ev.matiere || '—') + '</div>' +
-            '<div style="font-size:11.5px;color:var(--g400)">' + (ev.classe || '') + ' · ' + (ev.type || '') + ' · ' + (ev.date_evaluation || '—') + '</div>' +
+            '<div style="font-weight:600;font-size:13px">' + escapeHtml(ev.matiere || '\u2014') + '</div>' +
+            '<div style="font-size:11.5px;color:var(--g400)">' + escapeHtml(ev.classe || '') + ' \xb7 ' + escapeHtml(ev.type || '') + ' \xb7 ' + escapeHtml(ev.date_evaluation || '\u2014') + '</div>' +
           '</div>' +
-          '<button class="btn btn-l btn-sm" onclick="PageEnsNotes.ouvrirSaisie(\'' + ev.id + '\',\'' + titre.replace(/'/g, "\\'") + '\');goto(\'ens-notes\')">Saisir →</button>' +
+          '<button class="btn btn-l btn-sm" onclick="PageEnsNotes.ouvrirSaisie(\'' + evalId + '\');goto(\'ens-notes\')">' + 'Saisir \u2192</button>' +
         '</div>';
       }).join('');
     } catch (e) {
       el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--g400);font-size:13px">Indisponible</div>';
     }
+  },
+
+  _lancerAppel: function(creneauId) {
+    var c = (PageEnsDashboard._creneaux || []).find(function(x) { return String(x.creneau_id) === String(creneauId); });
+    if (c) PageEnsAppel.lancerDepuisCreneau(c.creneau_id, c.matiere, c.classe, c.classe_id);
   },
 };
 

@@ -67,8 +67,8 @@ var PageParDashboard = {
     el.innerHTML = notes.map(function(n) {
       return '<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--g100)">' +
         '<div>' +
-          '<div style="font-weight:600;font-size:13px">' + (n.matiere || '—') + '</div>' +
-          '<div style="font-size:11.5px;color:var(--g400)">' + (n.type || '') + ' · ' + (n.date_evaluation || '') + '</div>' +
+          '<div style="font-weight:600;font-size:13px">' + escapeHtml(n.matiere || '\u2014') + '</div>' +
+          '<div style="font-size:11.5px;color:var(--g400)">' + escapeHtml(n.type || '') + ' \xb7 ' + escapeHtml(n.date_evaluation || '') + '</div>' +
         '</div>' +
         '<span style="font-weight:800;font-size:15px;color:' + _parCn(n.valeur) + '">' + (n.valeur != null ? n.valeur : '—') + '/20</span>' +
       '</div>';

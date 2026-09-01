@@ -52,12 +52,12 @@ var PageBulletins = {
       var taux = b.taux_reussite || '\u2014';
 
       return '<tr>' +
-        '<td class="nc">' + (b.classe || '\u2014') + '</td>' +
+        '<td class="nc">' + escapeHtml(b.classe || '\u2014') + '</td>' +
         '<td style="font-weight:600">' + effectif + '</td>' +
         '<td><div style="display:flex;align-items:center;gap:7px"><div class="pb" style="width:70px;height:7px"><div class="pf" style="width:' + (effectif ? generes / effectif * 100 : 0) + '%;--c:var(--success)"></div></div><span style="font-weight:600;font-size:11.5px">' + generes + '/' + effectif + '</span></div></td>' +
         '<td><span style="font-weight:600;color:' + (valides === effectif && effectif > 0 ? 'var(--success)' : 'var(--g500)') + '">' + valides + '</span></td>' +
         '<td>' + (moy != null ? '<span style="font-weight:700;color:' + cn(moy) + '">' + moy + '</span>' : '\u2014') + '</td>' +
-        '<td style="font-size:12px">' + (b.premier_classe || '\u2014') + '</td>' +
+        '<td style="font-size:12px">' + escapeHtml(b.premier_classe || '\u2014') + '</td>' +
         '<td><span class="badge ' + (parseFloat(taux) >= 80 ? 'bs' : parseFloat(taux) >= 70 ? 'bw' : 'bd') + '">' + taux + '</span></td>' +
         '<td style="display:flex;gap:5px">' +
           '<button class="btn btn-l btn-sm" onclick="PageBulletins.voirClasse(\'' + b.id + '\',\'' + (b.classe || '') + '\')">Voir</button>' +
@@ -90,12 +90,12 @@ var PageBulletins = {
         '<tbody>' +
         items.map(function(b) {
           return '<tr>' +
-            '<td style="font-weight:600">' + (b.prenom || '') + ' ' + (b.nom || '') + '</td>' +
-            '<td style="font-family:\'Space Mono\',monospace;font-size:11px;color:var(--g400)">' + (b.matricule || '—') + '</td>' +
-            '<td>' + (b.periode || 'T' + (b.trimestre || '—')) + '</td>' +
+            '<td style="font-weight:600">' + escapeHtml((b.prenom || '') + ' ' + (b.nom || '')) + '</td>' +
+            '<td style="font-family:\'Space Mono\',monospace;font-size:11px;color:var(--g400)">' + escapeHtml(b.matricule || '—') + '</td>' +
+            '<td>' + escapeHtml(b.periode || ('T' + (b.trimestre || '—'))) + '</td>' +
             '<td>' + (b.moyenne_generale != null ? '<span style="font-weight:700;color:' + cn(b.moyenne_generale) + '">' + b.moyenne_generale + '/20</span>' : '—') + '</td>' +
             '<td style="text-align:center">' + (b.rang != null ? b.rang + '/' + b.rang_sur : '—') + '</td>' +
-            '<td>' + (b.mention ? '<span class="badge bs">' + b.mention + '</span>' : '—') + '</td>' +
+            '<td>' + (b.mention ? '<span class="badge bs">' + escapeHtml(b.mention) + '</span>' : '—') + '</td>' +
             '<td style="text-align:center">' + (b.valide_at ? '<span style="color:var(--success)">✓</span>' : '<span style="color:var(--g300)">—</span>') + '</td>' +
             '<td><button class="btn btn-l btn-sm" onclick="PageBulletins.voirBulletin(\'' + b.id + '\')">Détail</button>' +
               (!b.valide_at ? ' <button class="btn btn-p btn-sm" onclick="PageBulletins.validerBulletin(\'' + b.id + '\')">Valider</button>' : '') +
@@ -104,7 +104,7 @@ var PageBulletins = {
         }).join('') +
         '</tbody></table></div>';
     } catch (e) {
-      if (corps) corps.innerHTML = '<p style="text-align:center;padding:30px;color:var(--rouge)">Erreur : ' + (e.message || 'impossible de charger') + '</p>';
+      if (corps) corps.innerHTML = '<p style="text-align:center;padding:30px;color:var(--rouge)">Erreur : ' + escapeHtml(e.message || 'impossible de charger') + '</p>';
     }
   },
 
@@ -126,29 +126,29 @@ var PageBulletins = {
 
       corps.innerHTML =
         '<div style="padding:14px 18px;border-bottom:1px solid var(--g100);display:flex;gap:18px;flex-wrap:wrap">' +
-          '<div><span style="font-size:11px;color:var(--g400)">Classe</span><div style="font-weight:600">' + (el.classe || '—') + '</div></div>' +
-          '<div><span style="font-size:11px;color:var(--g400)">Matricule</span><div style="font-weight:600;font-family:\'Space Mono\',monospace;font-size:12px">' + (el.matricule || '—') + '</div></div>' +
-          '<div><span style="font-size:11px;color:var(--g400)">Année</span><div style="font-weight:600">' + (per.annee_scolaire || '—') + '</div></div>' +
+          '<div><span style="font-size:11px;color:var(--g400)">Classe</span><div style="font-weight:600">' + escapeHtml(el.classe || '—') + '</div></div>' +
+          '<div><span style="font-size:11px;color:var(--g400)">Matricule</span><div style="font-weight:600;font-family:\'Space Mono\',monospace;font-size:12px">' + escapeHtml(el.matricule || '—') + '</div></div>' +
+          '<div><span style="font-size:11px;color:var(--g400)">Année</span><div style="font-weight:600">' + escapeHtml(per.annee_scolaire || '—') + '</div></div>' +
           '<div><span style="font-size:11px;color:var(--g400)">Moyenne générale</span><div style="font-size:20px;font-weight:800;color:' + cn(res2.moyenne_generale) + '">' + (res2.moyenne_generale != null ? res2.moyenne_generale + '/20' : '—') + '</div></div>' +
           '<div><span style="font-size:11px;color:var(--g400)">Rang</span><div style="font-weight:600">' + (res2.rang != null ? res2.rang + '/' + res2.rang_sur : '—') + '</div></div>' +
-          '<div><span style="font-size:11px;color:var(--g400)">Mention</span><div style="font-weight:600">' + (res2.mention || '—') + '</div></div>' +
+          '<div><span style="font-size:11px;color:var(--g400)">Mention</span><div style="font-weight:600">' + escapeHtml(res2.mention || '—') + '</div></div>' +
         '</div>' +
         '<div class="tw" style="max-height:45vh;overflow-y:auto"><table>' +
           '<thead><tr><th>Matière</th><th>Coeff.</th><th>Moyenne</th><th>Points</th><th>Rang</th><th>Appréciation</th></tr></thead>' +
           '<tbody>' +
           matieres.map(function(m) {
             return '<tr>' +
-              '<td style="font-weight:600">' + (m.matiere || '—') + '</td>' +
+              '<td style="font-weight:600">' + escapeHtml(m.matiere || '—') + '</td>' +
               '<td style="text-align:center;color:var(--g400)">' + (m.coefficient || '—') + '</td>' +
               '<td>' + (m.moyenne != null ? '<span style="font-weight:700;color:' + cn(m.moyenne) + '">' + m.moyenne + '/20</span>' : '<span style="color:var(--g300)">—</span>') + '</td>' +
               '<td style="color:var(--g500)">' + (m.points != null ? m.points : '—') + '</td>' +
               '<td style="text-align:center">' + (m.rang_dans_classe != null ? m.rang_dans_classe + '/' + m.rang_sur : '—') + '</td>' +
-              '<td style="font-size:12px;color:var(--g500)">' + (m.appreciation_enseignant || '—') + '</td>' +
+              '<td style="font-size:12px;color:var(--g500)">' + escapeHtml(m.appreciation_enseignant || '—') + '</td>' +
             '</tr>';
           }).join('') +
           '</tbody></table></div>';
     } catch (e) {
-      if (corps) corps.innerHTML = '<p style="text-align:center;padding:30px;color:var(--rouge)">Erreur : ' + (e.message || 'impossible de charger le bulletin') + '</p>';
+      if (corps) corps.innerHTML = '<p style="text-align:center;padding:30px;color:var(--rouge)">Erreur : ' + escapeHtml(e.message || 'impossible de charger le bulletin') + '</p>';
     }
   },
 

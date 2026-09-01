@@ -54,7 +54,7 @@ var PageClasses = {
       if (!sel) return;
       sel.innerHTML = '<option value="">— Choisir un niveau —</option>' +
         this._niveaux.map(function(n) {
-          return '<option value="' + n.id + '">' + n.nom + '</option>';
+          return '<option value="' + escapeHtml(String(n.id || '')) + '">' + escapeHtml(n.nom || '') + '</option>';
         }).join('');
     } catch (e) {
       console.warn('PageClasses.chargerNiveaux —', e.message);
@@ -109,11 +109,11 @@ var PageClasses = {
     }
 
     grid.innerHTML = classes.map(function(c) {
-      var nom      = c.nom_classe || c.nom || '—';
+      var nom      = escapeHtml(c.nom_classe || c.nom || '—');
       var effectif = c.effectif || c.effectif_max || 0;
       var moy      = c.moyenne != null ? c.moyenne : null;
       var pres     = c.taux_presence != null ? c.taux_presence : null;
-      var salle    = c.salle_principale || '';
+      var salle    = escapeHtml(c.salle_principale || '');
 
       return '<div class="carte" style="cursor:pointer;transition:transform .15s" onmouseenter="this.style.transform=\'translateY(-3px)\'" onmouseleave="this.style.transform=\'\'">' +
         '<div style="padding:16px 18px">' +
@@ -171,9 +171,9 @@ var PageClasses = {
       } else {
         affDiv.innerHTML = affectations.map(function(a) {
           return '<span style="display:inline-flex;align-items:center;gap:5px;background:var(--g100);border-radius:20px;padding:4px 10px;font-size:12px">' +
-            '<span style="width:8px;height:8px;border-radius:50%;background:' + (a.couleur_affichage || 'var(--vert)') + ';display:inline-block"></span>' +
-            '<b>' + a.matiere + '</b>' +
-            '<span style="color:var(--g500)">— ' + (a.enseignant_prenom || '') + ' ' + (a.enseignant_nom || '') + '</span>' +
+            '<span style="width:8px;height:8px;border-radius:50%;background:' + escapeHtml(a.couleur_affichage || 'var(--vert)') + ';display:inline-block"></span>' +
+            '<b>' + escapeHtml(a.matiere || '—') + '</b>' +
+            '<span style="color:var(--g500)">— ' + escapeHtml((a.enseignant_prenom || '') + ' ' + (a.enseignant_nom || '')) + '</span>' +
           '</span>';
         }).join('');
       }
@@ -194,15 +194,15 @@ var PageClasses = {
           eleves.map(function(e, i) {
             return '<tr style="border-bottom:1px solid var(--g100)">' +
               '<td style="padding:7px 8px;color:var(--g400)">' + (i + 1) + '</td>' +
-              '<td style="padding:7px 8px;font-weight:600">' + (e.nom || '—') + '</td>' +
-              '<td style="padding:7px 8px">' + (e.prenom || '—') + '</td>' +
-              '<td style="padding:7px 8px;font-family:monospace;font-size:11px;color:var(--g500)">' + (e.matricule || '—') + '</td>' +
+              '<td style="padding:7px 8px;font-weight:600">' + escapeHtml(e.nom || '—') + '</td>' +
+              '<td style="padding:7px 8px">' + escapeHtml(e.prenom || '—') + '</td>' +
+              '<td style="padding:7px 8px;font-family:monospace;font-size:11px;color:var(--g500)">' + escapeHtml(e.matricule || '—') + '</td>' +
             '</tr>';
           }).join('') +
           '</tbody></table>';
       }
     } catch (err) {
-      document.getElementById('dc-eleves').innerHTML = '<span style="color:var(--rouge);font-size:13px">Erreur : ' + err.message + '</span>';
+      document.getElementById('dc-eleves').innerHTML = '<span style="color:var(--rouge);font-size:13px">Erreur : ' + escapeHtml(err.message || '') + '</span>';
     }
   },
   init: function() { this.charger(); }

@@ -51,6 +51,8 @@ var PageEnsAppel = {
       var jourAuj = edt.find(function(j) { return j.jour === jourEDT; });
       var creneaux = (jourAuj && jourAuj.creneaux) || [];
       creneaux = creneaux.filter(function(c) { return !c.est_pause; });
+      // Stocker pour lookup dans selectionnerCreneau (évite d'injecter données API dans onclick)
+      this._creneauxData = creneaux;
 
       // Si filtre classe pré-sélectionné (venu de ens-classes)
       if (this._filtreClasseId) {
@@ -69,23 +71,28 @@ var PageEnsAppel = {
       }
 
       liste.innerHTML = creneaux.map(function(c) {
+        var matiere = escapeHtml(c.matiere || '\u2014');
+        var classe  = escapeHtml(c.classe  || '');
+        var heures  = escapeHtml((c.heure_debut || '') + ' \u2013 ' + (c.heure_fin || ''));
+        var salle   = c.salle ? ' \u00B7 <span style="color:var(--g400)">' + escapeHtml(c.salle) + '</span>' : '';
+        // Passer uniquement l'UUID (safe) — le reste est récupéré depuis _creneauxData
+        var creneauId = escapeHtml(String(c.creneau_id || ''));
+
         return '<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--g100)">' +
           '<div>' +
-            '<div style="font-weight:700;font-size:14px;color:var(--g900)">' + (c.matiere || '\u2014') + '</div>' +
+            '<div style="font-weight:700;font-size:14px;color:var(--g900)">' + matiere + '</div>' +
             '<div style="font-size:12.5px;color:var(--g500);margin-top:3px">' +
-              (c.classe || '') + ' \u00B7 ' + (c.heure_debut || '') + ' \u2013 ' + (c.heure_fin || '') +
-              (c.salle ? ' \u00B7 <span style="color:var(--g400)">' + c.salle + '</span>' : '') +
+              classe + ' \u00B7 ' + heures + salle +
             '</div>' +
           '</div>' +
-          '<button class="btn btn-p" ' +
-            'onclick="PageEnsAppel.selectionnerCreneau(\'' + c.creneau_id + '\',\'' + (c.matiere || '').replace(/\'/g, "\\'") + '\',\'' + (c.classe || '').replace(/\'/g, "\\'") + '\',\'' + (c.classe_id || '') + '\')">' +
+          '<button class="btn btn-p" onclick="PageEnsAppel.selectionnerCreneau(\'' + creneauId + '\')">' +
             'Faire l\'appel \u2192' +
           '</button>' +
         '</div>';
       }).join('');
 
     } catch (e) {
-      liste.innerHTML = '<div style="text-align:center;padding:28px;color:var(--rouge);font-size:13px">Impossible de charger les cr\u00E9neaux : ' + (e.message || '') + '</div>';
+      liste.innerHTML = '<div style="text-align:center;padding:28px;color:var(--rouge);font-size:13px">Impossible de charger les cr\u00E9neaux : ' + escapeHtml(e.message || '') + '</div>';
     }
   },
 
@@ -104,6 +111,11 @@ var PageEnsAppel = {
   },
 
   async selectionnerCreneau(creneauId, matiere, classe, classeId) {
+    // Lookup depuis _creneauxData si appelé depuis le bouton (sans matiere/classe)
+    if (!matiere && !classeId) {
+      var cData = (this._creneauxData || []).find(function(c) { return String(c.creneau_id) === String(creneauId); });
+      if (cData) { matiere = cData.matiere; classe = cData.classe; classeId = cData.classe_id; }
+    }
     this._classeId = classeId;
 
     // Afficher la grille
@@ -112,10 +124,10 @@ var PageEnsAppel = {
     if (etapeCreneaux) etapeCreneaux.style.display = 'none';
     if (etapeGrille) etapeGrille.style.display = '';
 
-    // Titre de la grille
+    // Titre de la grille (textContent — safe against XSS)
     var titre = document.getElementById('appel-grille-titre');
     var sous = document.getElementById('appel-grille-sous');
-    if (titre) titre.textContent = matiere + ' \u2014 ' + classe;
+    if (titre) titre.textContent = (matiere || '') + ' \u2014 ' + (classe || '');
     if (sous) {
       var now = new Date();
       sous.textContent = now.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -144,7 +156,7 @@ var PageEnsAppel = {
       this._renderGrille(this._eleves);
 
     } catch (e) {
-      if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--rouge)">Erreur : ' + (e.message || 'impossible d\'ouvrir l\'appel') + '</td></tr>';
+      if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--rouge)">Erreur : ' + escapeHtml(e.message || 'impossible d\'ouvrir l\'appel') + '</td></tr>';
     }
   },
 
@@ -158,9 +170,9 @@ var PageEnsAppel = {
     }
 
     tbody.innerHTML = eleves.map(function(el, i) {
-      var nom = (el.nom || '') + ' ' + (el.prenom || '');
+      var nom = escapeHtml((el.nom || '') + ' ' + (el.prenom || ''));
       return '<tr id="ar-' + i + '">' +
-        '<td style="font-weight:600">' + nom + '<input type="hidden" class="ar-inscr" value="' + (el.inscription_id || '') + '"></td>' +
+        '<td style="font-weight:600">' + nom + '<input type="hidden" class="ar-inscr" value="' + escapeHtml(String(el.inscription_id || '')) + '"></td>' +
         '<td style="text-align:center"><input type="radio" name="stat-' + i + '" class="ar-stat" value="present" checked onchange="PageEnsAppel._onStatChange(' + i + ')"></td>' +
         '<td style="text-align:center"><input type="radio" name="stat-' + i + '" class="ar-stat" value="absent" onchange="PageEnsAppel._onStatChange(' + i + ')"></td>' +
         '<td style="text-align:center"><input type="radio" name="stat-' + i + '" class="ar-stat" value="retard" onchange="PageEnsAppel._onStatChange(' + i + ')"></td>' +

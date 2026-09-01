@@ -38,19 +38,22 @@ var PageEnsClasses = {
       });
 
       grid.innerHTML = Object.values(groupes).map(function(g) {
-        var matieresStr = g.matieres.join(', ');
+        var matieresStr = escapeHtml(g.matieres.join(', '));
+        var classeEsc   = escapeHtml(g.classe || '—');
+        var salleEsc    = g.salle_principale ? '<span>\uD83D\uDCCD ' + escapeHtml(g.salle_principale) + '</span>' : '';
+        var cycleEsc    = g.cycle ? '<span style="font-size:10px;background:var(--g100);padding:2px 8px;border-radius:10px">' + escapeHtml(g.cycle) + '</span>' : '';
+
         return '<div class="carte" style="padding:18px">' +
           '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">' +
             '<div>' +
-              '<div style="font-size:17px;font-weight:800;color:var(--g900)">' + (g.classe || '—') + '</div>' +
+              '<div style="font-size:17px;font-weight:800;color:var(--g900)">' + classeEsc + '</div>' +
               '<div style="font-size:12px;color:var(--vert-lt);font-weight:600;margin-top:2px">' + matieresStr + '</div>' +
             '</div>' +
             '<span class="badge ' + (g.est_titulaire ? 'bs' : 'bw') + '">' + (g.est_titulaire ? 'Titulaire' : 'Vacataire') + '</span>' +
           '</div>' +
           '<div style="display:flex;gap:16px;font-size:12px;color:var(--g500);flex-wrap:wrap">' +
-            '<span>🎓 <b style="color:var(--g900)">' + (g.effectif || 0) + '</b> élèves</span>' +
-            (g.salle_principale ? '<span>📍 ' + g.salle_principale + '</span>' : '') +
-            (g.cycle ? '<span style="font-size:10px;background:var(--g100);padding:2px 8px;border-radius:10px">' + g.cycle + '</span>' : '') +
+            '<span>\uD83C\uDF93 <b style="color:var(--g900)">' + (g.effectif || 0) + '</b> \u00E9l\u00E8ves</span>' +
+            salleEsc + cycleEsc +
           '</div>' +
           '<div style="margin-top:14px;display:flex;gap:8px">' +
             '<button class="btn btn-l btn-sm" onclick="PageEnsNotes.filtrerParClasse(\'' + g.classe_id + '\');goto(\'ens-notes\')">📝 Notes</button>' +
@@ -60,7 +63,7 @@ var PageEnsClasses = {
       }).join('');
 
     } catch (e) {
-      grid.innerHTML = '<div style="text-align:center;padding:40px;color:var(--rouge)">Erreur : ' + (e.message || 'impossible de charger les classes') + '</div>';
+      grid.innerHTML = '<div style="text-align:center;padding:40px;color:var(--rouge)">Erreur : ' + escapeHtml(e.message || 'impossible de charger les classes') + '</div>';
     }
   },
 

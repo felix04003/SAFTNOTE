@@ -30,7 +30,7 @@ var PageParAbsences = {
       PageParAbsences._renderDetail(absences);
 
     } catch (e) {
-      if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:28px;color:var(--rouge)">' + (e.message || 'Erreur') + '</td></tr>';
+      if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:28px;color:var(--rouge)">' + escapeHtml(e.message || 'Erreur') + '</td></tr>';
     }
   },
 
@@ -61,17 +61,18 @@ var PageParAbsences = {
     var JOURS = ['', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
 
     tbody.innerHTML = absences.map(function(a) {
-      var jour   = JOURS[a.jour_semaine] || '';
-      var statut = { absent: 'Absent', retard: 'Retard', sorti_avant: 'Sorti tôt' }[a.statut] || a.statut;
+      var jour    = JOURS[a.jour_semaine] || '';
+      var statut  = escapeHtml({ absent: 'Absent', retard: 'Retard', sorti_avant: 'Sorti t\u00F4t' }[a.statut] || a.statut || '\u2014');
       var couleur = a.statut === 'absent' ? 'var(--rouge)' : a.statut === 'retard' ? 'var(--orange)' : 'var(--g500)';
+      var motif   = a.motif_justification ? ' \u2014 ' + escapeHtml(a.motif_justification) : '';
       var justif  = a.est_justifie
-        ? '<span class="badge bs">✓ Justifié' + (a.motif_justification ? ' — ' + a.motif_justification : '') + '</span>'
-        : '<span class="badge bd">Non justifié</span>';
+        ? '<span class="badge bs">\u2713 Justifi\u00E9' + motif + '</span>'
+        : '<span class="badge bd">Non justifi\u00E9</span>';
 
       return '<tr>' +
-        '<td style="font-family:\'Space Mono\',monospace;font-size:11.5px">' + (a.date_cours || '—') + '</td>' +
-        '<td class="nc">' + (a.matiere || '—') + '</td>' +
-        '<td style="font-size:12px;color:var(--g500)">' + (jour ? jour + ' ' : '') + (a.heure_debut || '') + '–' + (a.heure_fin || '') + '</td>' +
+        '<td style="font-family:\'Space Mono\',monospace;font-size:11.5px">' + escapeHtml(a.date_cours || '\u2014') + '</td>' +
+        '<td class="nc">' + escapeHtml(a.matiere || '\u2014') + '</td>' +
+        '<td style="font-size:12px;color:var(--g500)">' + escapeHtml((jour ? jour + ' ' : '') + (a.heure_debut || '') + '\u2013' + (a.heure_fin || '')) + '</td>' +
         '<td><span style="font-weight:600;color:' + couleur + '">' + statut + (a.minutes_retard ? ' (' + a.minutes_retard + 'min)' : '') + '</span></td>' +
         '<td>' + justif + '</td>' +
       '</tr>';

@@ -66,16 +66,20 @@ var PageEnsDiscipline = {
           renvoi_temporaire:    'Renvoi temp.',
           conseil_discipline:   'Conseil disc.',
           exclusion_definitive: 'Exclusion d\u00e9f.',
-        }[s.type] || (s.type || '\u2014');
+        }[s.type] || escapeHtml(s.type || '\u2014');
 
         var badgeType = (s.type === 'renvoi_temporaire' || s.type === 'exclusion_definitive') ? 'bd' : 'bw';
+        var nomE   = escapeHtml(((s.eleve_prenom || '') + ' ' + (s.eleve_nom || '')).trim() || '\u2014');
+        var classe = escapeHtml(s.classe || '\u2014');
+        var dateP  = escapeHtml(s.date_prononcee || '\u2014');
+        var motif  = escapeHtml(s.motif || '\u2014');
 
         return '<tr>' +
-          '<td class="nc">' + (s.eleve_prenom || '') + ' ' + (s.eleve_nom || '') + '</td>' +
-          '<td><span class="badge bp">' + (s.classe || '\u2014') + '</span></td>' +
+          '<td class="nc">' + nomE + '</td>' +
+          '<td><span class="badge bp">' + classe + '</span></td>' +
           '<td><span class="badge ' + badgeType + '">' + typeLabel + '</span></td>' +
-          '<td style="font-family:\'Space Mono\',monospace;font-size:11.5px">' + (s.date_prononcee || '\u2014') + '</td>' +
-          '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--g500)" title="' + (s.motif || '').replace(/"/g, '&quot;') + '">' + (s.motif || '\u2014') + '</td>' +
+          '<td style="font-family:\'Space Mono\',monospace;font-size:11.5px">' + dateP + '</td>' +
+          '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--g500)" title="' + motif + '">' + motif + '</td>' +
           '<td style="text-align:center">' + (s.notif_parent_envoyee ? '<span class="badge bs">\uD83D\uDCF1 Oui</span>' : '<span class="badge bd">Non</span>') + '</td>' +
         '</tr>';
       }).join('');
@@ -83,7 +87,7 @@ var PageEnsDiscipline = {
       this._renderPagination(res.meta);
 
     } catch (e) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--rouge)">' + (e.message || 'Erreur') + '</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--rouge)">' + escapeHtml(e.message || 'Erreur') + '</td></tr>';
     }
   },
 
@@ -193,8 +197,7 @@ var PageEnsDiscipline = {
   },
 };
 
-function _esc(s) {
-  return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
+// Alias vers escapeHtml() de ui.js (couvre &, <, >, ", ')
+function _esc(s) { return escapeHtml(s); }
 
 PAGE_HOOKS['ens-discipline'] = function() { PageEnsDiscipline.init(); };

@@ -147,15 +147,16 @@ var PageEnsEdt = {
         }
 
         // Créneau de cours : cliquable
-        var couleur = c.couleur_affichage || '#1a4731';
+        var couleurRaw = c.couleur_affichage || '';
+        var couleur = /^(#[0-9a-fA-F]{3,8}|rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)|var\(--[\w-]+\))$/.test(couleurRaw) ? couleurRaw : '#1a4731';
         // Calculer la date ISO du jour (lundi + offset jour_semaine-1)
         var dateISO = _dateISO(_addDays(PageEnsEdt._semaine, j.jour - 1));
 
         parts.push(
           '<div class="edt-creneau" style="background:' + couleur + '" ' +
           'onclick="EdtDrawer.ouvrir(\'' + c.creneau_id + '\',\'' + dateISO + '\')">' +
-          '<div class="edt-creneau-mat">' + (c.matiere || '') + '</div>' +
-          '<div class="edt-creneau-info">' + (c.classe || '') + (c.salle ? ' \xb7 ' + c.salle : '') + '</div>' +
+          '<div class="edt-creneau-mat">' + escapeHtml(c.matiere || '') + '</div>' +
+          '<div class="edt-creneau-info">' + escapeHtml(c.classe || '') + (c.salle ? ' \xb7 ' + escapeHtml(c.salle) : '') + '</div>' +
           '</div>'
         );
       });
@@ -238,7 +239,7 @@ var EdtDrawer = {
     } catch (e) {
       var body2 = document.getElementById('edt-drawer-body');
       if (body2) {
-        body2.innerHTML = '<div style="color:var(--rouge);padding:16px">Erreur\u00a0: ' + (e.message || 'Chargement échoué') + '</div>';
+        body2.innerHTML = '<div style="color:var(--rouge);padding:16px">Erreur\u00a0: ' + escapeHtml(e.message || 'Chargement \u00e9chou\u00e9') + '</div>';
       }
       return false;
     }
@@ -288,7 +289,7 @@ var EdtDrawer = {
     EdtDrawer._eleves.forEach(function(el) {
       parts.push(
         '<div class="edt-eleve-row">' +
-          '<span class="edt-eleve-nom">' + el.nom + ' ' + el.prenom + '</span>' +
+          '<span class="edt-eleve-nom">' + escapeHtml((el.nom || '') + ' ' + (el.prenom || '')) + '</span>' +
           badge(el) +
         '</div>'
       );
@@ -314,7 +315,7 @@ var EdtDrawer = {
     var salle = (EdtDrawer._creneau && EdtDrawer._creneau.salle) || '';
     body.innerHTML =
       '<div style="margin-bottom:12px;font-size:13px;color:var(--gris)">Salle actuelle\u00a0: <strong>' + (salle || '\u2014') + '</strong></div>' +
-      '<input id="edt-salle-input" class="fi" type="text" maxlength="50" placeholder="Ex: Salle 12, Amphi A\u2026" value="' + salle + '" style="width:100%;box-sizing:border-box;margin-bottom:12px">' +
+      '<input id="edt-salle-input" class="fi" type="text" maxlength="50" placeholder="Ex: Salle 12, Amphi A\u2026" value="' + escapeHtml(salle) + '" style="width:100%;box-sizing:border-box;margin-bottom:12px">' +
       '<button class="btn btn-p" style="width:100%" onclick="EdtDrawer._saveSalle()">Enregistrer</button>' +
       '<div id="edt-salle-msg" style="margin-top:10px;font-size:13px"></div>';
   },
@@ -403,7 +404,7 @@ var EdtAppel = {
 
       parts.push(
         '<div class="edt-eleve-row" id="row-' + id + '">' +
-          '<span class="edt-eleve-nom">' + el.nom + ' ' + el.prenom + '</span>' +
+          '<span class="edt-eleve-nom">' + escapeHtml((el.nom || '') + ' ' + (el.prenom || '')) + '</span>' +
           '<div class="edt-eleve-btns">' +
             '<button class="btn btn-xs edt-btn-present' + (s.statut === 'present' ? ' actif' : '') + '" ' +
               'onclick="EdtAppel.setStatut(\'' + id + '\',\'present\')">\u2713</button>' +

@@ -82,16 +82,23 @@ var PageNotes = {
           ? '<span class="badge bw">Brouillon</span>'
           : '<span class="badge bd">Non saisie</span>';
 
+      var matiere    = escapeHtml(ev.matiere || '—');
+      var classe     = escapeHtml(ev.classe  || '—');
+      var typeLabel  = escapeHtml(ev.type    || '—');
+      var date       = escapeHtml(ev.date_evaluation || '—');
+      var enseignant = escapeHtml(ev.enseignant || '—');
+
+      // Passer uniquement l'id (UUID safe) — le titre est calculé dans ouvrirSaisie()
       var actions = st !== 'publiee'
-        ? '<button class="btn btn-l btn-sm" onclick="event.stopPropagation();PageNotes.ouvrirSaisie(\'' + ev.id + '\',\'' + (ev.titre || ev.type + ' ' + ev.numero) + ' — ' + (ev.classe || '') + '\')" style="padding:4px 10px;font-size:11px">✏️ Saisir</button>'
+        ? '<button class="btn btn-l btn-sm" onclick="event.stopPropagation();PageNotes.ouvrirSaisie(\'' + ev.id + '\')" style="padding:4px 10px;font-size:11px">✏️ Saisir</button>'
         : '<button class="btn btn-sm" style="padding:4px 10px;font-size:11px;background:var(--g100);color:var(--g500);cursor:default">👁 Voir</button>';
 
-      return '<tr style="cursor:pointer" onclick="PageNotes.ouvrirSaisie(\'' + ev.id + '\',\'' + (ev.titre || ev.type + ' ' + ev.numero) + ' — ' + (ev.classe || '') + '\')">' +
-        '<td class="nc">' + (ev.matiere || '—') + '</td>' +
-        '<td><span class="badge bp">' + (ev.classe  || '—') + '</span></td>' +
-        '<td><span class="badge bo">' + (ev.type    || '—') + '</span></td>' +
-        '<td style="font-family:\'Space Mono\',monospace;font-size:11.5px">' + (ev.date_evaluation || '—') + '</td>' +
-        '<td>' + (ev.enseignant || '—') + '</td>' +
+      return '<tr style="cursor:pointer" onclick="PageNotes.ouvrirSaisie(\'' + ev.id + '\')">' +
+        '<td class="nc">' + matiere + '</td>' +
+        '<td><span class="badge bp">' + classe + '</span></td>' +
+        '<td><span class="badge bo">' + typeLabel + '</span></td>' +
+        '<td style="font-family:\'Space Mono\',monospace;font-size:11.5px">' + date + '</td>' +
+        '<td>' + enseignant + '</td>' +
         '<td>' + (moy != null ? '<span style="font-weight:700;color:' + cn(moy) + '">' + moy + '/20</span>' : '<span class="badge bd">—</span>') + '</td>' +
         '<td style="color:var(--g400)">' + (ev.note_min != null ? ev.note_min : '—') + '</td>' +
         '<td style="color:var(--g400)">' + (ev.note_max != null ? ev.note_max : '—') + '</td>' +
@@ -142,8 +149,8 @@ var PageNotes = {
       }
       selAff.innerHTML = '<option value="">— Choisir matière/enseignant —</option>' +
         aff.map(function(a) {
-          return '<option value="' + a.affectation_id + '">' +
-            a.matiere + ' · ' + a.enseignant_prenom + ' ' + a.enseignant_nom +
+          return '<option value="' + escapeHtml(String(a.affectation_id || '')) + '">' +
+            escapeHtml(a.matiere || '') + ' · ' + escapeHtml(a.enseignant_prenom || '') + ' ' + escapeHtml(a.enseignant_nom || '') +
           '</option>';
         }).join('');
     } catch (e) {
@@ -190,12 +197,17 @@ var PageNotes = {
   },
 
   // ── Saisie des notes ─────────────────────────────────────────────
-  async ouvrirSaisie(evalId, titre) {
-    this._evalCourant = { id: evalId, titre: titre };
+  async ouvrirSaisie(evalId) {
+    this._evalCourant = { id: evalId };
 
-    // Titre du modal
+    // Titre calculé depuis les données locales (évite d'injecter des données API dans onclick)
+    var evalMeta = (PageNotes.data || []).find(function(e) { return e.id === evalId; });
+    var titre = evalMeta
+      ? (evalMeta.titre || ((evalMeta.type || '') + ' ' + (evalMeta.numero || '') + ' \u2014 ' + (evalMeta.classe || '')))
+      : 'Saisie des notes';
+
     var titreEl = document.getElementById('notes-modal-titre');
-    if (titreEl) titreEl.textContent = titre || 'Saisie des notes';
+    if (titreEl) titreEl.textContent = titre;
 
     var tbody = document.getElementById('tb-notes-saisie');
     if (tbody) tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:30px;color:var(--g400)">Chargement…</td></tr>';
@@ -240,7 +252,7 @@ var PageNotes = {
       if (btnSauver)  btnSauver.style.display  = estPubliee ? 'none' : '';
 
     } catch (e) {
-      if (tbody) tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:30px;color:var(--rouge)">Erreur : ' + (e.message || 'impossible de charger les notes') + '</td></tr>';
+      if (tbody) tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:30px;color:var(--rouge)">Erreur : ' + escapeHtml(e.message || 'impossible de charger les notes') + '</td></tr>';
     }
   },
 
@@ -257,9 +269,9 @@ var PageNotes = {
       var note = notesMap[el.id] || {};
       var absent = note.est_absent || false;
       return '<tr id="nr-' + i + '">' +
-        '<td><span style="font-weight:600">' + el.nom + '</span> ' + el.prenom +
-          '<input type="hidden" class="nr-eleve-id"    value="' + el.id + '">' +
-          '<input type="hidden" class="nr-inscription" value="' + (el.inscription_id || '') + '">' +
+        '<td><span style="font-weight:600">' + escapeHtml(el.nom || '') + '</span> ' + escapeHtml(el.prenom || '') +
+          '<input type="hidden" class="nr-eleve-id"    value="' + escapeHtml(String(el.id || '')) + '">' +
+          '<input type="hidden" class="nr-inscription" value="' + escapeHtml(String(el.inscription_id || '')) + '">' +
         '</td>' +
         '<td style="text-align:center">' +
           '<input type="checkbox" class="nr-absent" ' + (absent ? 'checked' : '') +

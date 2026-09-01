@@ -42,18 +42,25 @@ var PageAbsences = {
     }
 
     tbody.innerHTML = absences.map(function(a) {
-      var type = a.statut || a.type || 'absent';
+      var type     = a.statut || a.type || 'absent';
       var justifie = a.est_justifie;
+      var nom      = escapeHtml((a.eleve || ((a.prenom || '') + ' ' + (a.nom || ''))).trim() || '\u2014');
+      var classe   = escapeHtml(a.classe || '\u2014');
+      var date     = escapeHtml(a.date_cours || a.date || '\u2014');
+      var matiere  = escapeHtml(a.matiere || '\u2014');
+      var typeEsc  = escapeHtml(type);
+      var justif   = escapeHtml(a.justification || '\u2014');
+      var presId   = escapeHtml(String(a.presence_id || ''));
 
       return '<tr>' +
-        '<td class="nc">' + (a.eleve || (a.prenom || '') + ' ' + (a.nom || '')) + '</td>' +
-        '<td><span class="badge bp">' + (a.classe || '\u2014') + '</span></td>' +
-        '<td style="font-family:\'Space Mono\',monospace;font-size:11.5px">' + (a.date_cours || a.date || '\u2014') + '</td>' +
-        '<td>' + (a.matiere || '\u2014') + '</td>' +
-        '<td><span class="badge ' + (type === 'absent' ? 'bd' : 'bw') + '">' + type + '</span></td>' +
+        '<td class="nc">' + nom + '</td>' +
+        '<td><span class="badge bp">' + classe + '</span></td>' +
+        '<td style="font-family:\'Space Mono\',monospace;font-size:11.5px">' + date + '</td>' +
+        '<td>' + matiere + '</td>' +
+        '<td><span class="badge ' + (type === 'absent' ? 'bd' : 'bw') + '">' + typeEsc + '</span></td>' +
         '<td style="text-align:center">' + (a.notifie || (justifie != null ? (justifie ? '\u2705' : '\u274C') : '\u2014')) + '</td>' +
-        '<td style="font-size:11.5px;color:var(--g500)">' + (a.justification || '\u2014') + '</td>' +
-        '<td>' + (!justifie ? '<button class="btn btn-l btn-sm" onclick="PageAbsences.ouvrirJustification(\'' + (a.presence_id || '') + '\')">Justifier</button>' : '<span style="font-size:12px;color:var(--success)">Justifi\u00E9e</span>') + '</td>' +
+        '<td style="font-size:11.5px;color:var(--g500)">' + justif + '</td>' +
+        '<td>' + (!justifie ? '<button class="btn btn-l btn-sm" onclick="PageAbsences.ouvrirJustification(\'' + presId + '\')">Justifier</button>' : '<span style="font-size:12px;color:var(--success)">Justifi\u00E9e</span>') + '</td>' +
       '</tr>';
     }).join('');
   },

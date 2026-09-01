@@ -20,9 +20,9 @@ var PageParNotes = {
       PageParNotes._periodes = (r.data && r.data.periodes) || [];
       var sel = document.getElementById('par-fil-periode');
       if (sel) {
-        sel.innerHTML = '<option value="">Toutes les périodes</option>' +
+        sel.innerHTML = '<option value="">Toutes les p\u00E9riodes</option>' +
           PageParNotes._periodes.map(function(p) {
-            return '<option value="' + p.id + '">' + p.libelle + '</option>';
+            return '<option value="' + escapeHtml(String(p.id || '')) + '">' + escapeHtml(p.libelle || '') + '</option>';
           }).join('');
         if (PageParNotes._filtrePerid) sel.value = PageParNotes._filtrePerid;
       }
@@ -59,26 +59,28 @@ var PageParNotes = {
       }
 
       container.innerHTML = parMatiere.map(function(m) {
-        var couleur = m.couleur || '#1a4731';
+        // Valider couleur CSS pour éviter l'injection de style
+        var couleur = /^(#[0-9a-fA-F]{3,8}|rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)|var\(--[\w-]+\))$/.test(m.couleur) ? m.couleur : '#1a4731';
+        var matiere = escapeHtml(m.matiere || '—');
         return '<div class="carte" style="margin-bottom:16px">' +
           '<div class="ch" style="border-left:3px solid ' + couleur + '">' +
-            '<span style="color:' + couleur + ';font-weight:800">' + (m.matiere || '—') + '</span>' +
+            '<span style="color:' + couleur + ';font-weight:800">' + matiere + '</span>' +
           '</div>' +
           '<div class="tw">' +
             '<table>' +
               '<thead><tr>' +
-                '<th>Type</th><th>Date</th><th>Note</th><th>Moy. classe</th><th>Appréciation</th>' +
+                '<th>Type</th><th>Date</th><th>Note</th><th>Moy. classe</th><th>Appr\u00E9ciation</th>' +
               '</tr></thead>' +
               '<tbody>' +
                 m.notes.map(function(n) {
                   var valAff = n.est_absent ? '<span class="badge bd">Absent</span>' :
-                    (n.valeur != null ? '<span style="font-weight:800;color:' + _parCn(n.valeur) + '">' + n.valeur + '/' + (n.note_max || 20) + '</span>' : '—');
+                    (n.valeur != null ? '<span style="font-weight:800;color:' + _parCn(n.valeur) + '">' + n.valeur + '/' + (n.note_max || 20) + '</span>' : '\u2014');
                   return '<tr>' +
-                    '<td><span class="badge bo">' + (n.type || '—') + '</span></td>' +
-                    '<td style="font-family:\'Space Mono\',monospace;font-size:11.5px">' + (n.date_evaluation || '—') + '</td>' +
+                    '<td><span class="badge bo">' + escapeHtml(n.type || '\u2014') + '</span></td>' +
+                    '<td style="font-family:\'Space Mono\',monospace;font-size:11.5px">' + escapeHtml(n.date_evaluation || '\u2014') + '</td>' +
                     '<td>' + valAff + '</td>' +
-                    '<td style="color:var(--g500);font-size:12px">' + (n.moyenne_classe != null ? n.moyenne_classe + '/20' : '—') + '</td>' +
-                    '<td style="color:var(--g500);font-size:12px">' + (n.appreciation || '') + '</td>' +
+                    '<td style="color:var(--g500);font-size:12px">' + (n.moyenne_classe != null ? n.moyenne_classe + '/20' : '\u2014') + '</td>' +
+                    '<td style="color:var(--g500);font-size:12px">' + escapeHtml(n.appreciation || '') + '</td>' +
                   '</tr>';
                 }).join('') +
               '</tbody>' +
@@ -88,7 +90,7 @@ var PageParNotes = {
       }).join('');
 
     } catch (e) {
-      if (container) container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--rouge)">' + (e.message || 'Erreur de chargement') + '</div>';
+      if (container) container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--rouge)">' + escapeHtml(e.message || 'Erreur de chargement') + '</div>';
     }
   },
 

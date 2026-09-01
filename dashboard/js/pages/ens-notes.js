@@ -40,7 +40,7 @@ var PageEnsNotes = {
     });
     sel.innerHTML = '<option value="">Toutes mes classes</option>' +
       classes.map(function(c) {
-        return '<option value="' + c.classe_id + '">' + c.classe + '</option>';
+        return '<option value="' + escapeHtml(String(c.classe_id || '')) + '">' + escapeHtml(c.classe || '') + '</option>';
       }).join('');
     if (PageEnsNotes._filtreClasseId) sel.value = PageEnsNotes._filtreClasseId;
   },
@@ -68,7 +68,7 @@ var PageEnsNotes = {
       this._data = res.data || [];
       this._renderTable(this._data);
     } catch (e) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--rouge)">' + (e.message || 'Erreur de chargement') + '</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--rouge)">' + escapeHtml(e.message || 'Erreur de chargement') + '</td></tr>';
     }
   },
 
@@ -90,19 +90,18 @@ var PageEnsNotes = {
           ? '<span class="badge bw">Brouillon</span>'
           : '<span class="badge bd">\u00c0 saisir</span>';
 
-      var titre = (ev.titre || (ev.type + ' ' + (ev.numero || ''))) + ' \u2014 ' + (ev.classe || '');
-      var titreEsc = (titre || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      var evalId = escapeHtml(String(ev.id || ''));
 
-      return '<tr style="cursor:pointer" onclick="PageEnsNotes.ouvrirSaisie(\'' + ev.id + '\',\'' + titreEsc + '\')">' +
-        '<td class="nc">' + (ev.matiere || '\u2014') + '</td>' +
-        '<td><span class="badge bp">' + (ev.classe || '\u2014') + '</span></td>' +
-        '<td><span class="badge bo">' + (ev.type || '\u2014') + '</span></td>' +
-        '<td style="font-family:\'Space Mono\',monospace;font-size:11.5px">' + (ev.date_evaluation || '\u2014') + '</td>' +
+      return '<tr style="cursor:pointer" onclick="PageEnsNotes.ouvrirSaisie(\'' + evalId + '\')">' +
+        '<td class="nc">' + escapeHtml(ev.matiere || '\u2014') + '</td>' +
+        '<td><span class="badge bp">' + escapeHtml(ev.classe || '\u2014') + '</span></td>' +
+        '<td><span class="badge bo">' + escapeHtml(ev.type || '\u2014') + '</span></td>' +
+        '<td style="font-family:\'Space Mono\',monospace;font-size:11.5px">' + escapeHtml(ev.date_evaluation || '\u2014') + '</td>' +
         '<td>' + (moy != null ? '<span style="font-weight:700;color:' + cn(moy) + '">' + moy + '/20</span>' : '<span class="badge bd">\u2014</span>') + '</td>' +
         '<td>' + badge + '</td>' +
         '<td onclick="event.stopPropagation()">' +
           (st !== 'publiee'
-            ? '<button class="btn btn-l btn-sm" onclick="event.stopPropagation();PageEnsNotes.ouvrirSaisie(\'' + ev.id + '\',\'' + titreEsc + '\')">&#x270f;&#xfe0f; Saisir</button>'
+            ? '<button class="btn btn-l btn-sm" onclick="event.stopPropagation();PageEnsNotes.ouvrirSaisie(\'' + evalId + '\')">&#x270f;&#xfe0f; Saisir</button>'
             : '<button class="btn btn-sm" style="background:var(--g100);color:var(--g500);cursor:default">&#x1f441; Voir</button>') +
         '</td>' +
       '</tr>';
@@ -151,7 +150,7 @@ var PageEnsNotes = {
     if (aff.length) {
       selAff.innerHTML = '<option value="">\u2014 Choisir la mati\u00e8re \u2014</option>' +
         aff.map(function(a) {
-          return '<option value="' + a.affectation_id + '">' + a.matiere + '</option>';
+          return '<option value="' + escapeHtml(String(a.affectation_id || '')) + '">' + escapeHtml(a.matiere || '') + '</option>';
         }).join('');
     } else {
       selAff.innerHTML = '<option value="">Aucune affectation pour cette classe</option>';
@@ -199,11 +198,11 @@ var PageEnsNotes = {
   },
 
   // ── Modal saisie des notes ────────────────────────────────────────
-  ouvrirSaisie: async function(evalId, titre) {
-    this._evalCourant = { id: evalId, titre: titre };
+  ouvrirSaisie: async function(evalId) {
+    this._evalCourant = { id: evalId };
 
     var titreEl = document.getElementById('ens-notes-modal-titre');
-    if (titreEl) titreEl.textContent = titre || 'Saisie des notes';
+    if (titreEl) titreEl.textContent = 'Saisie des notes';
 
     var tbody = document.getElementById('tb-ens-notes-saisie');
     if (tbody) tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:30px;color:var(--g400)">Chargement\u2026</td></tr>';
@@ -229,6 +228,10 @@ var PageEnsNotes = {
       PageEnsNotes._evalCourant.statut    = evalInfo ? evalInfo.statut    : 'non_saisie';
       PageEnsNotes._evalCourant.classe_id = evalInfo ? evalInfo.classe_id : null;
 
+      if (evalInfo && titreEl) {
+        titreEl.textContent = (evalInfo.titre || ((evalInfo.type || '') + ' ' + (evalInfo.numero || '')).trim()) + ' \u2014 ' + (evalInfo.classe || '');
+      }
+
       var eleves = [];
       if (evalInfo && evalInfo.classe_id) {
         var elevesRes = await Api.get('/classes/' + evalInfo.classe_id + '/eleves');
@@ -249,7 +252,7 @@ var PageEnsNotes = {
       if (btnSauver)  btnSauver.style.display  = estPubliee ? 'none' : '';
 
     } catch (e) {
-      if (tbody) tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:30px;color:var(--rouge)">Erreur\u00a0: ' + (e.message || '') + '</td></tr>';
+      if (tbody) tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:30px;color:var(--rouge)">Erreur\u00a0: ' + escapeHtml(e.message || '') + '</td></tr>';
     }
   },
 
@@ -264,9 +267,9 @@ var PageEnsNotes = {
       var note = notesMap[el.id] || {};
       var absent = note.est_absent || false;
       return '<tr id="nr-' + i + '">' +
-        '<td><span style="font-weight:600">' + (el.nom || '') + '</span> ' + (el.prenom || '') +
-          '<input type="hidden" class="nr-eleve-id" value="' + (el.id || '') + '">' +
-          '<input type="hidden" class="nr-inscription" value="' + (el.inscription_id || '') + '">' +
+        '<td><span style="font-weight:600">' + escapeHtml(el.nom || '') + '</span> ' + escapeHtml(el.prenom || '') +
+          '<input type="hidden" class="nr-eleve-id" value="' + escapeHtml(String(el.id || '')) + '">' +
+          '<input type="hidden" class="nr-inscription" value="' + escapeHtml(String(el.inscription_id || '')) + '">' +
         '</td>' +
         '<td style="text-align:center"><input type="checkbox" class="nr-absent" ' + (absent ? 'checked' : '') +
           ' onchange="PageEnsNotes._toggleAbsent(this,' + i + ')"></td>' +
@@ -275,7 +278,7 @@ var PageEnsNotes = {
           ' placeholder="/' + noteMax + '" ' + (absent ? 'disabled' : '') +
           ' style="width:90px;padding:4px 8px;font-size:13px"></td>' +
         '<td><input type="text" class="fi nr-appreciation" placeholder="Appr\u00e9ciation\u2026"' +
-          ' value="' + ((note.appreciation || '')).replace(/"/g, '&quot;') + '"' +
+          ' value="' + escapeHtml(note.appreciation || '') + '"' +
           ' style="font-size:12px;padding:4px 8px"></td>' +
       '</tr>';
     }).join('');
