@@ -1,7 +1,7 @@
 // src/stores/authStore.ts
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
-import { api } from '../services/api/client';
+import { api, authApi } from '../services/api/client';
 import { getDB } from '../services/storage/database';
 
 export type Role = 'enseignant' | 'parent' | 'directeur' | 'censeur' | 'admin' | 'super_admin';
@@ -51,20 +51,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   // Connexion par mot de passe (enseignants, directeurs)
   connexionMDP: async (data) => {
-    const res = await (await import('../services/api/client')).authApi.connexion(data);
+    const res = await authApi.connexion(data);
     await persisterSession(res, set);
   },
 
   // Connexion OTP (parents)
   connexionOTP: async (data) => {
-    const res = await (await import('../services/api/client')).authApi.validerOTP(data);
+    const res = await authApi.validerOTP(data);
     await persisterSession(res, set);
   },
 
   // Déconnexion
   deconnexion: async () => {
     try {
-      await (await import('../services/api/client')).authApi.deconnexion().catch(() => {});
+      await authApi.deconnexion().catch(() => {});
     } finally {
       api.setToken(null);
       await SecureStore.deleteItemAsync('jwt_token');

@@ -52,16 +52,16 @@ var ParApp = {
         conteneur.innerHTML =
           '<div style="font-size:9px;opacity:.5;margin-bottom:4px;letter-spacing:.5px;text-transform:uppercase">Mon enfant</div>' +
           '<div style="font-size:11px;font-weight:600">' +
-            (ParApp._enfantActif.prenom || '') + ' ' + (ParApp._enfantActif.nom || '') +
+            escapeHtml(ParApp._enfantActif.prenom || '') + ' ' + escapeHtml(ParApp._enfantActif.nom || '') +
           '</div>' +
-          '<div style="font-size:9px;opacity:.5">' + (ParApp._enfantActif.classe || '') + '</div>';
+          '<div style="font-size:9px;opacity:.5">' + escapeHtml(ParApp._enfantActif.classe || '') + '</div>';
       }
       return;
     }
 
     sel.innerHTML = ParApp._enfants.map(function(e) {
-      return '<option value="' + e.eleve_utilisateur_id + '">' +
-        (e.prenom || '') + ' ' + (e.nom || '') +
+      return '<option value="' + escapeHtml(String(e.eleve_utilisateur_id || '')) + '">' +
+        escapeHtml(e.prenom || '') + ' ' + escapeHtml(e.nom || '') +
         (e.classe ? ' — ' + e.classe : '') +
       '</option>';
     }).join('');

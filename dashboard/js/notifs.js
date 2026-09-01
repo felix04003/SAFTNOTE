@@ -126,25 +126,25 @@ var Notifs = {
   _renderItem: function(type, item) {
     switch (type) {
       case 'appels_manques':
-        return '<strong>' + (item.matiere || '—') + '</strong> · ' + (item.classe || '') +
-               '<div class="notif-meta">' + Notifs._fmtDate(item.date) + (item.heure ? ' · ' + item.heure : '') + '</div>';
+        return '<strong>' + escapeHtml(item.matiere || '—') + '</strong> · ' + escapeHtml(item.classe || '') +
+               '<div class="notif-meta">' + Notifs._fmtDate(item.date) + (item.heure ? ' · ' + escapeHtml(item.heure) : '') + '</div>';
 
       case 'absences_injustifiees':
-        return '<strong>' + (item.eleve || '—') + '</strong> · ' + (item.classe || '') +
+        return '<strong>' + escapeHtml(item.eleve || '—') + '</strong> · ' + escapeHtml(item.classe || '') +
                '<div class="notif-meta">' + Notifs._fmtDate(item.date) + '</div>';
 
       case 'notes_publiees':
-        return '<strong>' + (item.matiere || '—') + '</strong> · ' + (item.classe || '') +
+        return '<strong>' + escapeHtml(item.matiere || '—') + '</strong> · ' + escapeHtml(item.classe || '') +
                '<div class="notif-meta">' + Notifs._fmtDate(item.date) + '</div>';
 
       case 'bulletins_disponibles':
-        return '<strong>' + (item.eleve || item.periode || '—') + '</strong>' +
-               '<div class="notif-meta">' + (item.periode || '') + ' · ' + Notifs._fmtDate(item.date) + '</div>';
+        return '<strong>' + escapeHtml(item.eleve || item.periode || '—') + '</strong>' +
+               '<div class="notif-meta">' + escapeHtml(item.periode || '') + ' · ' + Notifs._fmtDate(item.date) + '</div>';
 
       case 'incidents_discipline':
-        return '<strong>' + (item.eleve || '—') + '</strong> · ' +
-               '<span style="color:var(--rouge)">' + (item.gravite || '') + '</span>' +
-               '<div class="notif-meta">' + (item.type || '') + ' · ' + Notifs._fmtDate(item.date) + '</div>';
+        return '<strong>' + escapeHtml(item.eleve || '—') + '</strong> · ' +
+               '<span style="color:var(--rouge)">' + escapeHtml(item.gravite || '') + '</span>' +
+               '<div class="notif-meta">' + escapeHtml(item.type || '') + ' · ' + Notifs._fmtDate(item.date) + '</div>';
 
       default:
         return JSON.stringify(item);

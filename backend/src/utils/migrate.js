@@ -20,7 +20,7 @@ const path = require('path');
 const { Pool } = require('pg');
 
 const MIGRATIONS_DIR = process.env.MIGRATIONS_DIR
-  || path.resolve(__dirname, '../../../../migrations');
+  || path.resolve(__dirname, '../../../migrations');
 
 async function run() {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });

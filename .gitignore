@@ -31,7 +31,10 @@ backend/logs/
 # ── Tests ────────────────────────────────────────────
 coverage/
 backend/coverage/
+mobile/coverage/
 .nyc_output/
+**/test-results/
+**/playwright-report/
 
 # ── Bulletins PDF générés ────────────────────────────
 backend/storage/bulletins/

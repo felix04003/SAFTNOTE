@@ -25,9 +25,17 @@ services:
         value: sandbox
       - key: META_WA_TOKEN
         value: ""          # WhatsApp Business — à renseigner pour activer WA
-      - key: CLOUDFLARE_R2_BUCKET
-        value: ""
+      - key: S3_ENDPOINT
+        value: ""          # ex: https://<account_id>.r2.cloudflarestorage.com
+      - key: S3_ACCESS_KEY
+        value: ""          # R2 Access Key ID
+      - key: S3_SECRET_KEY
+        value: ""          # R2 Secret Access Key
+      - key: S3_BUCKET
+        value: ""          # Nom du bucket R2
       - key: MEDICAL_ENCRYPTION_KEY
+        generateValue: true
+      - key: MONITORING_TOKEN
         generateValue: true
     plan: free
 
