@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Api } from '../api';
 import { escapeHtml, cn, toast, openModal, closeModal } from '../ui';
 import { PAGE_HOOKS } from '../router';
@@ -9,33 +8,33 @@ export const PageBulletins: any = {
 
   async charger() {
     try {
-      var res = await Api.get('/bulletins/classes');
+      const res = await Api.get('/bulletins/classes');
       this.data = res.data;
       this.renderTable(res.data);
       this.updateKpis(res.data);
       return true;
-    } catch (e) {
+    } catch (e: any) {
       console.error('PageBulletins.charger —', e.message);
       return false;
     }
   },
 
-  updateKpis: function(classes) {
-    function set(id, val) { var el = document.getElementById(id); if (el) el.textContent = val; }
-    var totalEleves = classes.reduce(function(s, c) { return s + parseInt(c.effectif || 0); }, 0);
-    var totalGeneres = classes.reduce(function(s, c) { return s + parseInt(c.generes || 0); }, 0);
-    var totalValides = classes.reduce(function(s, c) { return s + parseInt(c.valides || 0); }, 0);
+  updateKpis: function(classes: any[]) {
+    function set(id: string, val: any) { const el = document.getElementById(id) as HTMLElement | null; if (el) el.textContent = val; }
+    const totalEleves  = classes.reduce(function(s: number, c: any) { return s + parseInt(c.effectif || 0); }, 0);
+    const totalGeneres = classes.reduce(function(s: number, c: any) { return s + parseInt(c.generes || 0); }, 0);
+    const totalValides = classes.reduce(function(s: number, c: any) { return s + parseInt(c.valides || 0); }, 0);
     set('bull-kpi-generes',  totalGeneres);
     set('bull-kpi-attente',  totalEleves - totalGeneres);
     set('bull-kpi-valides',  totalValides);
     set('bull-kpi-telecharg', '—');
     // Sous-titre page bulletins
-    var sousTitre = document.getElementById('ph-sous-bulletins');
+    const sousTitre = document.getElementById('ph-sous-bulletins') as HTMLElement | null;
     if (sousTitre && totalEleves) sousTitre.textContent = totalEleves + ' élèves · ' + classes.length + ' classe' + (classes.length > 1 ? 's' : '');
   },
 
-  renderTable: function(bulletins) {
-    var tbody = document.getElementById('tb-bull');
+  renderTable: function(bulletins: any[]) {
+    const tbody = document.getElementById('tb-bull') as HTMLElement | null;
     if (!tbody) return;
 
     if (!bulletins.length) {
@@ -43,12 +42,12 @@ export const PageBulletins: any = {
       return;
     }
 
-    tbody.innerHTML = bulletins.map(function(b) {
-      var moy = b.moyenne_classe != null ? b.moyenne_classe : null;
-      var effectif = b.effectif || 0;
-      var generes = b.generes || 0;
-      var valides = b.valides || 0;
-      var taux = b.taux_reussite || '—';
+    tbody.innerHTML = bulletins.map(function(b: any) {
+      const moy = b.moyenne_classe != null ? b.moyenne_classe : null;
+      const effectif = b.effectif || 0;
+      const generes = b.generes || 0;
+      const valides = b.valides || 0;
+      const taux = b.taux_reussite || '—';
 
       return '<tr>' +
         '<td class="nc">' + escapeHtml(b.classe || '—') + '</td>' +
@@ -68,26 +67,26 @@ export const PageBulletins: any = {
   },
 
   // ── Voir les bulletins d'une classe ──────────────────────────────
-  async voirClasse(classeId, nomClasse) {
-    var titreEl = document.getElementById('bull-modal-titre');
+  async voirClasse(classeId: string, nomClasse: string) {
+    const titreEl = document.getElementById('bull-modal-titre') as HTMLElement | null;
     if (titreEl) titreEl.textContent = 'Bulletins — ' + (nomClasse || 'Classe');
 
-    var corps = document.getElementById('bull-modal-corps');
+    const corps = document.getElementById('bull-modal-corps') as HTMLElement | null;
     if (corps) corps.innerHTML = '<p style="text-align:center;padding:30px;color:var(--g400)">Chargement…</p>';
 
     openModal('m-detail-bulletin');
 
     try {
-      var res = await Api.get('/bulletins', { classe_id: classeId });
-      var items = res.data || [];
+      const res = await Api.get('/bulletins', { classe_id: classeId });
+      const items = res.data || [];
       if (!items.length) {
-        corps.innerHTML = '<p style="text-align:center;padding:30px;color:var(--g400)">Aucun bulletin généré pour cette classe.</p>';
+        if (corps) corps.innerHTML = '<p style="text-align:center;padding:30px;color:var(--g400)">Aucun bulletin généré pour cette classe.</p>';
         return;
       }
-      corps.innerHTML = '<div class="tw"><table>' +
+      if (corps) corps.innerHTML = '<div class="tw"><table>' +
         '<thead><tr><th>Élève</th><th>Matricule</th><th>Période</th><th>Moy. générale</th><th>Rang</th><th>Mention</th><th>Validé</th><th></th></tr></thead>' +
         '<tbody>' +
-        items.map(function(b) {
+        items.map(function(b: any) {
           return '<tr>' +
             '<td style="font-weight:600">' + escapeHtml((b.prenom || '') + ' ' + (b.nom || '')) + '</td>' +
             '<td style="font-family:\'Space Mono\',monospace;font-size:11px;color:var(--g400)">' + escapeHtml(b.matricule || '—') + '</td>' +
@@ -102,25 +101,25 @@ export const PageBulletins: any = {
           '</tr>';
         }).join('') +
         '</tbody></table></div>';
-    } catch (e) {
+    } catch (e: any) {
       if (corps) corps.innerHTML = '<p style="text-align:center;padding:30px;color:var(--rouge)">Erreur : ' + escapeHtml(e.message || 'impossible de charger') + '</p>';
     }
   },
 
   // ── Voir un bulletin individuel ──────────────────────────────────
-  async voirBulletin(bulletinId) {
-    var corps = document.getElementById('bull-modal-corps');
+  async voirBulletin(bulletinId: string) {
+    const corps = document.getElementById('bull-modal-corps') as HTMLElement | null;
     if (corps) corps.innerHTML = '<p style="text-align:center;padding:30px;color:var(--g400)">Chargement du bulletin…</p>';
 
     try {
-      var res = await Api.get('/bulletins/' + bulletinId);
-      var b = res.data;
-      var el = b.eleve || {};
-      var per = b.periode || {};
-      var res2 = b.resultat || {};
-      var matieres = b.matieres || [];
+      const res = await Api.get('/bulletins/' + bulletinId);
+      const b = res.data;
+      const el = b.eleve || {};
+      const per = b.periode || {};
+      const res2 = b.resultat || {};
+      const matieres = b.matieres || [];
 
-      var titreEl = document.getElementById('bull-modal-titre');
+      const titreEl = document.getElementById('bull-modal-titre') as HTMLElement | null;
       if (titreEl) titreEl.textContent = (el.prenom || '') + ' ' + (el.nom || '') + ' — ' + (per.libelle || '');
 
       corps.innerHTML =
@@ -135,7 +134,7 @@ export const PageBulletins: any = {
         '<div class="tw" style="max-height:45vh;overflow-y:auto"><table>' +
           '<thead><tr><th>Matière</th><th>Coeff.</th><th>Moyenne</th><th>Points</th><th>Rang</th><th>Appréciation</th></tr></thead>' +
           '<tbody>' +
-          matieres.map(function(m) {
+          matieres.map(function(m: any) {
             return '<tr>' +
               '<td style="font-weight:600">' + escapeHtml(m.matiere || '—') + '</td>' +
               '<td style="text-align:center;color:var(--g400)">' + (m.coefficient || '—') + '</td>' +
@@ -146,37 +145,33 @@ export const PageBulletins: any = {
             '</tr>';
           }).join('') +
           '</tbody></table></div>';
-    } catch (e) {
+    } catch (e: any) {
       if (corps) corps.innerHTML = '<p style="text-align:center;padding:30px;color:var(--rouge)">Erreur : ' + escapeHtml(e.message || 'impossible de charger le bulletin') + '</p>';
     }
   },
 
   // ── Valider un bulletin individuel ───────────────────────────────
-  async validerBulletin(bulletinId) {
+  async validerBulletin(bulletinId: string) {
     if (!confirm('Valider ce bulletin ? Cette action est irréversible.')) return;
     try {
       await Api.put('/bulletins/' + bulletinId + '/valider', {});
       toast('Bulletin validé ✓', 's');
-      // Rafraîchir le contenu du modal
-      var titreEl = document.getElementById('bull-modal-titre');
-      var titre = titreEl ? titreEl.textContent : '';
-      // Recharger la vue classe si possible
       await PageBulletins.charger();
-    } catch (e) {
+    } catch (e: any) {
       toast(e.message || 'Erreur de validation', 'e');
     }
   },
 
   // ── Valider tous les bulletins générés d'une classe ──────────────
-  async validerClasse(classeId) {
+  async validerClasse(classeId: string) {
     if (!confirm('Valider tous les bulletins générés de cette classe ?')) return;
     try {
-      var res = await Api.get('/bulletins', { classe_id: classeId });
-      var items = (res.data || []).filter(function(b) { return !b.valide_at && b.bulletin_genere; });
+      const res = await Api.get('/bulletins', { classe_id: classeId });
+      const items = (res.data || []).filter(function(b: any) { return !b.valide_at && b.bulletin_genere; });
       if (!items.length) return toast('Aucun bulletin à valider', 'w');
 
-      var nb = 0;
-      for (var i = 0; i < items.length; i++) {
+      let nb = 0;
+      for (let i = 0; i < items.length; i++) {
         try {
           await Api.put('/bulletins/' + items[i].id + '/valider', {});
           nb++;
@@ -184,7 +179,7 @@ export const PageBulletins: any = {
       }
       toast(nb + ' bulletin(s) validé(s) ✓', 's');
       await this.charger();
-    } catch (e) {
+    } catch (e: any) {
       toast(e.message || 'Erreur de validation', 'e');
     }
   },

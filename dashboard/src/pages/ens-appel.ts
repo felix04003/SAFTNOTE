@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Api } from '../api';
 import { escapeHtml, toast } from '../ui';
 import { PAGE_HOOKS, goto } from '../ens-router';
@@ -10,76 +9,66 @@ export const PageEnsAppel: any = {
   _filtreClasseId: null,  // filtre pré-sélectionné depuis ens-classes
 
   async init() {
-    // Date du jour dans le header
-    var dateEl = document.getElementById('appel-date-aujourd-hui');
+    const dateEl = document.getElementById('appel-date-aujourd-hui') as HTMLElement | null;
     if (dateEl) {
-      var now = new Date();
-      var opts = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
+      const now = new Date();
+      const opts: Intl.DateTimeFormatOptions = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
       dateEl.textContent = now.toLocaleDateString('fr-FR', opts);
     }
 
-    // Reset état
     this._appelId = null;
     this._classeId = null;
     this._eleves = [];
 
-    // Toujours afficher la liste des créneaux au (re)chargement
     this.retourCreneaux();
     await this._chargerCreneaux();
   },
 
   retourCreneaux() {
     this._appelId = null;
-    var etapeCreneaux = document.getElementById('appel-etape-creneaux');
-    var etapeGrille = document.getElementById('appel-etape-grille');
+    const etapeCreneaux = document.getElementById('appel-etape-creneaux') as HTMLElement | null;
+    const etapeGrille   = document.getElementById('appel-etape-grille')   as HTMLElement | null;
     if (etapeCreneaux) etapeCreneaux.style.display = '';
-    if (etapeGrille) etapeGrille.style.display = 'none';
+    if (etapeGrille)   etapeGrille.style.display   = 'none';
   },
 
   async _chargerCreneaux() {
-    var liste = document.getElementById('appel-creneaux-liste');
+    const liste = document.getElementById('appel-creneaux-liste') as HTMLElement | null;
     if (!liste) return;
     liste.innerHTML = '<div style="padding:20px;text-align:center;color:var(--g400)">Chargement…</div>';
 
     try {
-      var res = await Api.get('/enseignants/moi/edt');
-      var edt = (res.data && res.data.emploi_du_temps) || [];
+      const res = await Api.get('/enseignants/moi/edt');
+      const edt = (res.data && res.data.emploi_du_temps) || [];
 
-      // Mapping jour : JS getDay() → 0=Dim, 1=Lun ... 6=Sam
-      // Backend jour_semaine → 1=Lun ... 6=Sam (pas de 0 — pas de cours le dimanche)
-      // La valeur numérique coïncide pour Lun-Sam. Dimanche (JS=0) → aucun créneau trouvé → liste vide (correct).
-      var jourJS = new Date().getDay();
-      var jourEDT = jourJS;
+      const jourJS  = new Date().getDay();
+      const jourEDT = jourJS;
 
-      var jourAuj = edt.find(function(j) { return j.jour === jourEDT; });
-      var creneaux = (jourAuj && jourAuj.creneaux) || [];
-      creneaux = creneaux.filter(function(c) { return !c.est_pause; });
-      // Stocker pour lookup dans selectionnerCreneau (évite d'injecter données API dans onclick)
+      const jourAuj = edt.find(function(j: any) { return j.jour === jourEDT; });
+      let creneaux = (jourAuj && jourAuj.creneaux) || [];
+      creneaux = creneaux.filter(function(c: any) { return !c.est_pause; });
       this._creneauxData = creneaux;
 
-      // Si filtre classe pré-sélectionné (venu de ens-classes)
       if (this._filtreClasseId) {
-        var filtreId = this._filtreClasseId;
-        creneaux = creneaux.filter(function(c) { return c.classe_id === filtreId; });
+        const filtreId = this._filtreClasseId;
+        creneaux = creneaux.filter(function(c: any) { return c.classe_id === filtreId; });
         this._filtreClasseId = null;
       }
 
       if (!creneaux.length) {
         liste.innerHTML = '<div style="text-align:center;padding:32px;color:var(--g400)">' +
-          '<div style="font-size:32px;margin-bottom:12px">������</div>' +
           '<div style="font-weight:600;font-size:14px;color:var(--g500)">Pas de cours aujourd\'hui</div>' +
           '<div style="font-size:12px;margin-top:6px">Consultez votre <a onclick="goto(\'ens-edt\')" style="color:var(--vert-lt);cursor:pointer">emploi du temps</a> pour la semaine.</div>' +
         '</div>';
         return;
       }
 
-      liste.innerHTML = creneaux.map(function(c) {
-        var matiere = escapeHtml(c.matiere || '—');
-        var classe  = escapeHtml(c.classe  || '');
-        var heures  = escapeHtml((c.heure_debut || '') + ' – ' + (c.heure_fin || ''));
-        var salle   = c.salle ? ' · <span style="color:var(--g400)">' + escapeHtml(c.salle) + '</span>' : '';
-        // Passer uniquement l'UUID (safe) — le reste est récupéré depuis _creneauxData
-        var creneauId = escapeHtml(String(c.creneau_id || ''));
+      liste.innerHTML = creneaux.map(function(c: any) {
+        const matiere   = escapeHtml(c.matiere || '—');
+        const classe    = escapeHtml(c.classe  || '');
+        const heures    = escapeHtml((c.heure_debut || '') + ' – ' + (c.heure_fin || ''));
+        const salle     = c.salle ? ' · <span style="color:var(--g400)">' + escapeHtml(c.salle) + '</span>' : '';
+        const creneauId = escapeHtml(String(c.creneau_id || ''));
 
         return '<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--g100)">' +
           '<div>' +
@@ -94,13 +83,13 @@ export const PageEnsAppel: any = {
         '</div>';
       }).join('');
 
-    } catch (e) {
+    } catch (e: any) {
       liste.innerHTML = '<div style="text-align:center;padding:28px;color:var(--rouge);font-size:13px">Impossible de charger les créneaux : ' + escapeHtml(e.message || '') + '</div>';
     }
   },
 
   // Appelé depuis le dashboard (bouton rapide)
-  lancerDepuisCreneau(creneauId, matiere, classe, classeId) {
+  lancerDepuisCreneau(creneauId: string, matiere: string, classe: string, classeId: string) {
     goto('ens-appel');
     // Petit délai pour laisser la page s'afficher
     setTimeout(function() {
@@ -109,62 +98,56 @@ export const PageEnsAppel: any = {
   },
 
   // Filtre pré-sélectionné depuis ens-classes
-  filtrerParClasse(classeId) {
+  filtrerParClasse(classeId: string) {
     this._filtreClasseId = classeId;
   },
 
-  async selectionnerCreneau(creneauId, matiere, classe, classeId) {
-    // Lookup depuis _creneauxData si appelé depuis le bouton (sans matiere/classe)
+  async selectionnerCreneau(creneauId: string, matiere?: string, classe?: string, classeId?: string) {
     if (!matiere && !classeId) {
-      var cData = (this._creneauxData || []).find(function(c) { return String(c.creneau_id) === String(creneauId); });
+      const cData = (this._creneauxData || []).find(function(c: any) { return String(c.creneau_id) === String(creneauId); });
       if (cData) { matiere = cData.matiere; classe = cData.classe; classeId = cData.classe_id; }
     }
     this._classeId = classeId;
 
-    // Afficher la grille
-    var etapeCreneaux = document.getElementById('appel-etape-creneaux');
-    var etapeGrille = document.getElementById('appel-etape-grille');
+    const etapeCreneaux = document.getElementById('appel-etape-creneaux') as HTMLElement | null;
+    const etapeGrille   = document.getElementById('appel-etape-grille')   as HTMLElement | null;
     if (etapeCreneaux) etapeCreneaux.style.display = 'none';
-    if (etapeGrille) etapeGrille.style.display = '';
+    if (etapeGrille)   etapeGrille.style.display   = '';
 
-    // Titre de la grille (textContent — safe against XSS)
-    var titre = document.getElementById('appel-grille-titre');
-    var sous = document.getElementById('appel-grille-sous');
+    const titre = document.getElementById('appel-grille-titre') as HTMLElement | null;
+    const sous  = document.getElementById('appel-grille-sous')  as HTMLElement | null;
     if (titre) titre.textContent = (matiere || '') + ' — ' + (classe || '');
     if (sous) {
-      var now = new Date();
+      const now = new Date();
       sous.textContent = now.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
     }
 
-    // État du tableau
-    var tbody = document.getElementById('tb-appel-grille');
+    const tbody = document.getElementById('tb-appel-grille') as HTMLElement | null;
     if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--g400)">Ouverture de l\'appel…</td></tr>';
 
     try {
-      // 1. Ouvrir l'appel (idempotent)
-      var today = new Date().toISOString().split('T')[0];
-      var res = await Api.post('/appels', {
+      const today = new Date().toISOString().split('T')[0];
+      const res = await Api.post('/appels', {
         emploi_du_temps_id: creneauId,
         date_cours: today,
       });
       this._appelId = res.data && res.data.appel_id;
 
-      // 2. Charger les élèves de la classe
-      var elevesRes = await Api.get('/classes/' + classeId + '/eleves');
+      const elevesRes = await Api.get('/classes/' + classeId + '/eleves');
       this._eleves = elevesRes.data || [];
 
-      var nbEl = document.getElementById('appel-grille-nb');
+      const nbEl = document.getElementById('appel-grille-nb') as HTMLElement | null;
       if (nbEl) nbEl.textContent = this._eleves.length + ' élève(s)';
 
       this._renderGrille(this._eleves);
 
-    } catch (e) {
+    } catch (e: any) {
       if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--rouge)">Erreur : ' + escapeHtml(e.message || 'impossible d\'ouvrir l\'appel') + '</td></tr>';
     }
   },
 
-  _renderGrille(eleves) {
-    var tbody = document.getElementById('tb-appel-grille');
+  _renderGrille(eleves: any[]) {
+    const tbody = document.getElementById('tb-appel-grille') as HTMLElement | null;
     if (!tbody) return;
 
     if (!eleves.length) {
@@ -172,8 +155,8 @@ export const PageEnsAppel: any = {
       return;
     }
 
-    tbody.innerHTML = eleves.map(function(el, i) {
-      var nom = escapeHtml((el.nom || '') + ' ' + (el.prenom || ''));
+    tbody.innerHTML = eleves.map(function(el: any, i: number) {
+      const nom = escapeHtml((el.nom || '') + ' ' + (el.prenom || ''));
       return '<tr id="ar-' + i + '">' +
         '<td style="font-weight:600">' + nom + '<input type="hidden" class="ar-inscr" value="' + escapeHtml(String(el.inscription_id || '')) + '"></td>' +
         '<td style="text-align:center"><input type="radio" name="stat-' + i + '" class="ar-stat" value="present" checked onchange="PageEnsAppel._onStatChange(' + i + ')"></td>' +
@@ -184,19 +167,19 @@ export const PageEnsAppel: any = {
     }).join('');
   },
 
-  _onStatChange(i) {
-    var row = document.getElementById('ar-' + i);
+  _onStatChange(i: number) {
+    const row = document.getElementById('ar-' + i);
     if (!row) return;
-    var checkedRadio = row.querySelector('input[name="stat-' + i + '"]:checked');
-    var stat = checkedRadio ? checkedRadio.value : null;
-    var retardInput = row.querySelector('.ar-retard');
+    const checkedRadio = row.querySelector('input[name="stat-' + i + '"]:checked') as HTMLInputElement | null;
+    const stat = checkedRadio ? checkedRadio.value : null;
+    const retardInput = row.querySelector('.ar-retard') as HTMLInputElement | null;
     if (retardInput) retardInput.disabled = (stat !== 'retard');
   },
 
   marquerTousPresents() {
-    document.querySelectorAll('#tb-appel-grille tr[id^="ar-"]').forEach(function(row) {
-      var i = parseInt(row.id.replace('ar-', ''), 10);
-      var radio = row.querySelector('input[value="present"]');
+    document.querySelectorAll('#tb-appel-grille tr[id^="ar-"]').forEach(function(row: Element) {
+      const i = parseInt((row as HTMLElement).id.replace('ar-', ''), 10);
+      const radio = row.querySelector('input[value="present"]') as HTMLInputElement | null;
       if (radio) { radio.checked = true; PageEnsAppel._onStatChange(i); }
     });
   },
@@ -204,43 +187,43 @@ export const PageEnsAppel: any = {
   async soumettre() {
     if (!this._appelId) return toast('Appel non initialisé', 'w');
 
-    var rows = document.querySelectorAll('#tb-appel-grille tr[id^="ar-"]');
-    var presences = [];
+    const rows = document.querySelectorAll('#tb-appel-grille tr[id^="ar-"]');
+    const presences: Record<string, any>[] = [];
 
-    rows.forEach(function(row, i) {
-      var inscriptionIdEl = row.querySelector('.ar-inscr');
-      var inscriptionId = inscriptionIdEl ? inscriptionIdEl.value : null;
-      var checkedRadio = row.querySelector('input[name="stat-' + i + '"]:checked');
-      var stat = checkedRadio ? checkedRadio.value : 'present';
-      var retardEl = row.querySelector('.ar-retard');
-      var minutesRetard = retardEl ? parseInt(retardEl.value) : NaN;
+    rows.forEach(function(row: Element, i: number) {
+      const inscriptionIdEl = row.querySelector('.ar-inscr') as HTMLInputElement | null;
+      const inscriptionId   = inscriptionIdEl ? inscriptionIdEl.value : null;
+      const checkedRadio    = row.querySelector('input[name="stat-' + i + '"]:checked') as HTMLInputElement | null;
+      const stat            = checkedRadio ? checkedRadio.value : 'present';
+      const retardEl        = row.querySelector('.ar-retard') as HTMLInputElement | null;
+      const minutesRetard   = retardEl ? parseInt(retardEl.value) : NaN;
 
       if (inscriptionId) {
-        var p = { inscription_id: inscriptionId, statut: stat };
-        if (stat === 'retard' && !isNaN(minutesRetard) && minutesRetard > 0) p.minutes_retard = minutesRetard;
+        const p: Record<string, any> = { inscription_id: inscriptionId, statut: stat };
+        if (stat === 'retard' && !isNaN(minutesRetard) && minutesRetard > 0) p['minutes_retard'] = minutesRetard;
         presences.push(p);
       }
     });
 
-    var nbIgnores = rows.length - presences.length;
+    const nbIgnores = rows.length - presences.length;
     if (nbIgnores > 0) toast(nbIgnores + ' élève(s) sans identifiant ignoré(s)', 'w');
     if (!presences.length) return toast('Aucune présence à enregistrer', 'w');
 
-    var btn = document.getElementById('btn-appel-soumettre');
+    const btn = document.getElementById('btn-appel-soumettre') as HTMLButtonElement | null;
     if (btn) { btn.disabled = true; btn.textContent = 'Enregistrement…'; }
 
     try {
       await Api.put('/appels/' + this._appelId + '/presences', {
-        presences: presences,
+        presences,
         cloturer: true,
       });
 
-      var nbAbsents = presences.filter(function(p) { return p.statut === 'absent' || p.statut === 'retard'; }).length;
-      toast('Appel enregistré ✓' + (nbAbsents ? ' — ' + nbAbsents + ' absence(s) signalée(s), parents notifiés ������' : ''), 's');
+      const nbAbsents = presences.filter(function(p) { return p['statut'] === 'absent' || p['statut'] === 'retard'; }).length;
+      toast('Appel enregistré ✓' + (nbAbsents ? ' — ' + nbAbsents + ' absence(s) signalée(s), parents notifiés' : ''), 's');
       this.retourCreneaux();
       await this._chargerCreneaux();
 
-    } catch (e) {
+    } catch (e: any) {
       toast(e.message || 'Erreur lors de la soumission', 'e');
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = 'Soumettre l\'appel'; }

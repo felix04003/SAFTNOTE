@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Api } from '../api';
 import { escapeHtml, init2, toast, openModal, closeModal } from '../ui';
 import { PAGE_HOOKS } from '../router';
@@ -8,31 +7,31 @@ export const PageEnseignants: any = {
 
   async charger() {
     try {
-      var res = await Api.get('/enseignants');
+      const res = await Api.get('/enseignants');
       this.data = res.data;
       this.renderTable(res.data);
       return true;
-    } catch (e) {
+    } catch (e: any) {
       console.error('PageEnseignants.charger —', e.message);
       return false;
     }
   },
 
   async ajouter() {
-    var nom        = document.getElementById('m-ens-nom')?.value?.trim();
-    var prenom     = document.getElementById('m-ens-prenom')?.value?.trim();
-    var telephone  = document.getElementById('m-ens-tel')?.value?.trim();
-    var email      = document.getElementById('m-ens-email')?.value?.trim();
-    var specialite = document.getElementById('m-ens-specialite')?.value?.trim();
-    var contrat    = document.getElementById('m-ens-contrat')?.value;
-    var mdp        = document.getElementById('m-ens-mdp')?.value?.trim();
+    const nom        = (document.getElementById('m-ens-nom')       as HTMLInputElement | null)?.value?.trim();
+    const prenom     = (document.getElementById('m-ens-prenom')    as HTMLInputElement | null)?.value?.trim();
+    const telephone  = (document.getElementById('m-ens-tel')       as HTMLInputElement | null)?.value?.trim();
+    const email      = (document.getElementById('m-ens-email')     as HTMLInputElement | null)?.value?.trim();
+    const specialite = (document.getElementById('m-ens-specialite') as HTMLInputElement | null)?.value?.trim();
+    const contrat    = (document.getElementById('m-ens-contrat')   as HTMLSelectElement | null)?.value;
+    const mdp        = (document.getElementById('m-ens-mdp')       as HTMLInputElement | null)?.value?.trim();
 
     if (!nom || !prenom) return toast('Nom et prénom obligatoires', 'w');
     if (!telephone)      return toast('Numéro de téléphone obligatoire', 'w');
 
-    var payload = {
-      nom: nom,
-      prenom: prenom,
+    const payload: Record<string, any> = {
+      nom,
+      prenom,
       telephone: telephone.replace(/\s/g, ''),
       email: email || undefined,
       specialite: specialite || undefined,
@@ -40,24 +39,24 @@ export const PageEnseignants: any = {
       mot_de_passe: mdp || undefined,
     };
 
-    var btn = document.getElementById('btn-ajouter-ens');
+    const btn = document.getElementById('btn-ajouter-ens') as HTMLButtonElement | null;
     if (btn) { btn.disabled = true; btn.textContent = 'Création…'; }
 
     try {
-      var res = await Api.post('/enseignants', payload);
+      const res = await Api.post('/enseignants', payload);
       closeModal('m-enseignant');
-      var mdpInfo = (res.data && res.data.message) || ('Mot de passe provisoire : ' + (mdp || telephone));
+      const mdpInfo = (res.data && res.data.message) || ('Mot de passe provisoire : ' + (mdp || telephone));
       toast('Enseignant créé ✓ — ' + mdpInfo, 's');
       await this.charger();
-    } catch (e) {
+    } catch (e: any) {
       toast('Erreur : ' + (e.message || 'Création échouée'), 'd');
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = 'Créer le compte'; }
     }
   },
 
-  renderTable: function(enseignants) {
-    var tbody = document.getElementById('tb-ens');
+  renderTable: function(enseignants: any[]) {
+    const tbody = document.getElementById('tb-ens') as HTMLElement | null;
     if (!tbody) return;
 
     if (!enseignants || !enseignants.length) {
@@ -65,9 +64,9 @@ export const PageEnseignants: any = {
       return;
     }
 
-    tbody.innerHTML = enseignants.map(function(e) {
-      var nom = escapeHtml((e.prenom || '') + ' ' + (e.nom || ''));
-      var nomForAttr = nom.replace(/'/g, '');
+    tbody.innerHTML = enseignants.map(function(e: any) {
+      const nom = escapeHtml((e.prenom || '') + ' ' + (e.nom || ''));
+      const nomForAttr = nom.replace(/'/g, '');
       return '<tr>' +
         '<td class="nc" style="display:flex;align-items:center;gap:9px"><div class="av" style="background:var(--bleu)">' + init2(nom) + '</div>' + nom + '</td>' +
         '<td><span class="badge bo">' + escapeHtml(e.specialite || '—') + '</span></td>' +
@@ -94,11 +93,11 @@ export const PageAffectations: any = {
   enseignantId:  null,
   enseignantNom: null,
 
-  async ouvrir(id, nom) {
+  async ouvrir(id: string, nom: string) {
     this.enseignantId  = id;
     this.enseignantNom = nom;
 
-    var titre = document.getElementById('m-aff-titre');
+    const titre = document.getElementById('m-aff-titre') as HTMLElement | null;
     if (titre) titre.textContent = 'Affectations — ' + nom;
 
     openModal('m-affectations');
@@ -106,81 +105,81 @@ export const PageAffectations: any = {
   },
 
   async chargerClasses() {
-    var sel = document.getElementById('m-aff-classe');
+    const sel = document.getElementById('m-aff-classe') as HTMLSelectElement | null;
     if (!sel) return;
     try {
-      var res = await Api.get('/classes');
-      var classes = res.data || [];
+      const res = await Api.get('/classes');
+      const classes = res.data || [];
       if (!classes.length) {
         sel.innerHTML = '<option value="">Aucune classe</option>';
         return;
       }
       sel.innerHTML = '<option value="">— Choisir —</option>' +
-        classes.map(function(c) {
+        classes.map(function(c: any) {
           return '<option value="' + c.id + '">' + (c.niveau_nom || c.niveau || '') + ' ' + c.nom + '</option>';
         }).join('');
-    } catch (e) {
+    } catch {
       sel.innerHTML = '<option value="">Erreur chargement classes</option>';
     }
   },
 
   async chargerMatieres() {
-    var sel = document.getElementById('m-aff-matiere');
+    const sel = document.getElementById('m-aff-matiere') as HTMLSelectElement | null;
     if (!sel) return;
     try {
-      var res = await Api.get('/configs/matieres', { actif_seulement: 'true' });
-      var matieres = res.data || [];
+      const res = await Api.get('/configs/matieres', { actif_seulement: 'true' });
+      const matieres = res.data || [];
       if (!matieres.length) {
         sel.innerHTML = '<option value="">Aucune matière — créez-en dans Paramètres</option>';
         return;
       }
       sel.innerHTML = '<option value="">— Choisir —</option>' +
-        matieres.map(function(m) {
+        matieres.map(function(m: any) {
           return '<option value="' + m.id + '">' + m.nom + '</option>';
         }).join('');
-    } catch (e) {
+    } catch {
       sel.innerHTML = '<option value="">Erreur chargement matières</option>';
     }
   },
 
   async chargerAffectations() {
-    var liste = document.getElementById('m-aff-liste');
-    var label = document.getElementById('m-aff-annee-label');
+    const liste = document.getElementById('m-aff-liste') as HTMLElement | null;
+    const label = document.getElementById('m-aff-annee-label') as HTMLElement | null;
     if (!liste) return;
 
     liste.innerHTML = '<div style="color:var(--g400);font-size:13px;text-align:center;padding:16px">Chargement…</div>';
 
     try {
-      var res = await Api.get('/enseignants/' + this.enseignantId + '/affectations');
-      var data = res.data;
+      const res = await Api.get('/enseignants/' + this.enseignantId + '/affectations');
+      const data = res.data;
       if (label) label.textContent = 'Affectations actuelles (' + (data.annee || '') + ')';
 
-      var aff = data.affectations || [];
+      const aff = data.affectations || [];
       if (!aff.length) {
         liste.innerHTML = '<div style="color:var(--g400);font-size:13px;text-align:center;padding:16px">(Aucune affectation pour le moment)</div>';
         return;
       }
 
-      liste.innerHTML = aff.map(function(a) {
+      liste.innerHTML = aff.map(function(a: any) {
         return '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--g100)">' +
           '<span style="font-size:13px">• <strong>' + escapeHtml(a.matiere) + '</strong> · ' + escapeHtml(a.niveau || '') + ' ' + escapeHtml(a.classe) + (a.est_titulaire ? ' <span class="badge bs" style="font-size:10px">Titulaire</span>' : '') + '</span>' +
           '<button class="btn btn-d btn-sm" onclick="PageAffectations.supprimer(\'' + escapeHtml(a.id) + '\')">🗑️</button>' +
         '</div>';
       }).join('');
-    } catch (e) {
+    } catch {
       liste.innerHTML = '<div style="color:var(--rouge);font-size:13px;text-align:center;padding:16px">Impossible de charger les affectations</div>';
     }
   },
 
   async ajouter() {
-    var classeId  = document.getElementById('m-aff-classe')?.value;
-    var matiereId = document.getElementById('m-aff-matiere')?.value;
-    var titulaire = document.getElementById('m-aff-titulaire')?.checked;
+    const classeId  = (document.getElementById('m-aff-classe')    as HTMLSelectElement | null)?.value;
+    const matiereId = (document.getElementById('m-aff-matiere')   as HTMLSelectElement | null)?.value;
+    const titulaire = (document.getElementById('m-aff-titulaire') as HTMLInputElement  | null)?.checked;
 
     if (!classeId)  return toast('Veuillez sélectionner une classe', 'w');
     if (!matiereId) return toast('Veuillez sélectionner une matière', 'w');
 
-    var btn = document.getElementById('btn-ajouter-aff');
+    const btn = document.getElementById('btn-ajouter-aff') as HTMLButtonElement | null;
     if (btn) { btn.disabled = true; btn.textContent = 'Ajout…'; }
 
     try {
@@ -191,24 +190,27 @@ export const PageAffectations: any = {
         est_titulaire: !!titulaire,
       });
       toast('Affectation ajoutée ✓', 's');
-      document.getElementById('m-aff-classe').value = '';
-      document.getElementById('m-aff-matiere').value = '';
-      var cb = document.getElementById('m-aff-titulaire'); if (cb) cb.checked = true;
+      const selC = document.getElementById('m-aff-classe')  as HTMLSelectElement | null;
+      const selM = document.getElementById('m-aff-matiere') as HTMLSelectElement | null;
+      if (selC) selC.value = '';
+      if (selM) selM.value = '';
+      const cb = document.getElementById('m-aff-titulaire') as HTMLInputElement | null;
+      if (cb) cb.checked = true;
       await this.chargerAffectations();
-    } catch (e) {
+    } catch (e: any) {
       toast('Erreur : ' + (e.message || 'Ajout échoué'), 'd');
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = "+ Ajouter l'affectation"; }
     }
   },
 
-  async supprimer(affectationId) {
+  async supprimer(affectationId: string) {
     if (!confirm('Supprimer cette affectation ?')) return;
     try {
       await Api.del('/affectations/' + affectationId);
       toast('Affectation supprimée', 's');
       await this.chargerAffectations();
-    } catch (e) {
+    } catch (e: any) {
       toast('Erreur : ' + (e.message || 'Suppression échouée'), 'd');
     }
   },
