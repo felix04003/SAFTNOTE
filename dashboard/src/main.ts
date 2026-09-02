@@ -1,0 +1,17 @@
+import './config';
+import './api';
+import './auth';
+import './ui';
+import './router';
+import './notifs';
+import './app';
+import './pages/dashboard';
+import './pages/eleves';
+import './pages/classes';
+import './pages/enseignants';
+import './pages/notes';
+import './pages/bulletins';
+import './pages/absences';
+import './pages/edt';
+import './pages/alertes';
+import './pages/parametres';

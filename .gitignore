@@ -82,3 +82,4 @@ postgres-data/
 .superpowers/
 .gstack/
 mobile/package-lock.json
+dashboard/dist/

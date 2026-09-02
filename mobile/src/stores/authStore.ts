@@ -20,6 +20,7 @@ interface AuthState {
   chargement:     boolean;
   estConnecte:    boolean;
   estParent:      () => boolean;
+  estDirecteur:   () => boolean;
   estEnseignant:  () => boolean;
   chargerSession: () => Promise<void>;
   connexionMDP:   (data: { identifiant: string; mot_de_passe: string; etablissement_code: string }) => Promise<void>;
@@ -33,6 +34,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   chargement:    true,
   estConnecte:   false,
   estParent:     () => get().session?.role === 'parent',
+  estDirecteur:  () => ['directeur', 'censeur'].includes(get().session?.role ?? ''),
   estEnseignant: () => ['enseignant', 'directeur', 'censeur'].includes(get().session?.role ?? ''),
 
   // Charger la session persistée au démarrage

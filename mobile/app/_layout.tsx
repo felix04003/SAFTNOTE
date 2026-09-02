@@ -19,6 +19,7 @@ export default function RootLayout() {
   const chargement      = useAuthStore(s => s.chargement);
   const estConnecte     = useAuthStore(s => s.estConnecte);
   const estParent       = useAuthStore(s => s.estParent);
+  const estDirecteur    = useAuthStore(s => s.estDirecteur);
 
   // Init au démarrage
   useEffect(() => {
@@ -51,6 +52,8 @@ export default function RootLayout() {
       router.replace('/auth/connexion');
     } else if (estParent()) {
       router.replace('/(app)/parent');
+    } else if (estDirecteur()) {
+      router.replace('/(app)/directeur');
     } else {
       router.replace('/(app)/enseignant');
     }

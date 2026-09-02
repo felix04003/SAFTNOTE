@@ -18,6 +18,7 @@ export default function AppLayout() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="enseignant" />
       <Stack.Screen name="parent"     />
+      <Stack.Screen name="directeur"  />
     </Stack>
   );
 }

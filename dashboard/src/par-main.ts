@@ -1,0 +1,11 @@
+import './config';
+import './api';
+import './auth';
+import './ui';
+import './par-router';
+import './notifs';
+import './par-app';
+import './pages/par-dashboard';
+import './pages/par-notes';
+import './pages/par-absences';
+import './pages/par-bulletins';

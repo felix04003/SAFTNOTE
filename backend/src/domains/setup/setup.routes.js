@@ -305,10 +305,10 @@ router.get('/setup/status', async (req, res, next) => {
 
 // ── GET /dashboard — Stats réelles de l'établissement ────────────
 const { authentifier }        = require('../../middleware/auth.middleware');
-const { isolerEtablissement } = require('../../middleware/permission.middleware');
+const { isolerEtablissement, exigerPermission } = require('../../middleware/permission.middleware');
 const { ok }                  = require('../../utils/reponse');
 
-router.get('/dashboard', authentifier, isolerEtablissement, async (req, res, next) => {
+router.get('/dashboard', authentifier, isolerEtablissement, exigerPermission('rapports.voir'), async (req, res, next) => {
   try {
     const db     = getDB();
     const etabId = req.etablissement_id;

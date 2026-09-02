@@ -147,6 +147,12 @@ export const syncApi = {
     api.post('/sync/operations', { operations }),
 };
 
+// ── Endpoints Directeur ──────────────────────────────────────────
+export const directeurApi = {
+  getDashboard: () =>
+    api.get('/dashboard'),
+};
+
 // ── Endpoints Parent ─────────────────────────────────────────────
 export const parentApi = {
   getTableauDeBord: (eleveId: string) =>

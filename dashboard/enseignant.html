@@ -357,7 +357,6 @@
 <!-- Toast container -->
 <div id="tc" style="position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px"></div>
 
-<script src="js/config.js"></script>
 <!-- ═══ EDT DRAWER ═══ -->
 <div id="edt-overlay" onclick="EdtDrawer.fermer()"></div>
 <div id="edt-drawer">
@@ -377,17 +376,6 @@
   <div id="edt-drawer-body"></div>
 </div>
 
-<script src="js/api.js"></script>
-<script src="js/auth.js"></script>
-<script src="js/ui.js"></script>
-<script src="js/ens-router.js"></script>
-<script src="js/pages/ens-dashboard.js"></script>
-<script src="js/pages/ens-classes.js"></script>
-<script src="js/pages/ens-notes.js"></script>
-<script src="js/pages/ens-appel.js"></script>
-<script src="js/pages/ens-edt.js"></script>
-<script src="js/pages/ens-discipline.js"></script>
-<script src="js/ens-app.js"></script>
 
 <!-- ═══ NOTIFICATION DRAWER ═══ -->
 <div id="notif-overlay" onclick="Notifs.fermer()"></div>
@@ -398,6 +386,6 @@
   </div>
   <div id="notif-drawer-body"></div>
 </div>
-<script src="js/notifs.js"></script>
+<script type="module" src="src/ens-main.ts"></script>
 </body>
 </html>
