@@ -4,96 +4,99 @@ import { Auth } from './auth';
 
 if (Auth.isAuthenticated()) window.location.href = 'index.html';
 if (window.innerWidth <= 768) {
-  var logoMobile = document.getElementById('logo-mobile');
+  const logoMobile = document.getElementById('logo-mobile');
   if (logoMobile) logoMobile.style.display = 'block';
 }
 
-var paysSelectionne = 'SN';
+let paysSelectionne = 'SN';
 
-(window as any).selectPays = function(btn: HTMLElement) {
+function selectPays(btn: HTMLElement) {
   document.querySelectorAll('.pays-btn').forEach(function(b: any) { b.classList.remove('sel'); });
   btn.classList.add('sel');
-  var val = btn.getAttribute('data-pays') || '';
-  var autreWrap = document.getElementById('pays-autre-wrap')!;
+  const val = btn.getAttribute('data-pays') || '';
+  const autreWrap = document.getElementById('pays-autre-wrap') as HTMLElement | null;
   if (val === 'autre') {
-    autreWrap.classList.add('show');
+    autreWrap?.classList.add('show');
     paysSelectionne = '';
   } else {
-    autreWrap.classList.remove('show');
+    autreWrap?.classList.remove('show');
     paysSelectionne = val;
-    (document.getElementById('etab-pays') as HTMLInputElement).value = val;
+    const etabPays = document.getElementById('etab-pays') as HTMLInputElement | null;
+    if (etabPays) etabPays.value = val;
   }
-};
+}
 
 function getPays(): string | null {
   if (paysSelectionne && paysSelectionne !== 'autre') return paysSelectionne;
-  var autre = ((document.getElementById('etab-pays-autre') as HTMLInputElement).value || '').trim().toUpperCase();
+  const autre = ((document.getElementById('etab-pays-autre') as HTMLInputElement | null)?.value || '').trim().toUpperCase();
   return autre || null;
 }
 
-(window as any).allerEtape = function(n: number) {
+function allerEtape(n: number) {
   document.querySelectorAll('.panel').forEach(function(p: any) { p.classList.remove('actif'); });
-  document.getElementById('panel' + n)!.classList.add('actif');
+  document.getElementById('panel' + n)?.classList.add('actif');
 
-  for (var i = 1; i <= 3; i++) {
-    var sc = document.getElementById('sc' + i)!;
-    var sl = document.getElementById('sl' + i)!;
-    sc.classList.remove('actif', 'fait');
-    sl.classList.remove('actif', 'fait');
-    if (i < n) { sc.classList.add('fait'); sl.classList.add('fait'); sc.textContent = '✓'; }
-    else if (i === n) { sc.classList.add('actif'); sl.classList.add('actif'); sc.textContent = String(i); }
-    else { sc.textContent = String(i); }
+  for (let i = 1; i <= 3; i++) {
+    const sc = document.getElementById('sc' + i) as HTMLElement | null;
+    const sl = document.getElementById('sl' + i) as HTMLElement | null;
+    sc?.classList.remove('actif', 'fait');
+    sl?.classList.remove('actif', 'fait');
+    if (i < n) { sc?.classList.add('fait'); sl?.classList.add('fait'); if (sc) sc.textContent = '\u2713'; }
+    else if (i === n) { sc?.classList.add('actif'); sl?.classList.add('actif'); if (sc) sc.textContent = String(i); }
+    else { if (sc) sc.textContent = String(i); }
     if (i < 3) {
-      var line = document.getElementById('line' + i)!;
-      line.classList.toggle('fait', i < n);
+      const line = document.getElementById('line' + i) as HTMLElement | null;
+      line?.classList.toggle('fait', i < n);
     }
   }
 
   if (n === 3) {
-    (document.getElementById('steps-bar') as HTMLElement).style.display = 'none';
-    (document.getElementById('link-login') as HTMLElement).style.display = 'none';
-    document.getElementById('ins-err')!.classList.remove('show');
+    (document.getElementById('steps-bar') as HTMLElement | null)?.style && ((document.getElementById('steps-bar') as HTMLElement).style.display = 'none');
+    (document.getElementById('link-login') as HTMLElement | null)?.style && ((document.getElementById('link-login') as HTMLElement).style.display = 'none');
+    document.getElementById('ins-err')?.classList.remove('show');
   }
-};
+}
 
 function showErr(msg: string) {
-  var el = document.getElementById('ins-err')!;
+  const el = document.getElementById('ins-err') as HTMLElement | null;
+  if (!el) return;
   el.textContent = msg;
   el.classList.add('show');
 }
 
-(window as any).etape2 = function() {
-  document.getElementById('ins-err')!.classList.remove('show');
-  var nom  = ((document.getElementById('etab-nom') as HTMLInputElement).value || '').trim();
-  var code = ((document.getElementById('etab-code') as HTMLInputElement).value || '').trim().toUpperCase();
-  var pays = getPays();
+function etape2() {
+  document.getElementById('ins-err')?.classList.remove('show');
+  const nom  = ((document.getElementById('etab-nom') as HTMLInputElement | null)?.value || '').trim();
+  const code = ((document.getElementById('etab-code') as HTMLInputElement | null)?.value || '').trim().toUpperCase();
+  const pays = getPays();
 
-  if (!nom)  return showErr("Le nom de l'établissement est obligatoire.");
-  if (!code) return showErr('Le code établissement est obligatoire.');
-  if (!/^[A-Z0-9_-]{2,20}$/.test(code)) return showErr('Code invalide : lettres majuscules, chiffres, tirets uniquement (2-20 caractères).');
-  if (!pays) return showErr('Veuillez sélectionner ou saisir le pays.');
+  if (!nom)  return showErr("Le nom de l'\u00e9tablissement est obligatoire.");
+  if (!code) return showErr('Le code \u00e9tablissement est obligatoire.');
+  if (!/^[A-Z0-9_-]{2,20}$/.test(code)) return showErr('Code invalide : lettres majuscules, chiffres, tirets uniquement (2-20 caract\u00e8res).');
+  if (!pays) return showErr('Veuillez s\u00e9lectionner ou saisir le pays.');
 
-  (document.getElementById('etab-code') as HTMLInputElement).value = code;
-  (window as any).allerEtape(2);
-};
+  const etabCode = document.getElementById('etab-code') as HTMLInputElement | null;
+  if (etabCode) etabCode.value = code;
+  allerEtape(2);
+}
 
-(window as any).soumettre = async function() {
-  document.getElementById('ins-err')!.classList.remove('show');
+async function soumettre() {
+  document.getElementById('ins-err')?.classList.remove('show');
 
-  var nom    = ((document.getElementById('etab-nom') as HTMLInputElement).value || '').trim();
-  var code   = ((document.getElementById('etab-code') as HTMLInputElement).value || '').trim().toUpperCase();
-  var type   = (document.getElementById('etab-type') as HTMLSelectElement).value;
-  var pays   = getPays();
-  var ville  = ((document.getElementById('etab-ville') as HTMLInputElement).value || '').trim();
-  var etabTel   = ((document.getElementById('etab-tel') as HTMLInputElement).value || '').trim();
-  var etabEmail = ((document.getElementById('etab-email') as HTMLInputElement).value || '').trim();
+  const nom    = ((document.getElementById('etab-nom') as HTMLInputElement | null)?.value || '').trim();
+  const code   = ((document.getElementById('etab-code') as HTMLInputElement | null)?.value || '').trim().toUpperCase();
+  const type   = (document.getElementById('etab-type') as HTMLSelectElement | null)?.value || '';
+  const pays   = getPays();
+  const ville  = ((document.getElementById('etab-ville') as HTMLInputElement | null)?.value || '').trim();
+  const etabTel   = ((document.getElementById('etab-tel') as HTMLInputElement | null)?.value || '').trim();
+  const etabEmail = ((document.getElementById('etab-email') as HTMLInputElement | null)?.value || '').trim();
 
-  var dirNom    = ((document.getElementById('dir-nom') as HTMLInputElement).value || '').trim();
-  var dirPrenom = ((document.getElementById('dir-prenom') as HTMLInputElement).value || '').trim();
-  var dirEmail  = ((document.getElementById('dir-email') as HTMLInputElement).value || '').trim();
-  var dirTel    = ((document.getElementById('dir-tel') as HTMLInputElement).value || '').trim();
-  var mdp       = ((document.getElementById('dir-mdp') as HTMLInputElement).value || '');
-  var mdp2      = ((document.getElementById('dir-mdp2') as HTMLInputElement).value || '');
+  const dirNom    = ((document.getElementById('dir-nom') as HTMLInputElement | null)?.value || '').trim();
+  const dirPrenom = ((document.getElementById('dir-prenom') as HTMLInputElement | null)?.value || '').trim();
+  const dirEmail  = ((document.getElementById('dir-email') as HTMLInputElement | null)?.value || '').trim();
+  const dirTel    = ((document.getElementById('dir-tel') as HTMLInputElement | null)?.value || '').trim();
+  const mdp       = ((document.getElementById('dir-mdp') as HTMLInputElement | null)?.value || '');
+  const mdp2      = ((document.getElementById('dir-mdp2') as HTMLInputElement | null)?.value || '');
 
   if (!dirNom)    return showErr('Le nom du directeur est obligatoire.');
   if (!dirPrenom) return showErr('Le prénom du directeur est obligatoire.');
@@ -103,12 +106,11 @@ function showErr(msg: string) {
   if (!mdp || mdp.length < 8) return showErr('Le mot de passe doit contenir au moins 8 caractères.');
   if (mdp !== mdp2) return showErr('Les mots de passe ne correspondent pas.');
 
-  var btn = document.getElementById('btn-inscrire') as HTMLButtonElement;
-  btn.disabled = true;
-  btn.textContent = 'Création en cours…';
+  const btn = document.getElementById('btn-inscrire') as HTMLButtonElement | null;
+  if (btn) { btn.disabled = true; btn.textContent = 'Cr\u00e9ation en cours\u2026'; }
 
   try {
-    var payload: any = {
+    const payload: any = {
       etablissement: { nom, code_officiel: code, type, pays },
       directeur: {
         nom: dirNom, prenom: dirPrenom, email: dirEmail,
@@ -119,21 +121,32 @@ function showErr(msg: string) {
     if (etabTel)   payload.etablissement.telephone = etabTel.replace(/\s/g,'');
     if (etabEmail) payload.etablissement.email     = etabEmail;
 
-    var res = await fetch(CONFIG.API_BASE + '/inscription', {
+    const res = await fetch(CONFIG.API_BASE + '/inscription', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    var data = await res.json();
-    if (!data.succes) throw new Error(data.erreur || 'Erreur lors de la création.');
+    const data = await res.json();
+    if (!data.succes) throw new Error(data.erreur || 'Erreur lors de la cr\u00e9ation.');
 
-    (document.getElementById('conf-code') as HTMLElement).textContent  = data.data.connexion.etablissement_code;
-    (document.getElementById('conf-email') as HTMLElement).textContent = data.data.connexion.identifiant;
-    (document.getElementById('conf-nom') as HTMLElement).textContent   = data.data.etablissement.nom;
-    (window as any).allerEtape(3);
+    const confCode = document.getElementById('conf-code') as HTMLElement | null;
+    const confEmail = document.getElementById('conf-email') as HTMLElement | null;
+    const confNom = document.getElementById('conf-nom') as HTMLElement | null;
+    if (confCode) confCode.textContent   = data.data.connexion.etablissement_code;
+    if (confEmail) confEmail.textContent = data.data.connexion.identifiant;
+    if (confNom) confNom.textContent     = data.data.etablissement.nom;
+    allerEtape(3);
   } catch (err: any) {
-    showErr(err.message || 'Erreur serveur. Veuillez réessayer.');
-    btn.disabled = false;
-    btn.textContent = 'Créer mon école';
+    showErr(err.message || 'Erreur serveur. Veuillez r\u00e9essayer.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Cr\u00e9er mon \u00e9cole'; }
   }
-};
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.pays-btn').forEach((btn) => {
+    btn.addEventListener('click', () => selectPays(btn as HTMLElement));
+  });
+  document.getElementById('btn-etape2')?.addEventListener('click', etape2);
+  document.getElementById('btn-retour-etape1')?.addEventListener('click', () => allerEtape(1));
+  document.getElementById('btn-inscrire')?.addEventListener('click', soumettre);
+});

@@ -33,14 +33,14 @@
 
     <!-- ONGLETS -->
     <div class="login-tabs">
-      <button class="login-tab actif" onclick="onglet('connexion')">Se connecter</button>
-      <button class="login-tab" onclick="onglet('inscription')">Créer un établissement</button>
+      <button class="login-tab actif" id="btn-tab-connexion">Se connecter</button>
+      <button class="login-tab" id="btn-tab-inscription">Créer un établissement</button>
     </div>
 
     <!-- ═══ PANNEAU CONNEXION ═══ -->
     <div class="login-panel actif" id="panel-connexion">
       <div class="login-err" id="login-err"></div>
-      <form id="login-form" onsubmit="return handleLogin(event)">
+      <form id="login-form">
         <div class="fg">
           <label class="fl">Identifiant</label>
           <input class="fi" id="login-id" type="text" placeholder="Email ou téléphone (+221...)" required autocomplete="username">
@@ -61,7 +61,7 @@
         </div>
       </form>
       <p style="text-align:center;font-size:12px;color:var(--g400);margin-top:16px">
-        Pas encore d'établissement ? <a href="#" onclick="onglet('inscription');return false" style="color:var(--bleu)">Créer le vôtre →</a>
+        Pas encore d'établissement ? <a href="#" id="lnk-go-inscription" style="color:var(--bleu)">Créer le vôtre →</a>
       </p>
     </div>
 
@@ -75,11 +75,11 @@
           <div style="font-size:13px;color:var(--g600)">Votre code établissement :</div>
           <div>
             <span class="code" id="code-officiel">—</span>
-            <span class="code-copy" onclick="copierCode()">copier</span>
+            <span class="code-copy" id="btn-copier-code">copier</span>
           </div>
           <div style="font-size:12px;color:var(--g500);margin-top:6px">⚠️ Notez ce code — il est nécessaire à chaque connexion.</div>
         </div>
-        <button class="btn btn-p btn-full" onclick="allerConnexion()">Se connecter maintenant →</button>
+        <button class="btn btn-p btn-full" id="btn-aller-connexion">Se connecter maintenant →</button>
       </div>
 
       <!-- Formulaire création -->
@@ -137,11 +137,11 @@
           <input id="ins-mdp" class="fi" type="password" placeholder="Minimum 6 caractères" required>
         </div>
 
-        <button class="btn btn-p btn-full" onclick="handleInscription()" id="ins-btn" style="margin-top:8px">
+        <button class="btn btn-p btn-full" id="ins-btn" style="margin-top:8px">
           Créer mon établissement
         </button>
         <p style="text-align:center;font-size:12px;color:var(--g400);margin-top:12px">
-          Déjà inscrit ? <a href="#" onclick="onglet('connexion');return false" style="color:var(--bleu)">Se connecter →</a>
+          Déjà inscrit ? <a href="#" id="lnk-go-connexion" style="color:var(--bleu)">Se connecter →</a>
         </p>
       </div>
 

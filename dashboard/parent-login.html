@@ -48,7 +48,7 @@
           <label class="fl" style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Code établissement *</label>
           <input class="fi" type="text" id="inp-etab-code" placeholder="ex : PMS001" autocomplete="off" style="width:100%;box-sizing:border-box;text-transform:uppercase">
         </div>
-        <button class="btn-otp" id="btn-demander" onclick="demanderOTP()">📱 Recevoir le code SMS</button>
+        <button class="btn-otp" id="btn-demander">📱 Recevoir le code SMS</button>
         <div class="login-link">Personnel de l'école ? <a href="login.html">Connexion normale →</a></div>
       </div>
 
@@ -58,15 +58,15 @@
         <div id="otp-hint" style="font-size:12px;color:#64748b;text-align:center;margin-bottom:4px"></div>
         <div class="login-error" id="err2"></div>
         <div class="otp-inputs" id="otp-inputs">
-          <input type="number" maxlength="1" min="0" max="9" oninput="avancerOTP(this,0)" onkeydown="reculerOTP(event,0)">
-          <input type="number" maxlength="1" min="0" max="9" oninput="avancerOTP(this,1)" onkeydown="reculerOTP(event,1)">
-          <input type="number" maxlength="1" min="0" max="9" oninput="avancerOTP(this,2)" onkeydown="reculerOTP(event,2)">
-          <input type="number" maxlength="1" min="0" max="9" oninput="avancerOTP(this,3)" onkeydown="reculerOTP(event,3)">
-          <input type="number" maxlength="1" min="0" max="9" oninput="avancerOTP(this,4)" onkeydown="reculerOTP(event,4)">
-          <input type="number" maxlength="1" min="0" max="9" oninput="avancerOTP(this,5)" onkeydown="reculerOTP(event,5)">
+          <input type="number" maxlength="1" min="0" max="9">
+          <input type="number" maxlength="1" min="0" max="9">
+          <input type="number" maxlength="1" min="0" max="9">
+          <input type="number" maxlength="1" min="0" max="9">
+          <input type="number" maxlength="1" min="0" max="9">
+          <input type="number" maxlength="1" min="0" max="9">
         </div>
-        <button class="btn-otp" id="btn-valider" onclick="validerOTP()">Connexion →</button>
-        <div class="resend-wrap"><span id="resend-msg">Pas reçu ? <a onclick="renvoyerOTP()">Renvoyer</a></span></div>
+        <button class="btn-otp" id="btn-valider">Connexion →</button>
+        <div class="resend-wrap"><span id="resend-msg"></span></div>
       </div>
 
     </div>

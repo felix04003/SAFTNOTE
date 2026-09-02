@@ -40,7 +40,7 @@
 
     <!-- ── Étape 1 : Demander le code ── -->
     <div class="step active" id="step-1">
-      <form id="form-etape1" onsubmit="return demanderCode(event)">
+      <form id="form-etape1">
         <div class="fg">
           <label class="fl">Email ou téléphone</label>
           <input class="fi" id="input-identifiant" type="text" placeholder="Email ou +221..." required autocomplete="username">
@@ -58,7 +58,7 @@
     <!-- ── Étape 2 : Saisir le code + nouveau MDP ── -->
     <div class="step" id="step-2">
       <div class="timer" id="timer-txt">Code valable <span id="timer-val">15:00</span></div>
-      <form id="form-etape2" onsubmit="return reinitialiser(event)">
+      <form id="form-etape2">
         <div class="fg" style="margin-top:16px">
           <label class="fl" style="text-align:center;display:block">Code reçu par SMS</label>
           <div class="otp-inputs" id="otp-inputs">
@@ -83,7 +83,7 @@
         </button>
       </form>
       <div style="text-align:center;margin-top:12px">
-        <button class="btn btn-l btn-sm" onclick="retourEtape1()" style="font-size:12px">
+        <button class="btn btn-l btn-sm" id="btn-retour" style="font-size:12px">
           &#8592; Renvoyer un code
         </button>
       </div>

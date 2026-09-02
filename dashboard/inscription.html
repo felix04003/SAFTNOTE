@@ -169,12 +169,12 @@
         <div class="fg" style="margin-top:14px">
           <label class="fl">Pays <span style="color:var(--rouge)">*</span></label>
           <div class="pays-grid">
-            <button type="button" class="pays-btn sel" data-pays="SN" onclick="selectPays(this)">🇸🇳 Sénégal</button>
-            <button type="button" class="pays-btn" data-pays="CI" onclick="selectPays(this)">🇨🇮 Côte d'Ivoire</button>
-            <button type="button" class="pays-btn" data-pays="ML" onclick="selectPays(this)">🇲🇱 Mali</button>
-            <button type="button" class="pays-btn" data-pays="BF" onclick="selectPays(this)">🇧🇫 Burkina Faso</button>
-            <button type="button" class="pays-btn" data-pays="GN" onclick="selectPays(this)">🇬🇳 Guinée</button>
-            <button type="button" class="pays-btn" data-pays="autre" onclick="selectPays(this)">🌍 Autre pays</button>
+            <button type="button" class="pays-btn sel" data-pays="SN" >🇸🇳 Sénégal</button>
+            <button type="button" class="pays-btn" data-pays="CI" >🇨🇮 Côte d'Ivoire</button>
+            <button type="button" class="pays-btn" data-pays="ML" >🇲🇱 Mali</button>
+            <button type="button" class="pays-btn" data-pays="BF" >🇧🇫 Burkina Faso</button>
+            <button type="button" class="pays-btn" data-pays="GN" >🇬🇳 Guinée</button>
+            <button type="button" class="pays-btn" data-pays="autre" >🌍 Autre pays</button>
           </div>
           <div class="pays-autre" id="pays-autre-wrap">
             <input class="fi" id="etab-pays-autre" type="text" placeholder="Code pays (ex: CM, TG, BJ)..." maxlength="3" style="text-transform:uppercase">
@@ -198,7 +198,7 @@
           <input class="fi" id="etab-email" type="email" placeholder="contact@mon-ecole.sn">
         </div>
 
-        <button class="btn btn-p btn-full" type="button" onclick="etape2()" style="margin-top:8px">
+        <button class="btn btn-p btn-full" type="button" id="btn-etape2" style="margin-top:8px">
           Continuer &rarr;
         </button>
       </div>
@@ -244,10 +244,10 @@
         </div>
 
         <div style="display:flex;gap:10px;margin-top:18px">
-          <button class="btn btn-l" type="button" onclick="allerEtape(1)" style="flex:0 0 auto">
+          <button class="btn btn-l" type="button" id="btn-retour-etape1" style="flex:0 0 auto">
             &larr; Retour
           </button>
-          <button class="btn btn-p btn-full" type="button" id="btn-inscrire" onclick="soumettre()">
+          <button class="btn btn-p btn-full" type="button" id="btn-inscrire">
             Créer mon école
           </button>
         </div>
