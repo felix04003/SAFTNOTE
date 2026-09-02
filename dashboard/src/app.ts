@@ -21,6 +21,19 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnLogout = document.getElementById('btn-logout');
   if (btnLogout) btnLogout.addEventListener('click', (e) => { e.preventDefault(); Auth.logout(); });
 
+  // Hamburger sidebar (mobile)
+  const btnMenu   = document.getElementById('btn-menu');
+  const sbOverlay = document.getElementById('sb-overlay');
+  const sidebar   = document.querySelector('.sidebar');
+  btnMenu?.addEventListener('click', () => {
+    sidebar?.classList.toggle('open');
+    sbOverlay?.classList.toggle('show');
+  });
+  sbOverlay?.addEventListener('click', () => {
+    sidebar?.classList.remove('open');
+    sbOverlay?.classList.remove('show');
+  });
+
   // Hash routing au chargement
   const hash = location.hash.replace('#', '');
   goto(hash || 'dashboard');
