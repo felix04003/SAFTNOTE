@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Api } from '../api';
 import { escapeHtml } from '../ui';
 import { PAR_HOOKS } from '../par-router';
@@ -8,7 +7,7 @@ declare const ParApp: any;
 export const PageParAbsences: any = {
 
   init: async function() {
-    var enfant = ParApp.enfantLien();
+    const enfant = ParApp.enfantLien();
     if (enfant.peut_voir_absences === false) {
       PageParAbsences._accesRefuse();
       return;
@@ -17,34 +16,34 @@ export const PageParAbsences: any = {
   },
 
   charger: async function() {
-    var id = ParApp.enfantId();
+    const id = ParApp.enfantId();
     if (!id) return;
-    var tbody = document.getElementById('tb-par-absences');
+    const tbody = document.getElementById('tb-par-absences') as HTMLElement | null;
     if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:28px;color:var(--g400)">Chargement…</td></tr>';
 
     try {
       // Détail des absences
-      var res = await Api.get('/parents/moi/enfants/' + id + '/absences');
-      var absences = res.data || [];
+      const res = await Api.get('/parents/moi/enfants/' + id + '/absences');
+      const absences = res.data || [];
 
       // Totaux depuis le tableau de bord (justifiées / injustifiées / retards)
-      var tdbRes = await Api.get('/parents/moi/tableau-de-bord');
-      var tdb = (tdbRes.data || []).find(function(e) { return e.enfant && e.enfant.id === id; });
-      var abs = (tdb && tdb.absences) || {};
+      const tdbRes = await Api.get('/parents/moi/tableau-de-bord');
+      const tdb = (tdbRes.data || []).find(function(e: any) { return e.enfant && e.enfant.id === id; });
+      const abs = (tdb && tdb.absences) || {};
       PageParAbsences._renderRecap(abs);
       PageParAbsences._renderDetail(absences);
 
-    } catch (e) {
+    } catch (e: any) {
       if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:28px;color:var(--rouge)">' + escapeHtml(e.message || 'Erreur') + '</td></tr>';
     }
   },
 
-  _renderRecap: function(abs) {
-    var el = document.getElementById('par-recap-abs-table');
+  _renderRecap: function(abs: any) {
+    const el = document.getElementById('par-recap-abs-table') as HTMLElement | null;
     if (!el) return;
-    var just   = abs.justifiees   || 0;
-    var injust = abs.injustifiees || 0;
-    var retard = abs.retards      || 0;
+    const just   = abs.justifiees   || 0;
+    const injust = abs.injustifiees || 0;
+    const retard = abs.retards      || 0;
     el.innerHTML =
       '<div class="carte"><div class="ch"><span>📊</span><span class="ct">Récapitulatif total</span></div>' +
       '<div style="display:flex;gap:12px;padding:12px 16px">' +
@@ -54,8 +53,8 @@ export const PageParAbsences: any = {
       '</div></div>';
   },
 
-  _renderDetail: function(absences) {
-    var tbody = document.getElementById('tb-par-absences');
+  _renderDetail: function(absences: any[]) {
+    const tbody = document.getElementById('tb-par-absences') as HTMLElement | null;
     if (!tbody) return;
 
     if (!absences.length) {
@@ -63,14 +62,14 @@ export const PageParAbsences: any = {
       return;
     }
 
-    var JOURS = ['', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+    const JOURS = ['', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
 
-    tbody.innerHTML = absences.map(function(a) {
-      var jour    = JOURS[a.jour_semaine] || '';
-      var statut  = escapeHtml({ absent: 'Absent', retard: 'Retard', sorti_avant: 'Sorti tôt' }[a.statut] || a.statut || '—');
-      var couleur = a.statut === 'absent' ? 'var(--rouge)' : a.statut === 'retard' ? 'var(--orange)' : 'var(--g500)';
-      var motif   = a.motif_justification ? ' — ' + escapeHtml(a.motif_justification) : '';
-      var justif  = a.est_justifie
+    tbody.innerHTML = absences.map(function(a: any) {
+      const jour    = JOURS[a.jour_semaine] || '';
+      const statut  = escapeHtml(({ absent: 'Absent', retard: 'Retard', sorti_avant: 'Sorti tôt' } as Record<string, string>)[a.statut] || a.statut || '—');
+      const couleur = a.statut === 'absent' ? 'var(--rouge)' : a.statut === 'retard' ? 'var(--orange)' : 'var(--g500)';
+      const motif   = a.motif_justification ? ' — ' + escapeHtml(a.motif_justification) : '';
+      const justif  = a.est_justifie
         ? '<span class="badge bs">✓ Justifié' + motif + '</span>'
         : '<span class="badge bd">Non justifié</span>';
 
@@ -85,9 +84,9 @@ export const PageParAbsences: any = {
   },
 
   _accesRefuse: function() {
-    var tbody = document.getElementById('tb-par-absences');
+    const tbody = document.getElementById('tb-par-absences') as HTMLElement | null;
     if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:28px;color:var(--g400)">Accès aux absences non autorisé pour cet enfant.</td></tr>';
-    var recap = document.getElementById('par-recap-abs-table');
+    const recap = document.getElementById('par-recap-abs-table') as HTMLElement | null;
     if (recap) recap.innerHTML = '';
   },
 

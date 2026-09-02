@@ -9,10 +9,11 @@ export interface ApiResponse<T = any> {
 }
 
 export interface ApiMeta {
-  total:  number;
-  page:   number;
-  limite: number;
-  pages:  number;
+  total:   number;
+  page:    number;
+  limite:  number;
+  pages:   number;
+  annee?:  string;
 }
 
 export interface User {

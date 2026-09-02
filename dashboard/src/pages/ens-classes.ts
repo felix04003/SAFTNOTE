@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Api } from '../api';
 import { escapeHtml } from '../ui';
 import { PAGE_HOOKS } from '../ens-router';
@@ -7,23 +6,23 @@ declare const PageEnsNotes: any;
 declare const PageEnsAppel: any;
 
 export const PageEnsClasses: any = {
-  _data: [],
+  _data: [] as any[],
 
   async charger() {
-    var grid = document.getElementById('ens-classes-grid');
+    const grid = document.getElementById('ens-classes-grid') as HTMLElement | null;
     if (!grid) return;
     grid.innerHTML = '<div style="text-align:center;padding:40px;color:var(--g400)">Chargement‚Ä¶</div>';
 
     try {
-      var res = await Api.get('/enseignants/moi/classes');
+      const res = await Api.get('/enseignants/moi/classes');
       this._data = res.data || [];
 
-      var sous = document.getElementById('ens-classes-sous');
+      const sous = document.getElementById('ens-classes-sous') as HTMLElement | null;
       if (sous && res.meta) {
         // Count unique classes
-        var classeIds = {};
-        this._data.forEach(function(c) { classeIds[c.classe_id] = true; });
-        var nbClasses = Object.keys(classeIds).length;
+        const classeIds: Record<string, boolean> = {};
+        this._data.forEach(function(c: any) { classeIds[c.classe_id] = true; });
+        const nbClasses = Object.keys(classeIds).length;
         sous.textContent = (res.meta.annee || '') + ' ¬∑ ' + nbClasses + ' classe(s)';
       }
 
@@ -33,8 +32,8 @@ export const PageEnsClasses: any = {
       }
 
       // Group by classe_id to handle multi-subject teachers
-      var groupes = {};
-      this._data.forEach(function(c) {
+      const groupes: Record<string, any> = {};
+      this._data.forEach(function(c: any) {
         if (!groupes[c.classe_id]) {
           // NOTE: effectif, salle_principale, est_titulaire pris du premier enregistrement
           // Suppose que ces champs sont au niveau classe (pas par affectation)
@@ -43,11 +42,11 @@ export const PageEnsClasses: any = {
         groupes[c.classe_id].matieres.push(c.matiere);
       });
 
-      grid.innerHTML = Object.values(groupes).map(function(g) {
-        var matieresStr = escapeHtml(g.matieres.join(', '));
-        var classeEsc   = escapeHtml(g.classe || '‚Äî');
-        var salleEsc    = g.salle_principale ? '<span>Ì†ΩÌ≥ç ' + escapeHtml(g.salle_principale) + '</span>' : '';
-        var cycleEsc    = g.cycle ? '<span style="font-size:10px;background:var(--g100);padding:2px 8px;border-radius:10px">' + escapeHtml(g.cycle) + '</span>' : '';
+      grid.innerHTML = Object.values(groupes).map(function(g: any) {
+        const matieresStr = escapeHtml(g.matieres.join(', '));
+        const classeEsc   = escapeHtml(g.classe || '‚Äî');
+        const salleEsc    = g.salle_principale ? '<span>ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ ' + escapeHtml(g.salle_principale) + '</span>' : '';
+        const cycleEsc    = g.cycle ? '<span style="font-size:10px;background:var(--g100);padding:2px 8px;border-radius:10px">' + escapeHtml(g.cycle) + '</span>' : '';
 
         return '<div class="carte" style="padding:18px">' +
           '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">' +
@@ -58,7 +57,7 @@ export const PageEnsClasses: any = {
             '<span class="badge ' + (g.est_titulaire ? 'bs' : 'bw') + '">' + (g.est_titulaire ? 'Titulaire' : 'Vacataire') + '</span>' +
           '</div>' +
           '<div style="display:flex;gap:16px;font-size:12px;color:var(--g500);flex-wrap:wrap">' +
-            '<span>Ì†ºÌæì <b style="color:var(--g900)">' + (g.effectif || 0) + '</b> √©l√®ves</span>' +
+            '<span>ÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ <b style="color:var(--g900)">' + (g.effectif || 0) + '</b> √©l√®ves</span>' +
             salleEsc + cycleEsc +
           '</div>' +
           '<div style="margin-top:14px;display:flex;gap:8px">' +
@@ -68,7 +67,7 @@ export const PageEnsClasses: any = {
         '</div>';
       }).join('');
 
-    } catch (e) {
+    } catch (e: any) {
       grid.innerHTML = '<div style="text-align:center;padding:40px;color:var(--rouge)">Erreur : ' + escapeHtml(e.message || 'impossible de charger les classes') + '</div>';
     }
   },

@@ -1,39 +1,38 @@
-// @ts-nocheck
 import { Api } from '../api';
 import { escapeHtml } from '../ui';
 import { PAGE_HOOKS } from '../router';
 
 export const PageAlertes: any = {
-  data: null,
+  data: null as any,
 
   async charger() {
     try {
-      var res = await Api.get('/notifications');
+      const res: any = await Api.get('/notifications');
       this.data = res.donnees;
       this.renderNotifs(res.donnees);
       return true;
-    } catch (e) {
+    } catch (e: any) {
       console.warn('PageAlertes: impossible de charger les notifications —', e.message);
-      var listeEl = document.getElementById('alertes-list');
+      const listeEl = document.getElementById('alertes-list') as HTMLElement | null;
       if (listeEl) listeEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--g400);font-size:13px">Notifications indisponibles</div>';
       return false;
     }
   },
 
-  renderAlertes: function(donnees) {
-    var sousTitre = document.getElementById('ph-sous-alertes');
+  renderAlertes: function(donnees: any) {
+    const sousTitre = document.getElementById('ph-sous-alertes') as HTMLElement | null;
     if (sousTitre) {
-      var total = (donnees && donnees.total) ? donnees.total : 0;
+      const total = (donnees && donnees.total) ? donnees.total : 0;
       sousTitre.innerHTML = total
         ? '<span class="badge bp">' + total + '</span> alerte' + (total > 1 ? 's' : '') + ' en attente'
         : 'Aucune alerte';
     }
   },
 
-  renderNotifs: function(donnees) {
+  renderNotifs: function(donnees: any) {
     this.renderAlertes(donnees);
 
-    var listeEl = document.getElementById('alertes-list');
+    const listeEl = document.getElementById('alertes-list') as HTMLElement | null;
     if (!listeEl) return;
 
     if (!donnees || donnees.total === 0) {
@@ -41,9 +40,9 @@ export const PageAlertes: any = {
       return;
     }
 
-    var lignes = [];
+    const lignes: string[] = [];
 
-    (donnees.appelsManques || []).forEach(function(item) {
+    (donnees.appelsManques || []).forEach(function(item: any) {
       lignes.push(
         '<div class="al al-i">' +
           '<span class="al-ico">📋</span>' +
@@ -55,7 +54,7 @@ export const PageAlertes: any = {
       );
     });
 
-    (donnees.absences || []).forEach(function(item) {
+    (donnees.absences || []).forEach(function(item: any) {
       lignes.push(
         '<div class="al al-i">' +
           '<span class="al-ico">⚠️</span>' +
@@ -67,7 +66,7 @@ export const PageAlertes: any = {
       );
     });
 
-    (donnees.notes || []).forEach(function(item) {
+    (donnees.notes || []).forEach(function(item: any) {
       lignes.push(
         '<div class="al al-i">' +
           '<span class="al-ico">📝</span>' +
@@ -79,7 +78,7 @@ export const PageAlertes: any = {
       );
     });
 
-    (donnees.bulletins || []).forEach(function(item) {
+    (donnees.bulletins || []).forEach(function(item: any) {
       lignes.push(
         '<div class="al al-i">' +
           '<span class="al-ico">📄</span>' +
@@ -90,7 +89,7 @@ export const PageAlertes: any = {
       );
     });
 
-    (donnees.incidents || []).forEach(function(item) {
+    (donnees.incidents || []).forEach(function(item: any) {
       lignes.push(
         '<div class="al al-i">' +
           '<span class="al-ico">🚨</span>' +

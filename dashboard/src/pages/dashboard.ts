@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Api } from '../api';
 import { Auth } from '../auth';
 import { PAGE_HOOKS } from '../router';

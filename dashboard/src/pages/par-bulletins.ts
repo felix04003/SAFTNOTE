@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Api } from '../api';
 import { escapeHtml, parCn } from '../ui';
 import { PAR_HOOKS } from '../par-router';
@@ -7,10 +6,10 @@ declare const ParApp: any;
 const _parCn = parCn;
 
 export const PageParBulletins: any = {
-  _bulletinsData: null,
+  _bulletinsData: null as any,
 
   init: async function() {
-    var enfant = ParApp.enfantLien();
+    const enfant = ParApp.enfantLien();
     if (enfant.peut_voir_bulletins === false) {
       PageParBulletins._accesRefuse();
       return;
@@ -19,18 +18,18 @@ export const PageParBulletins: any = {
   },
 
   charger: async function() {
-    var id = ParApp.enfantId();
+    const id = ParApp.enfantId();
     if (!id) return;
-    var liste = document.getElementById('par-bulletins-liste');
+    const liste = document.getElementById('par-bulletins-liste') as HTMLElement | null;
     if (!liste) return;
     liste.innerHTML = '<div style="text-align:center;padding:40px;color:var(--g400)">Chargement…</div>';
 
     try {
-      var res = await Api.get('/parents/moi/enfants/' + id + '/bulletins');
+      const res = await Api.get('/parents/moi/enfants/' + id + '/bulletins');
       PageParBulletins._bulletinsData = res.data || {};
-      var bulletins = PageParBulletins._bulletinsData.bulletins || [];
+      const bulletins = PageParBulletins._bulletinsData.bulletins || [];
 
-      var sous = document.getElementById('par-bulletins-sous');
+      const sous = document.getElementById('par-bulletins-sous') as HTMLElement | null;
       if (sous) sous.textContent = (PageParBulletins._bulletinsData.annee || '') + (PageParBulletins._bulletinsData.enfant ? ' · ' + PageParBulletins._bulletinsData.enfant.classe : '');
 
       if (!bulletins.length) {
@@ -38,21 +37,21 @@ export const PageParBulletins: any = {
         return;
       }
 
-      liste.innerHTML = bulletins.map(function(b, i) {
+      liste.innerHTML = bulletins.map(function(b: any, i: number) {
         return PageParBulletins._renderBulletin(b, i);
       }).join('');
 
-    } catch (e) {
+    } catch (e: any) {
       liste.innerHTML = '<div style="text-align:center;padding:40px;color:var(--rouge)">' + escapeHtml(e.message || 'Erreur de chargement') + '</div>';
     }
   },
 
-  _renderBulletin: function(b, i) {
-    var mention = b.mention || '—';
-    var couleurMention = { 'Excellent': 'var(--vert)', 'Très Bien': 'var(--vert)', 'Bien': 'var(--bleu)', 'Assez Bien': 'var(--orange)' }[mention] || 'var(--g500)';
+  _renderBulletin: function(b: any, i: number) {
+    const mention = b.mention || '—';
+    const couleurMention = ({ 'Excellent': 'var(--vert)', 'Très Bien': 'var(--vert)', 'Bien': 'var(--bleu)', 'Assez Bien': 'var(--orange)' } as Record<string, string>)[mention] || 'var(--g500)';
 
-    var matiereRows = (b.matieres || []).map(function(m) {
-      var moy = m.moyenne != null ? m.moyenne : '—';
+    const matiereRows = (b.matieres || []).map(function(m: any) {
+      const moy = m.moyenne != null ? m.moyenne : '—';
       return '<tr>' +
         '<td class="nc">' + escapeHtml(m.matiere || '—') + '</td>' +
         '<td style="text-align:center">' + (m.coefficient || 1) + '</td>' +
@@ -62,7 +61,7 @@ export const PageParBulletins: any = {
       '</tr>';
     }).join('');
 
-    var detailId = 'bul-detail-' + i;
+    const detailId = 'bul-detail-' + i;
 
     return '<div class="carte" style="margin-bottom:16px">' +
       '<div class="ch" style="cursor:pointer" onclick="document.getElementById(\'' + detailId + '\').style.display = document.getElementById(\'' + detailId + '\').style.display === \'none\' ? \'\' : \'none\'">' +
@@ -87,14 +86,14 @@ export const PageParBulletins: any = {
           ? '<div style="padding:12px 18px;border-top:1px solid var(--g100);font-size:13px;color:var(--g700)"><b>Conseil de classe :</b> ' + escapeHtml(b.appreciation_conseil) + (b.decision_conseil ? ' — <b>' + escapeHtml(b.decision_conseil) + '</b>' : '') + '</div>'
           : '') +
         (b.bulletin_url && /^https?:\/\//.test(b.bulletin_url)
-          ? '<div style="padding:12px 18px;border-top:1px solid var(--g100)"><a href="' + escapeHtml(b.bulletin_url) + '" target="_blank" class="btn btn-l btn-sm">������ Télécharger le bulletin PDF</a></div>'
+          ? '<div style="padding:12px 18px;border-top:1px solid var(--g100)"><a href="' + escapeHtml(b.bulletin_url) + '" target="_blank" class="btn btn-l btn-sm">������ Télécharger le bulletin PDF</a></div>'
           : '') +
       '</div>' +
     '</div>';
   },
 
   _accesRefuse: function() {
-    var liste = document.getElementById('par-bulletins-liste');
+    const liste = document.getElementById('par-bulletins-liste') as HTMLElement | null;
     if (liste) liste.innerHTML = '<div style="text-align:center;padding:40px;color:var(--g400)">Accès aux bulletins non autorisé pour cet enfant.</div>';
   },
 

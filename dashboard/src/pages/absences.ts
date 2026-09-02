@@ -1,38 +1,37 @@
-// @ts-nocheck
 import { Api } from '../api';
 import { escapeHtml, toast, openModal, closeModal } from '../ui';
 import { PAGE_HOOKS } from '../router';
 
 export const PageAbsences: any = {
-  data: [],
-  _presenceId: null,  // ID de la présence en cours de justification
+  data: [] as any[],
+  _presenceId: null as string | null,
 
   async charger() {
     try {
-      var res = await Api.get('/presences/absences');
+      const res = await Api.get('/presences/absences');
       this.data = res.data;
       this.renderTable(res.data);
       return true;
-    } catch (e) {
+    } catch (e: any) {
       console.error('PageAbsences.charger —', e.message);
       return false;
     }
   },
 
-  renderKpis: function(absences) {
-    function set(id, val) { var el = document.getElementById(id); if (el) el.textContent = val; }
-    var nb_absences = absences.filter(function(a) { return a.statut === 'absent'; }).length;
-    var nb_retards = absences.filter(function(a) { return a.statut === 'retard'; }).length;
-    var nb_justifiees = absences.filter(function(a) { return a.est_justifie; }).length;
+  renderKpis: function(absences: any[]) {
+    function set(id: string, val: any) { const el = document.getElementById(id) as HTMLElement | null; if (el) el.textContent = val; }
+    const nb_absences   = absences.filter(function(a: any) { return a.statut === 'absent'; }).length;
+    const nb_retards    = absences.filter(function(a: any) { return a.statut === 'retard'; }).length;
+    const nb_justifiees = absences.filter(function(a: any) { return a.est_justifie; }).length;
     set('abs-kpi-absences', nb_absences);
     set('abs-kpi-retards', nb_retards);
     set('abs-kpi-justifiees', nb_justifiees);
     set('abs-kpi-notifies', absences.length ? Math.round((nb_justifiees / absences.length) * 100) + '%' : '—');
   },
 
-  renderTable: function(absences) {
+  renderTable: function(absences: any[]) {
     this.renderKpis(absences);
-    var tbody = document.getElementById('tb-abs');
+    const tbody = document.getElementById('tb-abs') as HTMLElement | null;
     if (!tbody) return;
 
     if (!absences.length) {
@@ -40,16 +39,16 @@ export const PageAbsences: any = {
       return;
     }
 
-    tbody.innerHTML = absences.map(function(a) {
-      var type     = a.statut || a.type || 'absent';
-      var justifie = a.est_justifie;
-      var nom      = escapeHtml((a.eleve || ((a.prenom || '') + ' ' + (a.nom || ''))).trim() || '—');
-      var classe   = escapeHtml(a.classe || '—');
-      var date     = escapeHtml(a.date_cours || a.date || '—');
-      var matiere  = escapeHtml(a.matiere || '—');
-      var typeEsc  = escapeHtml(type);
-      var justif   = escapeHtml(a.justification || '—');
-      var presId   = escapeHtml(String(a.presence_id || ''));
+    tbody.innerHTML = absences.map(function(a: any) {
+      const type     = a.statut || a.type || 'absent';
+      const justifie = a.est_justifie;
+      const nom      = escapeHtml((a.eleve || ((a.prenom || '') + ' ' + (a.nom || ''))).trim() || '—');
+      const classe   = escapeHtml(a.classe || '—');
+      const date     = escapeHtml(a.date_cours || a.date || '—');
+      const matiere  = escapeHtml(a.matiere || '—');
+      const typeEsc  = escapeHtml(type);
+      const justif   = escapeHtml(a.justification || '—');
+      const presId   = escapeHtml(String(a.presence_id || ''));
 
       return '<tr>' +
         '<td class="nc">' + nom + '</td>' +
@@ -64,20 +63,20 @@ export const PageAbsences: any = {
     }).join('');
   },
 
-  ouvrirJustification: function(presenceId) {
+  ouvrirJustification: function(presenceId: string) {
     if (!presenceId) return toast('Identifiant de présence manquant', 'w');
     PageAbsences._presenceId = presenceId;
-    var motif = document.getElementById('just-motif');
+    const motif = document.getElementById('just-motif') as HTMLInputElement | null;
     if (motif) motif.value = '';
     openModal('m-justifier-absence');
   },
 
   confirmerJustification: async function() {
-    var motif = document.getElementById('just-motif')?.value?.trim();
+    const motif = (document.getElementById('just-motif') as HTMLInputElement | null)?.value?.trim();
     if (!motif) return toast('Saisissez un motif de justification', 'w');
     if (!PageAbsences._presenceId) return toast('Erreur : absence introuvable', 'e');
 
-    var btn = document.getElementById('btn-justifier-abs');
+    const btn = document.getElementById('btn-justifier-abs') as HTMLButtonElement | null;
     if (btn) { btn.disabled = true; btn.textContent = 'Enregistrement…'; }
 
     try {
@@ -86,7 +85,7 @@ export const PageAbsences: any = {
       toast('Absence justifiée ✓', 's');
       PageAbsences._presenceId = null;
       await PageAbsences.charger();
-    } catch (e) {
+    } catch (e: any) {
       toast(e.message || 'Erreur lors de la justification', 'e');
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = 'Enregistrer'; }
