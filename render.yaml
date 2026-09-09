@@ -4,6 +4,7 @@ services:
     runtime: node
     rootDir: backend
     buildCommand: npm ci
+    preDeployCommand: node src/utils/migrate.js
     startCommand: node src/app.js
     healthCheckPath: /api/v1/health
     envVars:
