@@ -40,6 +40,26 @@ services:
         generateValue: true
     plan: free
 
+  - type: web
+    name: ecolemanager-dashboard
+    env: static
+    buildCommand: cd dashboard && npm ci && npm run build
+    staticPublishPath: ./dashboard/dist
+    pullRequestPreviewsEnabled: false
+    routes:
+      - type: rewrite
+        source: /login
+        destination: /login.html
+      - type: rewrite
+        source: /inscription
+        destination: /inscription.html
+      - type: rewrite
+        source: /enseignant
+        destination: /enseignant.html
+      - type: rewrite
+        source: /parent
+        destination: /parent.html
+
 databases:
   - name: ecolemanager-db
     databaseName: ecolemanager
