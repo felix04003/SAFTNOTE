@@ -45,7 +45,7 @@ export default function DirecteurDashboard() {
     setErreur(null);
     try {
       const data = await directeurApi.getDashboard();
-      setStats({ ...STATS_VIDES, ...data });
+      setStats({ ...STATS_VIDES, ...(data as Partial<DashboardStats>) });
     } catch (e) {
       if (e instanceof ApiError && e.estHorsLigne) {
         setErreur('Hors ligne — données indisponibles sans connexion');

@@ -46,6 +46,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         api.setToken(token);
         set({ token, session: JSON.parse(session), estConnecte: true });
       }
+    } catch {
+      // SecureStore indisponible — démarrer non authentifié
     } finally {
       set({ chargement: false });
     }
