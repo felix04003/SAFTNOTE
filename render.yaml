@@ -22,10 +22,17 @@ services:
         generateValue: true
       - key: REDIS_URL
         value: ""          # Redis non dispo plan gratuit — cache désactivé
+      # Africa's Talking (SMS OTP) — obligatoire en production depuis le lot E
+      # (finding E1, audit 2026-09) : sans ces deux variables, env.js
+      # (validateEnv(), appelé au boot) fait crasher le démarrage du service
+      # plutôt que de risquer de logguer les codes OTP en clair. À saisir
+      # manuellement dans le dashboard Render (Settings > Environment) —
+      # `sync: false` évite qu'un déploiement écrase une clé déjà configurée
+      # avec une valeur vide.
       - key: AT_API_KEY
-        value: ""          # Africa's Talking — à renseigner pour activer SMS
+        sync: false
       - key: AT_USERNAME
-        value: sandbox
+        sync: false
       - key: META_WA_TOKEN
         value: ""          # WhatsApp Business — à renseigner pour activer WA
       - key: S3_ENDPOINT

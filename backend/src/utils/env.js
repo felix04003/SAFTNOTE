@@ -69,6 +69,19 @@ const REGLES = [
     },
     hint: 'S3_ENDPOINT est défini : S3_ACCESS_KEY, S3_SECRET_KEY et S3_BUCKET deviennent obligatoires (config S3 incomplète)',
   },
+  // SMS OTP via Africa's Talking (lot E, finding E1 audit 2026-09) : sans
+  // AT_API_KEY/AT_USERNAME, les routes /auth/otp/demander et
+  // /auth/mot-de-passe-oublie loguaient le code OTP en clair (fallback dev)
+  // — y compris en production, où AT_API_KEY est vide par défaut sur le
+  // plan gratuit Render (render.yaml). Ces logs sont accessibles à quiconque
+  // a accès aux journaux applicatifs, souvent moins protégés que la base de
+  // données. Obligatoire en production comme MONITORING_TOKEN/S3 ci-dessus :
+  // le serveur refuse de démarrer plutôt que de fuiter des codes OTP.
+  {
+    nom:   '_AT_GROUP',
+    check: () => Boolean(process.env.AT_API_KEY && process.env.AT_USERNAME),
+    hint:  'AT_API_KEY et AT_USERNAME (Africa\'s Talking) sont obligatoires en production : sans eux, les codes OTP ne peuvent pas être envoyés par SMS et le serveur refuse de démarrer plutôt que de les logguer en clair',
+  },
 ];
 
 // ── Fonction de validation ───────────────────────────────────────

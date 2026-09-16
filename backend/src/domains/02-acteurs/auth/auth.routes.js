@@ -38,6 +38,49 @@ function validerMotDePasse(mdp, politique) {
   return null;
 }
 
+/**
+ * Envoie un code OTP par SMS, ou le logue en développement/test si Africa's
+ * Talking n'est pas configuré (lot E, finding E1 audit 2026-09).
+ *
+ * Sans AT_API_KEY, en dehors des environnements explicitement sûrs
+ * (development, test) : ne JAMAIS construire de message de log contenant
+ * le code — ces logs sont accessibles à quiconque a accès aux journaux
+ * applicatifs (Render/CloudWatch/etc.), souvent moins protégés que la base
+ * de données. On lève une 503 explicite plutôt que de fuiter le code.
+ * Volontairement une liste blanche (et non `NODE_ENV === 'production'` en
+ * négatif) : un staging/préprod, ou un NODE_ENV vide/mal orthographié, doit
+ * tomber du côté "ne pas logguer" par défaut, pas du côté "logguer".
+ *
+ * Note : `env.js` (`validateEnv()`, appelé au boot dans `app.js`) rend déjà
+ * AT_API_KEY/AT_USERNAME obligatoires en production — le serveur ne démarre
+ * donc normalement jamais dans cet état. Cette vérification est une
+ * deuxième ligne de défense (contournement de validateEnv, appel direct de
+ * la route dans un test qui ne passe pas par `start()`, etc.).
+ *
+ * @param {string} telephone - Numéro international du destinataire
+ * @param {string} code      - Code OTP à 6 chiffres (jamais loggué hors dev/test)
+ * @param {string} libelle   - Nom affiché dans le SMS (établissement, contexte)
+ * @throws {ApiError} 503 SMS_INDISPONIBLE hors development/test sans AT_API_KEY
+ */
+async function envoyerOuLoggerOTP(telephone, code, libelle) {
+  const ENVIRONNEMENTS_LOG_AUTORISE = ['development', 'test'];
+
+  if (!process.env.AT_API_KEY) {
+    if (!ENVIRONNEMENTS_LOG_AUTORISE.includes(process.env.NODE_ENV)) {
+      throw ApiError.serviceIndisponible(
+        'Service SMS indisponible — réessayez plus tard',
+        'SMS_INDISPONIBLE'
+      );
+    }
+    // Dev/test uniquement : logguer le code plutôt que de tenter un envoi
+    // réel qui échouera toujours faute de credentials.
+    logger.warn('⚠️  SMS non configuré — CODE OTP (dev/test uniquement) : ' + code, { telephone });
+    return;
+  }
+
+  await envoyerOTP(telephone, code, libelle);
+}
+
 // Rate limiting strict sur les routes d'auth
 const limiterAuth = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -236,21 +279,19 @@ router.post('/auth/otp/demander', limiterAuth, valider(schemaOtpDemander), async
       expire_at:     db.raw("NOW() + INTERVAL '10 minutes'"),
     });
 
-    // Sans clé SMS configurée (dev local ou test) : logger le code plutôt
-    // que de tenter un envoi réel qui échouera toujours faute de credentials.
-    // L'ancienne condition (NODE_ENV==='test' uniquement) laissait passer un
-    // vrai appel réseau en dev normal, dont l'échec (réponse gateway
-    // non-JSON) faisait fuiter son message brut tel quel dans la réponse
-    // HTTP — affiché littéralement dans la bannière d'erreur de l'app.
-    if (!process.env.AT_API_KEY) {
-      logger.warn('⚠️  SMS non configuré — CODE OTP (dev/test uniquement) : ' + code, { telephone });
-    } else {
-      try {
-        await envoyerOTP(telephone, code, etablissement.nom);
-      } catch (smsErr) {
-        logger.error('Échec envoi SMS OTP', { telephone, error: smsErr.message });
-        throw ApiError.erreurServeur('Échec de l\'envoi du SMS — réessayez dans quelques instants.');
-      }
+    // Envoi SMS réel si AT_API_KEY est configurée ; sinon logué en dev/test
+    // uniquement — jamais en production (503 SMS_INDISPONIBLE, voir
+    // envoyerOuLoggerOTP, lot E). L'ancienne condition
+    // (NODE_ENV==='test' uniquement) laissait passer un vrai appel réseau
+    // en dev normal, dont l'échec (réponse gateway non-JSON) faisait fuiter
+    // son message brut tel quel dans la réponse HTTP — affiché littéralement
+    // dans la bannière d'erreur de l'app.
+    try {
+      await envoyerOuLoggerOTP(telephone, code, etablissement.nom);
+    } catch (smsErr) {
+      if (smsErr.isApiError) throw smsErr; // ex: SMS_INDISPONIBLE (503)
+      logger.error('Échec envoi SMS OTP', { telephone, error: smsErr.message });
+      throw ApiError.erreurServeur('Échec de l\'envoi du SMS — réessayez dans quelques instants.');
     }
 
     logger.info('OTP envoyé', { telephone, etablissement_id: etablissement.id });
@@ -481,10 +522,21 @@ router.post('/auth/mot-de-passe-oublie', limiterAuth, valider(schemaMotDePasseOu
       expire_at:      db.raw("NOW() + INTERVAL '15 minutes'"),
     });
 
-    if (process.env.NODE_ENV === 'test' && !process.env.AT_API_KEY) {
-      logger.warn(`[TEST] Code reset mot de passe pour ${identifiant} : ${code}`);
-    } else {
-      await envoyerOTP(telephone, code, `Réinitialisation — ${etablissement.nom}`);
+    // Même logique que /auth/otp/demander (lot E) : log en dev/test sans
+    // AT_API_KEY, 503 SMS_INDISPONIBLE hors dev/test sans clé, envoi réel
+    // sinon. L'ancienne condition ne couvrait que NODE_ENV==='test' et
+    // laissait passer un appel réseau réel (et un éventuel plantage) en
+    // développement normal sans credentials Africa's Talking.
+    // Même try/catch que /auth/otp/demander (code-review lot E, MEDIUM 2) :
+    // sans lui, un échec réel d'envoi SMS pour un compte existant plantait
+    // avec une erreur brute différente du message anti-énumération standard
+    // ci-dessous — un canal d'énumération de comptes involontaire.
+    try {
+      await envoyerOuLoggerOTP(telephone, code, `Réinitialisation — ${etablissement.nom}`);
+    } catch (smsErr) {
+      if (smsErr.isApiError) throw smsErr; // ex: SMS_INDISPONIBLE (503)
+      logger.error('Échec envoi SMS reset mot de passe', { telephone, error: smsErr.message });
+      throw ApiError.erreurServeur('Échec de l\'envoi du SMS — réessayez dans quelques instants.');
     }
 
     return ok(res, { message: 'Si ce compte existe, un code vous a été envoyé.' });
