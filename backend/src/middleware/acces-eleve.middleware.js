@@ -11,15 +11,23 @@ const ApiError           = require('../utils/ApiError');
  *
  *  - l'utilisateur connecté est un PARENT lié à cet élève précis
  *    (table parents_eleves), OU
+ *  - l'utilisateur connecté est l'ÉLÈVE lui-même (self-service — voir ses
+ *    propres données uniquement), OU
  *  - l'utilisateur possède la permission staff `permissionStaff`
  *    (admin/directeur/censeur/enseignant selon la route).
  *
  * Sans ce garde-fou, `exigerPermission(permissionStaff)` seul autoriserait
- * TOUT parent possédant la permission générique (ex: notes.voir_eleve,
- * absences.voir_eleve) à consulter les données de N'IMPORTE QUEL élève de
- * l'établissement — pas seulement son propre enfant (IDOR). Le staff, lui,
- * reste isolé au niveau établissement par isolerEtablissement — aucune
- * vérification supplémentaire de "propriété" n'est nécessaire pour eux.
+ * TOUT parent — ou TOUT élève — possédant la permission générique (ex:
+ * notes.voir_eleve, absences.voir_eleve) à consulter les données de
+ * N'IMPORTE QUEL élève de l'établissement, pas seulement les siennes
+ * (IDOR). Le rôle 'eleve' possédant lui-même ces permissions génériques
+ * (cf. migrations/005_domaine5_securite.sql), la branche self-service est
+ * TERMINALE : elle ne retombe jamais sur la vérification de permission
+ * staff, sinon un élève passerait cette vérification pour N'IMPORTE QUEL
+ * eleve_id (même bug, juste avec un élève comme attaquant plutôt qu'un
+ * parent — audit 2026-09, revue lot D). Le staff, lui, reste isolé au
+ * niveau établissement par isolerEtablissement — aucune vérification
+ * supplémentaire de "propriété" n'est nécessaire pour eux.
  */
 function autoriserAccesEleve(permissionStaff) {
   const verifierPermissionStaff = exigerPermission(permissionStaff);
@@ -38,6 +46,13 @@ function autoriserAccesEleve(permissionStaff) {
           .first('pe.id');
 
         if (!lien) throw ApiError.interdit('Cet élève n\'est pas lié à votre compte');
+        return next();
+      }
+
+      if (req.session.roles.includes('eleve')) {
+        if (req.params.eleve_id !== req.session.utilisateur_id) {
+          throw ApiError.interdit('Vous ne pouvez consulter que vos propres données');
+        }
         return next();
       }
 

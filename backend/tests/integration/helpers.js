@@ -149,8 +149,12 @@ async function seedTestData() {
       'eleves.voir',
       'rapports.voir'
     ]);
+    -- 'bulletins.voir' volontairement absente ici aussi : reflète la
+    -- migration 017 (audit 2026-09, finding 1 — IDOR sur les routes
+    -- génériques /bulletins*). Décision utilisateur : les élèves n'ont
+    -- pas accès aux bulletins, aucune route dédiée en remplacement.
     SELECT affecter_permissions('eleve', ARRAY[
-      'notes.voir_eleve','bulletins.voir','edt.voir'
+      'notes.voir_eleve','edt.voir'
     ]);
     -- 'bulletins.voir' volontairement absente ici aussi : reflète la
     -- migration 016 (lot C, finding C4 — IDOR sur les routes génériques

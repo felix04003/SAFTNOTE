@@ -209,9 +209,15 @@ SELECT affecter_permissions('parent', ARRAY[
 ]);
 
 -- Élève : consultation de ses propres données
+-- NOTE : 'bulletins.voir' volontairement absente (cf. migration 017) —
+-- les routes génériques /bulletins* ne filtrent pas par élève et
+-- exposeraient les bulletins de N'IMPORTE QUEL élève de l'établissement
+-- (IDOR), même problème que pour le rôle parent (migration 016).
+-- Décision utilisateur explicite (audit 2026-09) : les élèves n'ont pas
+-- accès aux bulletins — aucune route dédiée self-service n'est créée
+-- en remplacement.
 SELECT affecter_permissions('eleve', ARRAY[
     'notes.voir_eleve',
-    'bulletins.voir',
     'edt.voir'
 ]);
 

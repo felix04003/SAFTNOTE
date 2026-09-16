@@ -216,3 +216,32 @@ describe('GET /api/v1/parents/moi/enfants/:id/bulletins (non-régression)', () =
       .expect(403);
   });
 });
+
+// ── Audit 2026-09, finding 2 — GET /moyennes/eleve/:eleve_id ─────
+//
+// Cette route était gardée par exigerPermission('notes.voir_eleve')
+// seul, sans vérifier que l'appelant est autorisé pour CET élève
+// précis (IDOR). Corrigé avec autoriserAccesEleve('notes.voir_eleve'),
+// même pattern que /parents/moi/enfants/:id/notes et /absences.
+
+describe('GET /api/v1/moyennes/eleve/:eleve_id (accès parent)', () => {
+  it('devrait refuser un parent pour un élève qui n\'est pas son enfant', async () => {
+    const autreEleveId = seed.eleves[1].user.id; // non lié à ce parent
+
+    await request
+      .get(`/api/v1/moyennes/eleve/${autreEleveId}`)
+      .set('Authorization', `Bearer ${tokenParent}`)
+      .expect(403);
+  });
+
+  it('devrait autoriser un parent pour son propre enfant', async () => {
+    const eleveId = seed.eleves[0].user.id;
+
+    const res = await request
+      .get(`/api/v1/moyennes/eleve/${eleveId}`)
+      .set('Authorization', `Bearer ${tokenParent}`)
+      .expect(200);
+
+    expect(res.body.succes).toBe(true);
+  });
+});

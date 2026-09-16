@@ -77,8 +77,8 @@ describe('Moyennes Routes', () => {
     });
   });
 
-  // ── GET /moyennes/eleve/:eleveId ────────────────────────────────
-  describe('GET /moyennes/eleve/:eleveId', () => {
+  // ── GET /moyennes/eleve/:eleve_id ───────────────────────────────
+  describe('GET /moyennes/eleve/:eleve_id', () => {
     test('retourne les moyennes d\'un élève', async () => {
       // 1. db('inscriptions as i')...first()
       db.mockReturnValueOnce(mockQuery({ inscription_id: IDS.inscription, classe: 'Term S1', annee: '2024-2025' }));

@@ -12,6 +12,7 @@ const { ok } = require('../../../utils/reponse');
 const ApiError       = require('../../../utils/ApiError');
 const logger         = require('../../../utils/logger');
 const { getOrSet, invalidatePattern } = require('../../../infrastructure/cache/redis');
+const { autoriserAccesEleve } = require('../../../middleware/acces-eleve.middleware');
 
 const router = express.Router();
 const auth   = authentifier;
@@ -115,10 +116,24 @@ router.get('/moyennes/classe/:classeId', auth, isoler, perm('notes.voir_classe')
 });
 
 // ═════════════════════════════════════════════════════════════════
-// GET /moyennes/eleve/:eleveId
+// GET /moyennes/eleve/:eleve_id
 // Moyennes d'un élève pour toutes les matières et périodes
+//
+// Finding audit 2026-09 (lot D, finding 2) : cette route n'était
+// gardée que par exigerPermission('notes.voir_eleve'), sans vérifier
+// que l'appelant est bien autorisé pour CET élève précis. Un parent
+// possédant la permission générique 'notes.voir_eleve' pouvait donc
+// consulter les moyennes de N'IMPORTE QUEL élève de l'établissement,
+// pas seulement celles de son propre enfant — IDOR. Corrigé avec
+// autoriserAccesEleve(), déjà utilisé sur /eleves/:eleve_id/notes et
+// /eleves/:eleve_id/absences (backend/src/middleware/acces-eleve.
+// middleware.js). Le paramètre de route a été renommé de :eleveId à
+// :eleve_id pour matcher la convention lue par ce middleware
+// (req.params.eleve_id) — ce renommage est purement interne à Express
+// (nom de clé dans req.params) et ne change pas l'URL exposée aux
+// clients.
 // ═════════════════════════════════════════════════════════════════
-router.get('/moyennes/eleve/:eleveId', auth, isoler, perm('notes.voir_eleve'), async (req, res, next) => {
+router.get('/moyennes/eleve/:eleve_id', auth, isoler, autoriserAccesEleve('notes.voir_eleve'), async (req, res, next) => {
   try {
     const db = getDB();
 
@@ -128,7 +143,7 @@ router.get('/moyennes/eleve/:eleveId', auth, isoler, perm('notes.voir_eleve'), a
       .join('niveaux as n', 'n.id', 'c.niveau_id')
       .join('eleves as el', 'el.id', 'i.eleve_id')
       .where({
-        'el.utilisateur_id': req.params.eleveId,
+        'el.utilisateur_id': req.params.eleve_id,
         'a.etablissement_id': req.etablissement_id,
         'a.est_courante': true, 'i.statut': 'actif',
       })
