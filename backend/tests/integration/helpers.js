@@ -152,8 +152,12 @@ async function seedTestData() {
     SELECT affecter_permissions('eleve', ARRAY[
       'notes.voir_eleve','bulletins.voir','edt.voir'
     ]);
+    -- 'bulletins.voir' volontairement absente ici aussi : reflète la
+    -- migration 016 (lot C, finding C4 — IDOR sur les routes génériques
+    -- /bulletins*). Les parents accèdent à leurs enfants via
+    -- /parents/moi/enfants/:id/bulletins (filtré par parents_eleves).
     SELECT affecter_permissions('parent', ARRAY[
-      'notes.voir_eleve','bulletins.voir','absences.voir_eleve','edt.voir'
+      'notes.voir_eleve','absences.voir_eleve','edt.voir'
     ]);
   `);
 

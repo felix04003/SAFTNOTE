@@ -165,6 +165,42 @@ describe('Bulletins Routes', () => {
     });
   });
 
+  // ── Lot C (finding C4) — garde-fou de non-régression ─────────────
+  // Le middleware exigerPermission() est mocké dans ce fichier (il
+  // passe toujours), donc les tests supertest ci-dessus ne peuvent pas
+  // vérifier le contrôle d'accès réel — voir
+  // tests/integration/parents.integration.test.js pour ça. Ce test
+  // vérifie statiquement que le code source des routes reste bien
+  // gardé par exigerPermission('bulletins.voir'), pour détecter toute
+  // régression accidentelle du code applicatif (le lot C ne change que
+  // la donnée en base, pas ce fichier).
+  describe('Garde-fou permissions (lecture statique)', () => {
+    test('les routes /bulletins, /bulletins/:id et /bulletins/:id/download exigent bulletins.voir', () => {
+      const fs = require('fs');
+      const path = require('path');
+      const source = fs.readFileSync(
+        path.join(__dirname, '../../src/domains/03-pedagogie/bulletins/bulletins.routes.js'),
+        'utf8'
+      );
+
+      const routesProtegees = [
+        "router.get('/bulletins/classes'",
+        "router.get('/bulletins'",
+        "router.get('/bulletins/:id'",
+        "router.get('/bulletins/:id/download'",
+      ];
+
+      for (const debutRoute of routesProtegees) {
+        const idx = source.indexOf(debutRoute);
+        expect(idx).toBeGreaterThan(-1);
+        // La ligne de déclaration de route doit contenir l'appel à perm(...)
+        const finLigne = source.indexOf('\n', idx);
+        const ligne = source.slice(idx, finLigne === -1 ? undefined : finLigne);
+        expect(ligne).toMatch(/perm\('bulletins\.voir'\)/);
+      }
+    });
+  });
+
   // ── GET /bulletins/jobs/:jobId ───────────────────────────────────
   describe('GET /bulletins/jobs/:jobId', () => {
     const { getQueue } = require('../../src/infrastructure/queue/bullmq');

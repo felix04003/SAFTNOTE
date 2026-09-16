@@ -196,9 +196,14 @@ SELECT affecter_permissions('enseignant', ARRAY[
 ]);
 
 -- Parent : consultation uniquement, données de ses enfants
+-- NOTE : 'bulletins.voir' volontairement absente (cf. migration 016) —
+-- les routes génériques /bulletins* ne filtrent pas par élève et
+-- exposeraient les bulletins de N'IMPORTE QUEL élève de l'établissement
+-- (IDOR). Les parents accèdent aux bulletins de leurs enfants via les
+-- routes dédiées /parents/moi/enfants/:id/bulletins (filtrées par
+-- parents_eleves), qui ne dépendent d'aucune permission générique.
 SELECT affecter_permissions('parent', ARRAY[
     'notes.voir_eleve',
-    'bulletins.voir',
     'absences.voir_eleve',
     'edt.voir'
 ]);
