@@ -10,6 +10,7 @@ const { isolerEtablissement } = require('../middleware/permission.middleware');
 const { valider }    = require('../middleware/validate.middleware');
 const { ok }         = require('../utils/reponse');
 const logger         = require('../utils/logger');
+const { getUrlSignee, DUREE_URL_SIGNEE_SECONDES } = require('../infrastructure/storage/storage.service');
 
 const router = express.Router();
 
@@ -136,7 +137,7 @@ router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) =>
           .join('periodes as p', 'p.id', 'mg.periode_id')
           .where({ 'pe.parent_id': utilisateur_id, 'mg.bulletin_genere': true })
           .where('mg.updated_at', '>', syncDepuis)
-          .select('i.eleve_id', 'mg.moyenne_generale', 'mg.rang', 'mg.rang_sur', 'mg.mention', 'mg.bulletin_url', 'p.numero as trimestre'),
+          .select('i.eleve_id', 'mg.moyenne_generale', 'mg.rang', 'mg.rang_sur', 'mg.mention', 'mg.bulletin_key', 'p.numero as trimestre'),
 
         // EDT classes des enfants
         db('emplois_du_temps as edt')
@@ -152,7 +153,23 @@ router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) =>
           .distinct(),
       ]);
 
-      payload = { enfants, notes, absences, bulletins, edt };
+      // Lot D (finding C2) : bulletin_key (clé S3 interne) n'est jamais exposé
+      // tel quel ; le mobile continue de consommer un champ `bulletin_url`
+      // (mobile/src/services/sync/syncService.ts, mobile/app/(app)/parent/
+      // bulletins.tsx) — on y met une URL signée fraîche. ATTENTION : cette
+      // URL expire au bout d'1h alors que le payload de sync peut rester en
+      // cache local plus longtemps ; si l'utilisateur tape sur "Télécharger"
+      // après expiration, le lien échouera. Limitation connue et non résolue
+      // dans ce lot — une resynchronisation ou un endpoint de re-signature à
+      // la demande côté mobile serait nécessaire pour la lever complètement.
+      const bulletinsAvecUrl = await Promise.all(
+        bulletins.map(async ({ bulletin_key, ...reste }) => ({
+          ...reste,
+          bulletin_url: bulletin_key ? await getUrlSignee(bulletin_key, DUREE_URL_SIGNEE_SECONDES) : null,
+        }))
+      );
+
+      payload = { enfants, notes, absences, bulletins: bulletinsAvecUrl, edt };
     }
 
     return ok(res, { sync_at: syncAt, payload });

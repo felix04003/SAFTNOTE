@@ -13,6 +13,12 @@ jest.mock('../../src/infrastructure/queue/bullmq', () => ({
 jest.mock('../../src/utils/logger', () => ({
   info: jest.fn(), warn: jest.fn(), error: jest.fn(), http: jest.fn(), log: jest.fn(),
 }));
+jest.mock('../../src/infrastructure/storage/storage.service', () => ({
+  getUrlSignee:  jest.fn(),
+  isDisponible:  jest.fn(() => true),
+  uploadFichier: jest.fn(),
+  DUREE_URL_SIGNEE_SECONDES: 3600,
+}));
 jest.mock('../../src/middleware/auth.middleware', () => ({
   authentifier: (req, res, next) => {
     req.session = { ...require('../helpers/testApp').defaultSession };
@@ -36,6 +42,7 @@ const { createTestApp } = require('../helpers/testApp');
 const { bulletin } = require('../helpers/fixtures');
 
 const router = require('../../src/domains/03-pedagogie/bulletins/bulletins.routes');
+const { getUrlSignee, isDisponible } = require('../../src/infrastructure/storage/storage.service');
 const app = createTestApp(router);
 
 describe('Bulletins Routes', () => {
@@ -44,6 +51,8 @@ describe('Bulletins Routes', () => {
   beforeEach(() => {
     db = createMockDB();
     getDB.mockReturnValue(db);
+    isDisponible.mockReturnValue(true);
+    getUrlSignee.mockReset();
   });
 
   // ── GET /bulletins ──────────────────────────────────────────────
@@ -142,18 +151,20 @@ describe('Bulletins Routes', () => {
 
   // ── GET /bulletins/:id/download ─────────────────────────────────
   describe('GET /bulletins/:id/download', () => {
-    test('retourne l\'URL de téléchargement du bulletin', async () => {
+    test('retourne une URL signée fraîche', async () => {
       db.mockReturnValueOnce(mockQuery({
-        bulletin_url: 'https://storage.example.com/bulletins/bul-001.pdf',
+        bulletin_key: 'bulletins/etab-1/periode-1/bul-001.pdf',
         valide_at: '2025-01-21T14:00:00Z',
       }));
+      getUrlSignee.mockResolvedValueOnce('https://minio.example.com/bucket/bulletins/etab-1/periode-1/bul-001.pdf?X-Amz-Signature=abc');
 
       const res = await request(app)
         .get(`/bulletins/${bulletin.id}/download`)
         .expect(200);
 
       expect(res.body.succes).toBe(true);
-      expect(res.body.data).toHaveProperty('download_url');
+      expect(res.body.data.download_url).toBe('https://minio.example.com/bucket/bulletins/etab-1/periode-1/bul-001.pdf?X-Amz-Signature=abc');
+      expect(getUrlSignee).toHaveBeenCalledWith('bulletins/etab-1/periode-1/bul-001.pdf', 3600);
     });
 
     test('retourne 404 si bulletin sans PDF', async () => {
@@ -162,6 +173,54 @@ describe('Bulletins Routes', () => {
       await request(app)
         .get(`/bulletins/${IDS.evaluation}/download`)
         .expect(404);
+    });
+
+    test('retourne 404 si bulletin_key absent (PDF pas encore généré)', async () => {
+      db.mockReturnValueOnce(mockQuery({
+        bulletin_key: null,
+        valide_at: '2025-01-21T14:00:00Z',
+      }));
+
+      await request(app)
+        .get(`/bulletins/${bulletin.id}/download`)
+        .expect(404);
+
+      expect(getUrlSignee).not.toHaveBeenCalled();
+    });
+
+    test('retourne 403 si le bulletin n\'a pas encore été validé (non-régression)', async () => {
+      db.mockReturnValueOnce(mockQuery({
+        bulletin_key: 'bulletins/etab-1/periode-1/bul-001.pdf',
+        valide_at: null,
+      }));
+
+      await request(app)
+        .get(`/bulletins/${bulletin.id}/download`)
+        .expect(403);
+    });
+
+    test('retourne 503 si le service de stockage est indisponible', async () => {
+      isDisponible.mockReturnValue(false);
+
+      const res = await request(app)
+        .get(`/bulletins/${bulletin.id}/download`)
+        .expect(503);
+
+      expect(res.body.code).toBe('STOCKAGE_INDISPONIBLE');
+    });
+
+    test('retourne 503 si getUrlSignee échoue à produire une URL', async () => {
+      db.mockReturnValueOnce(mockQuery({
+        bulletin_key: 'bulletins/etab-1/periode-1/bul-001.pdf',
+        valide_at: '2025-01-21T14:00:00Z',
+      }));
+      getUrlSignee.mockResolvedValueOnce(null);
+
+      const res = await request(app)
+        .get(`/bulletins/${bulletin.id}/download`)
+        .expect(503);
+
+      expect(res.body.code).toBe('STOCKAGE_INDISPONIBLE');
     });
   });
 

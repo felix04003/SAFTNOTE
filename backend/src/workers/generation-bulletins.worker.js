@@ -5,13 +5,19 @@
  * Consomme la queue 'generation-bulletins' (BullMQ).
  *
  * Flux par job :
- *   1. Trouver tous les moyennes_generales (bulletin_genere=true, bulletin_url IS NULL)
+ *   1. Trouver tous les moyennes_generales (bulletin_genere=true, bulletin_key IS NULL)
  *      pour la (classe_id, periode_id) du job.
  *   2. Pour chaque bulletin : charger les données complètes depuis la DB.
  *   3. Générer le HTML via bulletin-template.js.
  *   4. Rendre en PDF via Puppeteer.
  *   5. Uploader sur S3/R2 via storage.service.js.
- *   6. Mettre à jour moyennes_generales.bulletin_url.
+ *   6. Mettre à jour moyennes_generales.bulletin_key.
+ *
+ * Lot D (finding C2, audit 2026-09) : bulletin_key stocke désormais la CLÉ S3
+ * (pas d'URL). Si l'upload échoue pour un bulletin, on NE fixe PLUS de valeur
+ * `pending:<id>` — bulletin_key reste NULL et l'erreur est propagée pour que
+ * BullMQ retente le job (3 tentatives, backoff exponentiel — voir
+ * infrastructure/queue/bullmq.js) au lieu d'avaler l'échec silencieusement.
  *
  * Démarrage : npm run worker:bulletins
  */
@@ -30,6 +36,21 @@ const logger                     = require('../utils/logger');
 
 const QUEUE_NAME  = 'generation-bulletins';
 const CONCURRENCE = parseInt(process.env.WORKER_BULLETINS_CONCURRENCE) || 1;
+
+/**
+ * Erreur dédiée à un échec d'upload S3 — distincte des autres erreurs par
+ * bulletin (données introuvables, rendu Puppeteer). Elle doit remonter
+ * jusqu'à BullMQ pour déclencher le retry du job, contrairement aux autres
+ * erreurs par bulletin qui sont comptées comme échecs et n'interrompent pas
+ * le traitement des autres bulletins du lot.
+ */
+class EchecUploadBulletin extends Error {
+  constructor(bulletinId) {
+    super(`Échec upload S3 pour le bulletin ${bulletinId} (storage indisponible ou erreur S3)`);
+    this.name = 'EchecUploadBulletin';
+    this.bulletinId = bulletinId;
+  }
+}
 
 // ── Chargement des données complètes d'un bulletin ──────────────
 
@@ -119,7 +140,7 @@ async function traiterJob(job) {
   const aPDF = await db('moyennes_generales as mg')
     .join('inscriptions as i', 'i.id', 'mg.inscription_id')
     .where({ 'i.classe_id': classe_id, 'mg.periode_id': periode_id, 'mg.bulletin_genere': true })
-    .whereNull('mg.bulletin_url')
+    .whereNull('mg.bulletin_key')
     .select('mg.id');
 
   if (aPDF.length === 0) {
@@ -164,16 +185,27 @@ async function traiterJob(job) {
         await page.close();
 
         const key = `bulletins/${etablissement_id}/${periode_id}/${b.id}.pdf`;
-        const url = await uploadFichier(key, Buffer.from(pdfBuffer), 'application/pdf');
+        const cle = await uploadFichier(key, Buffer.from(pdfBuffer), 'application/pdf');
+
+        if (!cle) {
+          // Échec d'upload : pas de valeur de repli (ancien comportement `pending:<id>`
+          // supprimé — il masquait l'échec). On propage pour faire échouer le job.
+          throw new EchecUploadBulletin(b.id);
+        }
 
         await db('moyennes_generales')
           .where('id', b.id)
-          .update({ bulletin_url: url || `pending:${b.id}`, updated_at: db.raw('NOW()') });
+          .update({ bulletin_key: cle, updated_at: db.raw('NOW()') });
 
-        logger.info('[BulletinsPDF] Bulletin rendu', { bulletinId: b.id, hasUrl: Boolean(url) });
+        logger.info('[BulletinsPDF] Bulletin rendu', { bulletinId: b.id });
         generes++;
 
       } catch (err) {
+        if (err instanceof EchecUploadBulletin) {
+          // Ne pas avaler : remonte pour faire échouer le job entier et
+          // déclencher le retry BullMQ (voir worker.on('failed') ci-dessous).
+          throw err;
+        }
         logger.error('[BulletinsPDF] Erreur bulletin individuel', { bulletinId: b.id, error: err.message });
         echecs++;
       }

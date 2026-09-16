@@ -3,8 +3,9 @@
 /**
  * storage.service.js — Client S3-compatible (MinIO dev / Cloudflare R2 prod)
  *
- * Dépendances requises (non présentes dans package.json) :
- *   npm install @aws-sdk/client-s3 @aws-sdk/s3-request-presigner
+ * Dépendances : @aws-sdk/client-s3, @aws-sdk/s3-request-presigner
+ * (backend/package.json — corrigé au lot D, finding C2 de l'audit 2026-09 :
+ * ces paquets étaient auparavant chargés dynamiquement sans être déclarés).
  *
  * Variables d'environnement :
  *   S3_ENDPOINT   — ex: http://localhost:9000 (MinIO) ou https://<account>.r2.cloudflarestorage.com
@@ -14,11 +15,19 @@
  *   S3_BUCKET     — Nom du bucket
  */
 
+const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+
 const logger = require('../../utils/logger');
 
 // ── Détection de disponibilité ──────────────────────────────────
 
 const VARS_REQUISES = ['S3_ENDPOINT', 'S3_ACCESS_KEY', 'S3_SECRET_KEY', 'S3_BUCKET'];
+
+// Durée par défaut de validité d'une URL signée (bulletins). Centralisée ici
+// pour éviter de dupliquer la valeur dans chaque route qui appelle
+// getUrlSignee() (bulletins.routes.js, parents.routes.js, sync.routes.js).
+const DUREE_URL_SIGNEE_SECONDES = 3600;
 
 function isDisponible() {
   return VARS_REQUISES.every((v) => Boolean(process.env[v]));
@@ -35,27 +44,18 @@ function getClient() {
     return null;
   }
 
-  try {
-    // Chargement dynamique — le paquet peut ne pas être installé
-    const { S3Client } = require('@aws-sdk/client-s3');
+  _client = new S3Client({
+    endpoint:        process.env.S3_ENDPOINT,
+    region:          process.env.S3_REGION || 'auto',
+    credentials: {
+      accessKeyId:     process.env.S3_ACCESS_KEY,
+      secretAccessKey: process.env.S3_SECRET_KEY,
+    },
+    // Forcer le style path pour MinIO et R2 (pas de virtual-hosted)
+    forcePathStyle: true,
+  });
 
-    _client = new S3Client({
-      endpoint:        process.env.S3_ENDPOINT,
-      region:          process.env.S3_REGION || 'auto',
-      credentials: {
-        accessKeyId:     process.env.S3_ACCESS_KEY,
-        secretAccessKey: process.env.S3_SECRET_KEY,
-      },
-      // Forcer le style path pour MinIO et R2 (pas de virtual-hosted)
-      forcePathStyle: true,
-    });
-
-    return _client;
-  } catch (err) {
-    logger.warn('Storage: impossible de charger @aws-sdk/client-s3', { error: err.message });
-    logger.warn('Storage: installez la dépendance : npm install @aws-sdk/client-s3 @aws-sdk/s3-request-presigner');
-    return null;
-  }
+  return _client;
 }
 
 // ── Upload ──────────────────────────────────────────────────────
@@ -65,7 +65,9 @@ function getClient() {
  * @param {string} key           — Chemin dans le bucket (ex: 'bulletins/abc123.pdf')
  * @param {Buffer} buffer        — Contenu du fichier
  * @param {string} contentType   — MIME type (ex: 'application/pdf', 'image/jpeg')
- * @returns {Promise<string|null>} URL publique du fichier, ou null si non disponible
+ * @returns {Promise<string|null>} la CLÉ S3 (identique au paramètre `key`) en cas de
+ *   succès, ou null si non disponible / échec. Ne retourne PLUS d'URL : les fichiers
+ *   sont privés, l'accès se fait via getUrlSignee(key) au moment de la consultation.
  */
 async function uploadFichier(key, buffer, contentType) {
   const client = getClient();
@@ -75,7 +77,6 @@ async function uploadFichier(key, buffer, contentType) {
   }
 
   try {
-    const { PutObjectCommand } = require('@aws-sdk/client-s3');
     const bucket = process.env.S3_BUCKET;
 
     await client.send(new PutObjectCommand({
@@ -85,9 +86,8 @@ async function uploadFichier(key, buffer, contentType) {
       ContentType: contentType,
     }));
 
-    const url = `${process.env.S3_ENDPOINT}/${bucket}/${key}`;
     logger.info('Storage: fichier uploadé', { key, contentType, bytes: buffer.length });
-    return url;
+    return key;
   } catch (err) {
     logger.error('Storage: échec upload', { key, error: err.message });
     return null;
@@ -102,7 +102,7 @@ async function uploadFichier(key, buffer, contentType) {
  * @param {number} expiresInSeconds  — Durée de validité en secondes (défaut: 3600)
  * @returns {Promise<string|null>} URL signée, ou null si non disponible
  */
-async function getUrlSignee(key, expiresInSeconds = 3600) {
+async function getUrlSignee(key, expiresInSeconds = DUREE_URL_SIGNEE_SECONDES) {
   const client = getClient();
   if (!client) {
     logger.warn('Storage: getUrlSignee ignoré — client non disponible', { key });
@@ -110,9 +110,6 @@ async function getUrlSignee(key, expiresInSeconds = 3600) {
   }
 
   try {
-    const { GetObjectCommand } = require('@aws-sdk/client-s3');
-    const { getSignedUrl }     = require('@aws-sdk/s3-request-presigner');
-
     const commande = new GetObjectCommand({
       Bucket: process.env.S3_BUCKET,
       Key:    key,
@@ -142,8 +139,6 @@ async function supprimerFichier(key) {
   }
 
   try {
-    const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
-
     await client.send(new DeleteObjectCommand({
       Bucket: process.env.S3_BUCKET,
       Key:    key,
@@ -163,4 +158,4 @@ if (!isDisponible()) {
   });
 }
 
-module.exports = { uploadFichier, getUrlSignee, supprimerFichier, isDisponible };
+module.exports = { uploadFichier, getUrlSignee, supprimerFichier, isDisponible, DUREE_URL_SIGNEE_SECONDES };

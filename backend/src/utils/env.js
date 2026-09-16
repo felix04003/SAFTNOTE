@@ -54,6 +54,21 @@ const REGLES = [
     check:    (v) => v && v.length > 0,
     hint:     'MONITORING_TOKEN est requis en production pour sécuriser /health/deep et /metrics',
   },
+  // Stockage S3/R2 des bulletins (lot D, finding C2 audit 2026-09) : le
+  // stockage entier est optionnel (dev sans MinIO), mais dès que S3_ENDPOINT
+  // est renseigné, une config à moitié faite doit être détectée tout de
+  // suite plutôt que de tomber silencieusement en mode "storage désactivé"
+  // (voir storage.service.js isDisponible()). Avertissement en dev, erreur
+  // fatale en prod — comme JWT_SECRET/MONITORING_TOKEN ci-dessus.
+  {
+    nom:   '_S3_GROUP',
+    check: () => {
+      const hasEndpoint = Boolean(process.env.S3_ENDPOINT);
+      if (!hasEndpoint) return true; // stockage non configuré, c'est permis
+      return Boolean(process.env.S3_ACCESS_KEY && process.env.S3_SECRET_KEY && process.env.S3_BUCKET);
+    },
+    hint: 'S3_ENDPOINT est défini : S3_ACCESS_KEY, S3_SECRET_KEY et S3_BUCKET deviennent obligatoires (config S3 incomplète)',
+  },
 ];
 
 // ── Fonction de validation ───────────────────────────────────────
