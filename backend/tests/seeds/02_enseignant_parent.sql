@@ -1,6 +1,6 @@
 -- ============================================================
--- MIGRATION 010 — COMPTES DE TEST ENSEIGNANT + PARENT
--- Complète 009_test_seed.sql (établissement TEST_LBD, directeur)
+-- SEED 02 — COMPTES DE TEST ENSEIGNANT + PARENT
+-- Complète 01_etablissement_test.sql (établissement TEST_LBD, directeur)
 -- avec un enseignant affecté à la classe existante + un parent
 -- lié à un élève existant, pour tester les dashboards mobile.
 --

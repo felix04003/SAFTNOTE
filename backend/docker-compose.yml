@@ -15,7 +15,9 @@ services:
       - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./migrations:/docker-entrypoint-initdb.d  # auto-exécuté au premier démarrage
+    # Le schéma n'est plus injecté via docker-entrypoint-initdb.d :
+    # appliquer les migrations depuis backend/ avec
+    #   npm run migrate && npm run seed:test
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ecole_user -d ecole_manager"]
       interval: 10s
@@ -88,7 +90,6 @@ services:
       - "3010:3000"
     volumes:
       - ./src:/app/src        # hot-reload en dev
-      - ./migrations:/app/migrations
     command: node src/app.js
 
   # ── Worker notifications ───────────────────────────────

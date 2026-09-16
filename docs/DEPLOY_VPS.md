@@ -206,12 +206,25 @@ docker compose -f docker-compose.prod.yml logs -f api
 ## 9. Appliquer les migrations SQL
 
 ```bash
-# Option A : via psql depuis le host (recommandé)
-docker exec -i ecole_postgres_prod \
-  psql -U ecolemanager -d ecolemanager_prod \
-  < migrations/run_all_migrations.sql
+# Runner de migrations idempotent (dossier migrations/ à la racine du dépôt,
+# 000 → 015, table de suivi _migrations). Relancer est sans effet si à jour.
+#
+# À exécuter depuis la racine du dépôt cloné : le conteneur api porte déjà
+# DATABASE_URL et les dépendances Node, et il est le seul à joindre postgres
+# (réseau `backend` interne, aucun port publié). Le dossier migrations/ est
+# monté à la volée tant que l'image ne l'embarque pas (lot F).
+docker compose -f docker-compose.prod.yml run --rm \
+  -v "$PWD/migrations:/app/migrations:ro" \
+  api node src/utils/migrate.js
 
-# Option B : connexion directe psql
+# Vérifier les migrations enregistrées
+docker exec -i ecole_postgres_prod \
+  psql -U ecolemanager -d ecolemanager_prod -c "SELECT name, run_at FROM _migrations ORDER BY name;"
+
+# Note : il n'existe plus de dossier backend/migrations. Les seeds de test
+# (backend/tests/seeds/) sont refusés avec NODE_ENV=production.
+
+# Connexion directe psql
 docker exec -it ecole_postgres_prod \
   psql -U ecolemanager -d ecolemanager_prod
 

@@ -1,6 +1,6 @@
 -- ============================================================
--- MIGRATION 015 — COMPTE DE TEST SUPER_ADMIN
--- Complète 009_test_seed.sql (établissement TEST_LBD) avec un
+-- SEED 04 — COMPTE DE TEST SUPER_ADMIN
+-- Complète 01_etablissement_test.sql (établissement TEST_LBD) avec un
 -- utilisateur super_admin, pour vérifier en exécution réelle le
 -- bug suspecté (mais jamais reproduit) dans permission.middleware.js
 -- : isolerEtablissement() a un retour anticipé pour super_admin

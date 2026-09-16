@@ -1,5 +1,5 @@
 -- ============================================================
--- MIGRATION 011 — presences.statut : ajouter 'non_saisi'
+-- MIGRATION 013 — presences.statut : ajouter 'non_saisi'
 --
 -- POST /appels pré-remplit une ligne 'presences' par élève inscrit
 -- avec statut='non_saisi' (appels.routes.js:70) pour que l'appel

@@ -25,7 +25,9 @@ RUN npm ci --only=production
 
 # Copier le code source
 COPY --chown=node:node src/ ./src/
-COPY --chown=node:node migrations/ ./migrations/
+# Les migrations vivent à la racine du dépôt (migrations/) et ne sont donc pas
+# copiables depuis ce contexte de build (./backend). Le passage du contexte à la
+# racine du dépôt + `COPY migrations ./migrations` est traité au lot F.
 
 # Ne pas tourner en root
 USER node

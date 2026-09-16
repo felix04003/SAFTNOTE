@@ -112,7 +112,19 @@ ecolemanager/
 │   ├── 005_domaine5_securite.sql   ✅ sessions, tokens, audit
 │   ├── 006_donnees_reference.sql   ✅ seed données de référence
 │   ├── 007_vues_et_fonctions.sql   ✅ vues calculées, fonctions PL/pgSQL
-│   └── run_all_migrations.sql      ✅ Script d'exécution complet
+│   ├── 008_index_performance.sql   ✅ index de performance
+│   ├── 009_fix_statut_checks.sql   ✅ contraintes CHECK statuts
+│   ├── 010_security_hardening.sql  ✅ durcissement sécurité
+│   ├── 011_rgpd_consentements.sql  ✅ consentements RGPD
+│   ├── 012_chiffrement_medical.sql ✅ chiffrement données médicales
+│   ├── 013_fix_presences_statut_non_saisi.sql      ✅ statuts appels/presences
+│   ├── 014_fix_notes_voir_eleve_permissions.sql    ✅ permission notes.voir_eleve (staff)
+│   ├── 015_fix_discipline_enseignant_permissions.sql ✅ permissions discipline (enseignant)
+│   └── run_all_migrations.sql      ⚠️  Legacy psql (\i + schema_migrations) —
+│                                       préférer `cd backend && npm run migrate`
+│
+│   Seeds de test (hors migrations) : backend/tests/seeds/*.sql,
+│   appliqués par `cd backend && npm run seed:test` (jamais en production).
 │
 └── dashboard/              ← Dashboard admin (HTML/CSS/JS vanilla — zéro dépendance NPM)
     ├── index.html          ✅ Structure HTML + scripts externes
@@ -327,8 +339,11 @@ cd backend && npm run dev
 # Mobile en mode Expo
 cd mobile && npx expo start
 
-# Exécuter les migrations
-psql $DATABASE_URL -f migrations/run_all_migrations.sql
+# Exécuter les migrations (runner idempotent, dossier migrations/ racine)
+cd backend && npm run migrate
+
+# Injecter les comptes de test E2E (dev uniquement)
+cd backend && npm run seed:test
 
 # ── LINT & TESTS ─────────────────────────────────────────────────
 
@@ -345,7 +360,7 @@ docker exec -it ecolemanager_postgres psql -U ecolemanager -d ecolemanager_dev
 
 # Reset complet (⚠️ supprime toutes les données)
 docker-compose down -v && docker-compose up -d
-sleep 5 && psql $DATABASE_URL -f migrations/run_all_migrations.sql
+sleep 5 && (cd backend && npm run migrate && npm run seed:test)
 
 # ── DÉPLOIEMENT ──────────────────────────────────────────────────
 

@@ -1,8 +1,8 @@
 -- ============================================================
--- MIGRATION 016 — matière de seed TEST_LBD pointait vers un
+-- SEED 05 — matière de seed TEST_LBD pointait vers un
 -- autre établissement (données polluées)
 --
--- 010_test_seed_enseignant_parent.sql résout la matière de
+-- 02_enseignant_parent.sql résout la matière de
 -- l'affectation enseignant via :
 --   SELECT id INTO v_matiere_id FROM matieres
 --   WHERE nom = 'Mathématiques' LIMIT 1;

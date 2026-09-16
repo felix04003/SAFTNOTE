@@ -1,6 +1,6 @@
 -- ============================================================
--- MIGRATION 012 — PÉRIODE + ÉVALUATION DE TEST
--- Complète 010_test_seed_enseignant_parent.sql : ajoute une
+-- SEED 03 — PÉRIODE + ÉVALUATION DE TEST
+-- Complète 02_enseignant_parent.sql : ajoute une
 -- période (trimestre 1) pour l'année scolaire de test TEST_LBD
 -- (aucune période n'existait, bloquant toute saisie de notes/
 -- bulletins) et une évaluation sur l'affectation existante de

@@ -12,16 +12,40 @@ cp .env.example .env
 # 2. Démarrer les services (PostgreSQL, Redis, MinIO)
 docker compose up -d postgres redis minio
 
-# 3. Appliquer les migrations SQL
-docker exec -i ecole_postgres psql -U ecole_user -d ecole_manager \
-  < migrations/run_all_migrations.sql
-
-# 4. Installer les dépendances
+# 3. Installer les dépendances
 npm install
 
-# 5. Démarrer le serveur
+# 4. Appliquer les migrations SQL (dossier migrations/ à la racine du dépôt)
+npm run migrate
+
+# 5. (Dev uniquement) Injecter les comptes de test E2E — refusé si NODE_ENV=production
+npm run seed:test
+
+# 6. Démarrer le serveur
 npm run dev
 ```
+
+## Migrations
+
+Un seul dossier de migrations : `migrations/` à la racine du dépôt (000 → 015),
+appliqué partout — dev, Docker, Render — par le runner idempotent
+`src/utils/migrate.js` (table de suivi `_migrations`).
+
+```bash
+npm run migrate      # applique les migrations manquantes ; relance = « à jour »
+npm run seed:test    # backend/tests/seeds/*.sql : établissement TEST_LBD,
+                     # directeur, enseignant, parent, super_admin (E2E Playwright)
+```
+
+- Le runner accepte `DATABASE_URL` ou les variables `POSTGRES_HOST/PORT/DB/USER/PASSWORD`.
+- `MIGRATIONS_DIR` permet de forcer le dossier de migrations.
+- Une base créée historiquement via `migrations/run_all_migrations.sql` (table
+  `schema_migrations`) est détectée : les migrations déjà appliquées sont
+  reportées dans `_migrations` et ne sont pas rejouées.
+- Les seeds ne sont **jamais** appliqués en production (`NODE_ENV=production` → sortie en erreur).
+- **Toute migration doit être idempotente** (`IF NOT EXISTS`, `ON CONFLICT DO NOTHING`,
+  `DROP ... IF EXISTS`) : le suivi se fait par nom de fichier, donc renommer ou
+  renuméroter une migration déjà appliquée la fait rejouer sous son nouveau nom.
 
 ## Architecture
 

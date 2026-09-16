@@ -1,5 +1,5 @@
 -- ============================================================
--- MIGRATION 009 — DONNÉES DE TEST POUR E2E
+-- SEED 01 — DONNÉES DE TEST POUR E2E
 -- Insère un établissement de test, une année scolaire,
 -- un directeur, et les niveaux pour les tests Playwright.
 --
@@ -116,11 +116,19 @@ BEGIN
         (uuid_generate_v4(), v_etab_id, 'Terminale', 'Tle',  7, 'lycee',   TRUE)
     ON CONFLICT (etablissement_id, nom) DO NOTHING;
 
-    RAISE NOTICE 'Migration 009 terminée — données de test E2E insérées';
+    -- ── 8. Classe A (6ème) — référencée par 02_enseignant_parent.sql ─
+    -- ID fixe utilisé par les seeds suivants et les tests Playwright.
+    INSERT INTO classes (id, annee_scolaire_id, niveau_id, nom, actif)
+    SELECT 'e06bc7f0-52e8-411e-8c65-d425c0b9e9c6', v_annee_id, n.id, 'A', TRUE
+    FROM niveaux n
+    WHERE n.etablissement_id = v_etab_id AND n.nom = '6ème'
+    ON CONFLICT (id) DO NOTHING;
+
+    RAISE NOTICE 'Seed 01 terminé — données de test E2E insérées';
     RAISE NOTICE '  - Établissement : Lycée Test E2E (TEST_LBD)';
     RAISE NOTICE '  - Année scolaire : 2025-2026 (courante)';
     RAISE NOTICE '  - Directeur : directeur@test.sn / Test1234!';
-    RAISE NOTICE '  - 7 niveaux créés';
+    RAISE NOTICE '  - 7 niveaux créés + Classe A (6ème)';
 
 END;
 $$;
