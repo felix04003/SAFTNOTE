@@ -11,12 +11,14 @@ export const Auth = {
     const data = res.data || res;
     localStorage.setItem(CONFIG.TOKEN_KEY, data.token || data.access_token);
     localStorage.setItem(CONFIG.USER_KEY, JSON.stringify(data.user || data));
+    if (data.refresh_token) sessionStorage.setItem(CONFIG.REFRESH_TOKEN_KEY, data.refresh_token);
     return data;
   },
 
   logout: function() {
     localStorage.removeItem(CONFIG.TOKEN_KEY);
     localStorage.removeItem(CONFIG.USER_KEY);
+    sessionStorage.removeItem(CONFIG.REFRESH_TOKEN_KEY);
     location.href = 'login.html';
   },
 

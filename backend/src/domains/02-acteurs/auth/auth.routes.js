@@ -47,6 +47,18 @@ const limiterAuth = rateLimit({
   legacyHeaders:   false,
 });
 
+// Rate limiting dédié à /auth/refresh — instance distincte de limiterAuth
+// (bucket séparé par IP) : un token expiré sur une IP partagée (NAT école)
+// déclenchant plusieurs refresh concurrents ne doit pas épuiser le quota
+// de /auth/connexion pour tous les utilisateurs derrière cette IP.
+const limiterRefresh = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max:      parseInt(process.env.RATE_LIMIT_REFRESH_MAX) || parseInt(process.env.RATE_LIMIT_AUTH_MAX) || 10,
+  message:  { succes: false, erreur: 'Trop de tentatives — réessayez dans 15 minutes', code: 'RATE_LIMIT' },
+  standardHeaders: true,
+  legacyHeaders:   false,
+});
+
 // ── Schémas de validation ────────────────────────────────────────
 const schemaMotDePasseOublie = z.object({
   identifiant:        z.string().min(3), // email ou téléphone
@@ -75,6 +87,10 @@ const schemaOtpValider = z.object({
   telephone:          z.string().regex(/^\+?[0-9]{8,15}$/),
   code:               z.string().length(6).regex(/^\d{6}$/),
   etablissement_code: z.string().min(2),
+});
+
+const schemaRefresh = z.object({
+  refresh_token: z.string().min(1, 'Refresh token manquant'),
 });
 
 // ── POST /auth/connexion — Connexion mot de passe ────────────────
@@ -394,11 +410,27 @@ router.get('/auth/sessions', authentifier, async (req, res, next) => {
 // ── DELETE /auth/sessions/:id — Révoquer une session ───────────
 router.delete('/auth/sessions/:id', authentifier, async (req, res, next) => {
   try {
-    const updated = await getDB()('sessions')
+    const db = getDB();
+    // UPDATE ... RETURNING atomique (pas de first() + update() séparés) :
+    // capture le token_hash réellement révoqué, sans fenêtre de course
+    // avec un /auth/refresh concurrent qui écrirait un nouveau token_hash
+    // entre la lecture et l'écriture — ce qui purgerait Redis avec un hash
+    // périmé et laisserait le nouveau token actif jusqu'à 10 min.
+    const [cible] = await db('sessions')
       .where({ id: req.params.id, utilisateur_id: req.session.utilisateur_id })
-      .update({ revoquee: true, motif_revocation: 'revocation_manuelle' });
+      .update({ revoquee: true, motif_revocation: 'revocation_manuelle' })
+      .returning('token_hash');
 
-    if (!updated) throw ApiError.nonTrouve('Session introuvable');
+    if (!cible) throw ApiError.nonTrouve('Session introuvable');
+
+    // Purger le cache Redis — sinon la session révoquée reste utilisable
+    // jusqu'à 10 min (TTL du cache session de authentifier).
+    try {
+      const { getRedis } = require('../../../infrastructure/cache/redis');
+      const redis = getRedis();
+      await redis.del(`sess:${cible.token_hash}`);
+    } catch { /* Redis down, pas critique */ }
+
     return ok(res, { message: 'Session révoquée' });
   } catch (err) {
     next(err);
@@ -593,37 +625,61 @@ function detecterAppareil(userAgent = '') {
 }
 
 // ── POST /auth/refresh — Rafraîchir le token d'accès ────────────
-router.post('/auth/refresh', async (req, res, next) => {
+// Rate-limitée comme les autres routes d'auth (B2) : un refresh token qui
+// fuite ne doit pas permettre un brute force illimité.
+router.post('/auth/refresh', limiterRefresh, valider(schemaRefresh), async (req, res, next) => {
   const { refresh_token } = req.body;
-  if (!refresh_token) return next(ApiError.nonAutorise('Refresh token manquant'));
   const db = getDB();
 
   try {
     const refreshHash = crypto.createHash('sha256').update(refresh_token).digest('hex');
 
+    // Réutilisation d'un refresh token déjà tourné : après un refresh réussi,
+    // l'ancien refresh_token_hash n'existe plus en base (remplacé par le
+    // nouveau ci-dessous) — la requête ne trouve donc plus la session et
+    // retombe naturellement dans ce cas 401, sans logique de révocation
+    // en cascade supplémentaire à écrire.
     const session = await db('sessions')
       .where({ refresh_token_hash: refreshHash, revoquee: false })
       .where('refresh_expire_at', '>', db.raw('NOW()'))
-      .first('id', 'utilisateur_id', 'etablissement_id');
+      .first('id', 'utilisateur_id', 'etablissement_id', 'token_hash');
 
     if (!session) return next(ApiError.nonAutorise('Refresh token invalide ou expiré'));
 
-    const newSessionId = uuid();
+    // Le sid du JWT reste l'id de session existant — ne JAMAIS le changer :
+    // il est référencé par DELETE /auth/sessions/:id et par req.session.id
+    // côté client (mobile/dashboard).
     const newToken = jwt.sign(
-      { sub: session.utilisateur_id, eid: session.etablissement_id, sid: newSessionId },
+      { sub: session.utilisateur_id, eid: session.etablissement_id, sid: session.id },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '30m' }
     );
     const tokenHash = crypto.createHash('sha256').update(newToken).digest('hex');
 
-    // Mise à jour de la session avec le nouveau token hash
+    // Rotation du refresh token — invalide l'ancien à chaque usage.
+    const nouveauRefreshToken = crypto.randomBytes(40).toString('hex');
+    const nouveauRefreshTokenHash = crypto.createHash('sha256').update(nouveauRefreshToken).digest('hex');
+
+    // Prolonger la session (expire_at) sinon `authentifier` (qui filtre
+    // expire_at > NOW()) rejette tout refresh effectué après les 30
+    // premières minutes, rendant la route inutilisable au-delà.
     await db('sessions').where({ id: session.id }).update({
-      id: newSessionId,
-      token_hash: tokenHash,
-      derniere_activite: db.raw('NOW()'),
+      token_hash:         tokenHash,
+      refresh_token_hash: nouveauRefreshTokenHash,
+      refresh_expire_at:  db.raw("NOW() + INTERVAL '7 days'"),
+      expire_at:          db.raw("NOW() + INTERVAL '30 minutes'"),
+      derniere_activite:  db.raw('NOW()'),
     });
 
-    return ok(res, { token: newToken });
+    // Purger le cache Redis de l'ancien token — sinon l'ancien token reste
+    // utilisable jusqu'à 10 min (TTL du cache session de authentifier).
+    try {
+      const { getRedis } = require('../../../infrastructure/cache/redis');
+      const redis = getRedis();
+      await redis.del(`sess:${session.token_hash}`);
+    } catch { /* Redis down, pas critique */ }
+
+    return ok(res, { token: newToken, refresh_token: nouveauRefreshToken });
   } catch (err) {
     next(err);
   }
