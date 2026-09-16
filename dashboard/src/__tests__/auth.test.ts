@@ -117,3 +117,23 @@ describe('Auth.requireAuth', () => {
     expect(Auth.requireAuth()).toBe(true);
   });
 });
+
+describe('Auth.login — payload envoyé au backend', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
+  it('envoie etablissement_code (pas code_etablissement) — le schéma Zod backend exige ce nom exact', async () => {
+    mockFetch(200, true, {
+      data: { token: 'jwt-abc', refresh_token: 'refresh-abc', user: { id: '1', role: 'directeur' } },
+    });
+
+    await Auth.login('directeur@test.sn', 'Test1234!', 'TEST_LBD');
+
+    const [, options] = vi.mocked(fetch).mock.calls[0];
+    const body = JSON.parse(options!.body as string);
+    expect(body).toHaveProperty('etablissement_code', 'TEST_LBD');
+    expect(body).not.toHaveProperty('code_etablissement');
+  });
+});

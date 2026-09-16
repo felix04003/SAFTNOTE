@@ -6,7 +6,7 @@ export const Auth = {
     const res = await Api.post('/auth/connexion', {
       identifiant,
       mot_de_passe: motDePasse,
-      code_etablissement: codeEtab,
+      etablissement_code: codeEtab,
     });
     const data = res.data || res;
     localStorage.setItem(CONFIG.TOKEN_KEY, data.token || data.access_token);
