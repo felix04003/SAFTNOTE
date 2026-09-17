@@ -198,7 +198,9 @@ describe('Sync Routes', () => {
     }
 
     test('notes.saisir : résout eleve_id (utilisateurs.id) vers eleves.id puis insère/merge la note', async () => {
+      db.mockReturnValueOnce(mockQuery({ id: IDS.evaluation, classe_id: IDS.classe })); // evaluations (garde établissement)
       db.mockReturnValueOnce(mockQuery({ id: IDS.eleve })); // eleves.where(...).first('id')
+      db.mockReturnValueOnce(mockQuery({ id: IDS.inscription })); // inscriptions (garde établissement)
       const insertChain = mockInsertAvecUpsert();
       db.mockReturnValueOnce(insertChain);
 
@@ -220,7 +222,27 @@ describe('Sync Routes', () => {
       expect(insertChain._mergeFn).toHaveBeenCalled();
     });
 
+    test('notes.saisir : évaluation introuvable ou d\'un autre établissement -> échec RESSOURCE_INTROUVABLE', async () => {
+      db.mockReturnValueOnce(mockQuery(undefined)); // evaluations : aucune ligne pour cet établissement
+
+      const op = {
+        id: '10101010-aaaa-bbbb-cccc-101010101010',
+        type: 'notes.saisir',
+        payload: { evaluation_id: 'evaluation-etab-B', eleve_id: IDS.utilisateur, inscription_id: IDS.inscription, valeur: 10 },
+        cree_at_local: new Date().toISOString(),
+      };
+
+      const res = await request(app)
+        .post('/sync/operations')
+        .send({ operations: [op] })
+        .expect(200);
+
+      expect(res.body.succes).toBe(true);
+      expect(res.body.data.resultats).toEqual([{ op_id: op.id, statut: 'erreur', code: 'RESSOURCE_INTROUVABLE' }]);
+    });
+
     test('notes.saisir : élève introuvable renvoie un échec partiel ELEVE_INTROUVABLE sans planter la requête', async () => {
+      db.mockReturnValueOnce(mockQuery({ id: IDS.evaluation, classe_id: IDS.classe })); // evaluations OK
       db.mockReturnValueOnce(mockQuery(undefined)); // eleves introuvable
 
       const op = {
@@ -239,6 +261,26 @@ describe('Sync Routes', () => {
       expect(res.body.data.resultats).toEqual([{ op_id: op.id, statut: 'erreur', code: 'ELEVE_INTROUVABLE' }]);
     });
 
+    test('notes.saisir : inscription ne correspondant pas à l\'élève/la classe de l\'évaluation -> échec RESSOURCE_INTROUVABLE', async () => {
+      db.mockReturnValueOnce(mockQuery({ id: IDS.evaluation, classe_id: IDS.classe })); // evaluations OK
+      db.mockReturnValueOnce(mockQuery({ id: IDS.eleve })); // eleves OK
+      db.mockReturnValueOnce(mockQuery(undefined)); // inscriptions : aucune ligne correspondante
+
+      const op = {
+        id: '12121212-aaaa-bbbb-cccc-121212121212',
+        type: 'notes.saisir',
+        payload: { evaluation_id: IDS.evaluation, eleve_id: IDS.utilisateur, inscription_id: 'inscription-etab-B', valeur: 10 },
+        cree_at_local: new Date().toISOString(),
+      };
+
+      const res = await request(app)
+        .post('/sync/operations')
+        .send({ operations: [op] })
+        .expect(200);
+
+      expect(res.body.data.resultats).toEqual([{ op_id: op.id, statut: 'erreur', code: 'RESSOURCE_INTROUVABLE' }]);
+    });
+
     test('notes.saisir envoyée deux fois avec le même id (rejeu) : idempotent grâce à onConflict/merge, pas d\'erreur ni de doublon', async () => {
       const op = {
         id: '33333333-aaaa-bbbb-cccc-333333333333',
@@ -248,7 +290,9 @@ describe('Sync Routes', () => {
       };
 
       // Premier envoi
+      db.mockReturnValueOnce(mockQuery({ id: IDS.evaluation, classe_id: IDS.classe }));
       db.mockReturnValueOnce(mockQuery({ id: IDS.eleve }));
+      db.mockReturnValueOnce(mockQuery({ id: IDS.inscription }));
       db.mockReturnValueOnce(mockInsertAvecUpsert());
       const res1 = await request(app).post('/sync/operations').send({ operations: [op] }).expect(200);
       expect(res1.body.data.resultats).toEqual([{ op_id: op.id, statut: 'ok' }]);
@@ -256,14 +300,17 @@ describe('Sync Routes', () => {
       // Rejeu du même op_id (ex: retry mobile après timeout réseau) — nouvelle requête HTTP,
       // le serveur ne conserve pas d'état d'opérations déjà traitées (pas de journal des op_id) ;
       // c'est l'UPSERT (onConflict sur evaluation_id+eleve_id) qui rend le rejeu sans effet de bord.
+      db.mockReturnValueOnce(mockQuery({ id: IDS.evaluation, classe_id: IDS.classe }));
       db.mockReturnValueOnce(mockQuery({ id: IDS.eleve }));
+      db.mockReturnValueOnce(mockQuery({ id: IDS.inscription }));
       db.mockReturnValueOnce(mockInsertAvecUpsert());
       const res2 = await request(app).post('/sync/operations').send({ operations: [op] }).expect(200);
       expect(res2.body.data.resultats).toEqual([{ op_id: op.id, statut: 'ok' }]);
     });
 
     test('presences.saisir : appel ouvert -> met à jour le statut de présence', async () => {
-      db.mockReturnValueOnce(mockQuery({ id: 'appel-1' })); // appels ouvert trouvé
+      db.mockReturnValueOnce(mockQuery({ id: 'appel-1', classe_id: IDS.classe })); // appels ouvert trouvé (garde établissement)
+      db.mockReturnValueOnce(mockQuery({ id: IDS.inscription })); // inscriptions (garde établissement)
       const updateChain = mockQuery(1);
       db.mockReturnValueOnce(updateChain);
 
@@ -281,7 +328,7 @@ describe('Sync Routes', () => {
     });
 
     test('presences.saisir : appel clôturé ou introuvable -> échec APPEL_CLOTURE', async () => {
-      db.mockReturnValueOnce(mockQuery(undefined)); // appel non trouvé (clôturé ou inexistant)
+      db.mockReturnValueOnce(mockQuery(undefined)); // appel non trouvé (clôturé, inexistant ou autre établissement)
 
       const op = {
         id: '55555555-aaaa-bbbb-cccc-555555555555',
@@ -293,6 +340,22 @@ describe('Sync Routes', () => {
       const res = await request(app).post('/sync/operations').send({ operations: [op] }).expect(200);
 
       expect(res.body.data.resultats).toEqual([{ op_id: op.id, statut: 'erreur', code: 'APPEL_CLOTURE' }]);
+    });
+
+    test('presences.saisir : inscription ne correspondant pas à la classe de l\'appel -> échec RESSOURCE_INTROUVABLE', async () => {
+      db.mockReturnValueOnce(mockQuery({ id: 'appel-1', classe_id: IDS.classe })); // appel OK
+      db.mockReturnValueOnce(mockQuery(undefined)); // inscriptions : aucune ligne correspondante
+
+      const op = {
+        id: '13131313-aaaa-bbbb-cccc-131313131313',
+        type: 'presences.saisir',
+        payload: { appel_id: 'appel-1', inscription_id: 'inscription-etab-B', statut: 'absent' },
+        cree_at_local: new Date().toISOString(),
+      };
+
+      const res = await request(app).post('/sync/operations').send({ operations: [op] }).expect(200);
+
+      expect(res.body.data.resultats).toEqual([{ op_id: op.id, statut: 'erreur', code: 'RESSOURCE_INTROUVABLE' }]);
     });
 
     test('type d\'opération inconnu -> échec TYPE_INCONNU', async () => {
@@ -312,12 +375,15 @@ describe('Sync Routes', () => {
 
     test('erreur serveur inattendue sur une opération -> ERREUR_SERVEUR, sans faire échouer les autres opérations du lot', async () => {
       // op1 : notes.saisir qui plante à l'insert
+      db.mockReturnValueOnce(mockQuery({ id: IDS.evaluation, classe_id: IDS.classe }));
       db.mockReturnValueOnce(mockQuery({ id: IDS.eleve }));
+      db.mockReturnValueOnce(mockQuery({ id: IDS.inscription }));
       const failingInsert = mockQuery(undefined);
       failingInsert.onConflict = jest.fn().mockReturnValue({ merge: jest.fn().mockRejectedValue(new Error('DB down')) });
       db.mockReturnValueOnce(failingInsert);
       // op2 : presences.saisir qui réussit
-      db.mockReturnValueOnce(mockQuery({ id: 'appel-2' }));
+      db.mockReturnValueOnce(mockQuery({ id: 'appel-2', classe_id: IDS.classe }));
+      db.mockReturnValueOnce(mockQuery({ id: IDS.inscription }));
       db.mockReturnValueOnce(mockQuery(1));
 
       const op1 = {
@@ -341,21 +407,23 @@ describe('Sync Routes', () => {
       ]);
     });
 
-    // Constat de sécurité (audit 2026-09) : le code actuel de POST /sync/operations
-    // ne vérifie à AUCUN moment que les entités référencées dans op.payload
-    // (eleve_id, appel_id, inscription_id...) appartiennent bien à
-    // req.etablissement_id — contrairement à ce qui a été corrigé sur les
-    // routes bulletins (lots C/D). Ce test documente le comportement RÉEL
-    // observé (l'opération est traitée sans filtre d'établissement), afin de
-    // matérialiser ce risque potentiel d'IDOR inter-établissements pour un
-    // futur lot de correction — il n'est PAS du périmètre du lot J de le
-    // corriger. Voir rapport final de l'agent pour l'escalade.
-    test('constat : une opération référençant un appel d\'un autre établissement n\'est pas filtrée par etablissement_id', async () => {
+    // Correctif de sécurité (audit 2026-09, lot fix/audit-2026-09) : POST
+    // /sync/operations vérifie désormais, par opération, que les entités
+    // référencées dans op.payload (evaluation_id, eleve_id, appel_id,
+    // inscription_id...) appartiennent bien à req.etablissement_id — même
+    // garde en esprit que celle déjà appliquée aux routes bulletins (lots
+    // C/D) et à isolerEtablissement, mais adaptée au batch hétérogène de
+    // cette route. Ce test vérifie que l'opération est désormais REJETÉE
+    // (et non traitée comme un succès) quand l'appel référencé appartient à
+    // un autre établissement — la requête `db('appels as ap')...` filtre sur
+    // `a.etablissement_id: req.etablissement_id` : pour un appel d'un autre
+    // établissement, cette requête ne retourne aucune ligne.
+    test('rejette une opération référençant un appel d\'un autre établissement', async () => {
       const sessionEtabA = JSON.stringify({ roles: ['enseignant'], utilisateur_id: IDS.enseignant, etablissement_id: IDS.etablissement });
 
-      db.mockReturnValueOnce(mockQuery({ id: 'appel-etab-B' })); // aucun filtre etablissement_id observé dans la requête
-      const updateChain = mockQuery(1);
-      db.mockReturnValueOnce(updateChain);
+      // La jointure jusqu'à annees_scolaires.etablissement_id ne retourne rien :
+      // l'appel existe bien, mais dans un autre établissement.
+      db.mockReturnValueOnce(mockQuery(undefined));
 
       const op = {
         id: '99999999-aaaa-bbbb-cccc-999999999999',
@@ -370,8 +438,33 @@ describe('Sync Routes', () => {
         .send({ operations: [op] })
         .expect(200);
 
-      // Comportement actuel : traité comme un succès, aucune vérification d'appartenance.
-      expect(res.body.data.resultats).toEqual([{ op_id: op.id, statut: 'ok' }]);
+      // Comportement corrigé : rejeté avec le même code que pour un appel
+      // clôturé ou inexistant (ne pas confirmer l'existence de la ressource
+      // dans un autre établissement).
+      expect(res.body.data.resultats).toEqual([{ op_id: op.id, statut: 'erreur', code: 'APPEL_CLOTURE' }]);
+    });
+
+    test('rejette une opération notes.saisir référençant une évaluation d\'un autre établissement', async () => {
+      const sessionEtabA = JSON.stringify({ roles: ['enseignant'], utilisateur_id: IDS.enseignant, etablissement_id: IDS.etablissement });
+
+      // La jointure jusqu'à annees_scolaires.etablissement_id ne retourne rien :
+      // l'évaluation existe bien, mais dans un autre établissement.
+      db.mockReturnValueOnce(mockQuery(undefined));
+
+      const op = {
+        id: '14141414-aaaa-bbbb-cccc-141414141414',
+        type: 'notes.saisir',
+        payload: { evaluation_id: 'evaluation-etab-B', eleve_id: IDS.utilisateur, inscription_id: IDS.inscription, valeur: 18 },
+        cree_at_local: new Date().toISOString(),
+      };
+
+      const res = await request(app)
+        .post('/sync/operations')
+        .set('x-test-session', sessionEtabA)
+        .send({ operations: [op] })
+        .expect(200);
+
+      expect(res.body.data.resultats).toEqual([{ op_id: op.id, statut: 'erreur', code: 'RESSOURCE_INTROUVABLE' }]);
     });
   });
 });
