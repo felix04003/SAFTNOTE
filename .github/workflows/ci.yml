@@ -44,6 +44,16 @@ jobs:
         env:
           NODE_ENV: test
 
+      # Lot G (finding E4, audit 2026-09) : audit de sécurité informatif,
+      # non bloquant pour l'instant (continue-on-error). Objectif : le rendre
+      # bloquant une fois que mobile/ et dashboard/ auront pu être nettoyés
+      # des vulnérabilités restantes qui nécessitent une montée majeure du
+      # SDK Expo (mobile) ou de Vite/Vitest (dashboard, déjà fait dans ce lot
+      # mais à surveiller pour les prochaines CVE).
+      - name: Audit de sécurité (informatif)
+        run: npm audit --omit=dev --audit-level=high
+        continue-on-error: true
+
       - name: Upload coverage
         if: always()
         uses: actions/upload-artifact@v4
@@ -87,9 +97,17 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
 
+      # Lot G (finding E4, audit 2026-09) : mobile/package-lock.json était
+      # gitignoré et l'install se faisait via `npm install --legacy-peer-deps`,
+      # ce qui rendait le build non reproductible. Le lockfile est désormais
+      # commité et régénéré proprement (`npx expo install --check`/`--fix`
+      # ont aligné les versions natives sur le SDK Expo installé) : `npm ci`
+      # sans --legacy-peer-deps s'installe sans conflit de peer deps.
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: npm ci
 
       - name: Tests unitaires
         run: npm run test:ci
@@ -112,9 +130,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: npm ci
 
       - name: TypeScript check
         run: npx tsc --noEmit
@@ -140,9 +160,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: npm ci
 
       - name: Setup EAS CLI
         run: npm install -g eas-cli

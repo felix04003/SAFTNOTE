@@ -47,7 +47,8 @@
         {
           "enableFTS": true
         }
-      ]
+      ],
+      "expo-asset"
     ],
     "scheme": "ecolemanager",
     "extra": {
