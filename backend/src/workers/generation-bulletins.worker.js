@@ -254,3 +254,9 @@ init().then(() => {
   logger.error('[BulletinsPDF] Démarrage échoué', { error: err.message });
   process.exit(1);
 });
+
+// ── Exports (lot J, E5) ──────────────────────────────────────────
+// Ajout uniquement pour permettre les tests unitaires (traiterJob,
+// getDonneesBulletin, EchecUploadBulletin) séparément du câblage BullMQ.
+// N'affecte pas le comportement au démarrage (init().then(...) ci-dessus).
+module.exports = { traiterJob, getDonneesBulletin, EchecUploadBulletin };

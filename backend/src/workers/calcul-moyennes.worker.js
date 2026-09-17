@@ -126,6 +126,11 @@ async function traiterCalcul(job) {
   return result;
 }
 
+// ── Exports (lot J, E5) ──────────────────────────────────────────
+// Ajout uniquement pour permettre les tests unitaires de traiterCalcul
+// séparément du câblage BullMQ (voir init() ci-dessous, inchangé).
+module.exports = { traiterCalcul };
+
 // ── Démarrage ────────────────────────────────────────────────────
 
 async function init() {

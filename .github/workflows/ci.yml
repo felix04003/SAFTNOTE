@@ -63,6 +63,81 @@ jobs:
           retention-days: 7
 
   # ──────────────────────────────────────────────────────
+  #  Backend : Tests d'intégration (PostgreSQL + Redis réels)
+  # ──────────────────────────────────────────────────────
+  # Lot J (E5, audit 2026-09) : les 15 fichiers de tests d'intégration
+  # existants (backend/tests/integration/*.integration.test.js) tournaient
+  # déjà contre un vrai PostgreSQL en local, mais n'étaient jamais exécutés
+  # en CI (seul `npm test`, unitaire avec mocks, l'était). Ce job les fait
+  # tourner sur des services PostgreSQL 16 et Redis 7 éphémères.
+  backend-integration:
+    name: Backend — Tests d'intégration
+    runs-on: ubuntu-latest
+    needs: backend-lint-test
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ecole_manager_test
+          POSTGRES_USER: ecole_user
+          POSTGRES_PASSWORD: ecole_password_dev
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U ecole_user -d ecole_manager_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      NODE_ENV: test
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5433
+      POSTGRES_DB: ecole_manager_test
+      POSTGRES_USER: ecole_user
+      POSTGRES_PASSWORD: ecole_password_dev
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      JWT_SECRET: ci_integration_jwt_secret_32_chars_min
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Appliquer les migrations
+        run: node src/utils/migrate.js
+
+      - name: Injecter les seeds de test
+        run: node src/utils/seed-test.js
+
+      - name: Tests d'intégration
+        run: npm run test:integration
+
+  # ──────────────────────────────────────────────────────
   #  Backend : Docker build
   # ──────────────────────────────────────────────────────
   backend-docker:
