@@ -122,6 +122,7 @@ export const PageBulletins: any = {
       const titreEl = document.getElementById('bull-modal-titre') as HTMLElement | null;
       if (titreEl) titreEl.textContent = (el.prenom || '') + ' ' + (el.nom || '') + ' — ' + (per.libelle || '');
 
+      if (!corps) return;
       corps.innerHTML =
         '<div style="padding:14px 18px;border-bottom:1px solid var(--g100);display:flex;gap:18px;flex-wrap:wrap">' +
           '<div><span style="font-size:11px;color:var(--g400)">Classe</span><div style="font-weight:600">' + escapeHtml(el.classe || '—') + '</div></div>' +

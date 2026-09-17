@@ -4,6 +4,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>EcoleManager — Espace Parents</title>
+<!-- CSP en repli (meta) : gestionnaires onclick= inline encore présents -->
+<!-- (statiques et générés dynamiquement par src/pages/par-*.ts) — migration -->
+<!-- vers addEventListener non faite pour ce lot, voir rapport Lot H. -->
+<!-- CSP (revue code-reviewer, lot H) — points supplémentaires :
+     - Pas de frame-ancestors : ignoré par les navigateurs en balise <meta>
+       (spec CSP3 — comme report-uri/report-to/sandbox), seul un en-tête
+       HTTP le fait respecter. La protection anti-clickjacking réelle vient
+       de X-Frame-Options: DENY (render.yaml, service ecolemanager-dashboard).
+     - connect-src est codé en dur sur l'URL de prod et DOIT être mis à jour
+       manuellement dans les 7 fichiers HTML si VITE_API_BASE change (voir
+       dashboard/.env.example) — sinon tous les fetch() sont bloqués
+       silencieusement par la CSP (erreur réseau opaque, rien dans l'UI). -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; connect-src 'self' https://ecolemanager-api.onrender.com; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; form-action 'self';">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">

@@ -34,7 +34,7 @@ export const PageParNotes: any = {
     } catch { PageParNotes._periodes = []; }
   },
 
-  filtrerPeriode: function(periodeId) {
+  filtrerPeriode: function(periodeId: string) {
     PageParNotes._filtrePerid = periodeId;
     PageParNotes.charger();
   },

@@ -55,6 +55,13 @@ services:
     buildCommand: cd dashboard && npm ci && npm run build
     staticPublishPath: ./dashboard/dist
     pullRequestPreviewsEnabled: false
+    # VITE_API_BASE (lot H, finding E6) : Vite lit cette variable au moment
+    # du build (buildCommand ci-dessus), pas à l'exécution — un site statique
+    # n'a pas de runtime Node. Elle doit donc être définie ici pour être
+    # inlinée dans le bundle. Pointe vers le service API du même render.yaml.
+    envVars:
+      - key: VITE_API_BASE
+        value: https://ecolemanager-api.onrender.com/api/v1
     routes:
       - type: rewrite
         source: /login

@@ -30,32 +30,32 @@ describe('Auth.getUser', () => {
 });
 
 describe('Auth.getToken', () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => { localStorage.clear(); sessionStorage.clear(); });
 
   it('retourne null si absent', () => {
     expect(Auth.getToken()).toBeNull();
   });
 
-  it('retourne le token stocké', () => {
-    localStorage.setItem(CONFIG.TOKEN_KEY, 'jwt-test-token');
+  it('retourne le token stocké (sessionStorage — lot H, finding E6)', () => {
+    sessionStorage.setItem(CONFIG.TOKEN_KEY, 'jwt-test-token');
     expect(Auth.getToken()).toBe('jwt-test-token');
   });
 });
 
 describe('Auth.isAuthenticated', () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => { localStorage.clear(); sessionStorage.clear(); });
 
   it('retourne false si pas de token', () => {
     expect(Auth.isAuthenticated()).toBe(false);
   });
 
   it('retourne false si token présent mais pas de user', () => {
-    localStorage.setItem(CONFIG.TOKEN_KEY, 'jwt-test');
+    sessionStorage.setItem(CONFIG.TOKEN_KEY, 'jwt-test');
     expect(Auth.isAuthenticated()).toBe(false);
   });
 
   it('retourne true si token ET user présents', () => {
-    localStorage.setItem(CONFIG.TOKEN_KEY, 'jwt-test');
+    sessionStorage.setItem(CONFIG.TOKEN_KEY, 'jwt-test');
     localStorage.setItem(CONFIG.USER_KEY, JSON.stringify({ id: '1', role: 'directeur' }));
     expect(Auth.isAuthenticated()).toBe(true);
   });
@@ -81,7 +81,9 @@ describe('Auth.login (B5 — persistance refresh_token)', () => {
 
     expect(sessionStorage.getItem(CONFIG.REFRESH_TOKEN_KEY)).toBe('refresh-connexion');
     expect(localStorage.getItem(CONFIG.REFRESH_TOKEN_KEY)).toBeNull();
-    expect(localStorage.getItem(CONFIG.TOKEN_KEY)).toBe('jwt-connexion');
+    // Lot H (finding E6) : le JWT lui-même est aussi en sessionStorage, pas localStorage.
+    expect(sessionStorage.getItem(CONFIG.TOKEN_KEY)).toBe('jwt-connexion');
+    expect(localStorage.getItem(CONFIG.TOKEN_KEY)).toBeNull();
   });
 });
 
@@ -91,19 +93,19 @@ describe('Auth.logout (B5 — nettoyage refresh_token)', () => {
     sessionStorage.clear();
   });
 
-  it('supprime le refresh_token de sessionStorage', () => {
-    localStorage.setItem(CONFIG.TOKEN_KEY, 'jwt-test');
+  it('supprime le token et le refresh_token de sessionStorage', () => {
+    sessionStorage.setItem(CONFIG.TOKEN_KEY, 'jwt-test');
     sessionStorage.setItem(CONFIG.REFRESH_TOKEN_KEY, 'refresh-test');
 
     Auth.logout();
 
     expect(sessionStorage.getItem(CONFIG.REFRESH_TOKEN_KEY)).toBeNull();
-    expect(localStorage.getItem(CONFIG.TOKEN_KEY)).toBeNull();
+    expect(sessionStorage.getItem(CONFIG.TOKEN_KEY)).toBeNull();
   });
 });
 
 describe('Auth.requireAuth', () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => { localStorage.clear(); sessionStorage.clear(); });
 
   it('retourne false et redirige vers login.html si non authentifié', () => {
     const result = Auth.requireAuth();
@@ -112,7 +114,7 @@ describe('Auth.requireAuth', () => {
   });
 
   it('retourne true si authentifié', () => {
-    localStorage.setItem(CONFIG.TOKEN_KEY, 'jwt-test');
+    sessionStorage.setItem(CONFIG.TOKEN_KEY, 'jwt-test');
     localStorage.setItem(CONFIG.USER_KEY, JSON.stringify({ id: '1', role: 'enseignant' }));
     expect(Auth.requireAuth()).toBe(true);
   });

@@ -24,6 +24,7 @@ describe('Api.get', () => {
   beforeEach(() => {
     vi.mocked(fetch).mockClear();
     localStorage.clear();
+    sessionStorage.clear();
   });
 
   it('appelle fetch avec la méthode GET', async () => {
@@ -35,8 +36,8 @@ describe('Api.get', () => {
     );
   });
 
-  it('inclut le token Authorization si présent', async () => {
-    localStorage.setItem(CONFIG.TOKEN_KEY, 'mon-token-jwt');
+  it('inclut le token Authorization si présent (sessionStorage — lot H, finding E6)', async () => {
+    sessionStorage.setItem(CONFIG.TOKEN_KEY, 'mon-token-jwt');
     mockFetch(200, true, { success: true, data: {} });
     await Api.get('/protected');
     const opts = vi.mocked(fetch).mock.calls[0][1] as RequestInit;
@@ -115,7 +116,7 @@ describe('Api.request — 401 avec refresh token (B5)', () => {
     expect(result).toEqual({ success: true, data: { ok: true } });
     expect(fetch).toHaveBeenCalledTimes(3);
     expect(vi.mocked(fetch).mock.calls[1][0]).toContain('/auth/refresh');
-    expect(localStorage.getItem(CONFIG.TOKEN_KEY)).toBe('nouveau-token');
+    expect(sessionStorage.getItem(CONFIG.TOKEN_KEY)).toBe('nouveau-token');
     expect(sessionStorage.getItem(CONFIG.REFRESH_TOKEN_KEY)).toBe('nouveau-refresh');
   });
 

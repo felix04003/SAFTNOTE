@@ -19,7 +19,7 @@ export const PageEleves: any = {
 
       const res = await Api.get('/eleves', params);
       this.data = res.data;
-      this.total = res.meta.total;
+      this.total = res.meta?.total ?? 0;
       this.renderTable(res.data);
       this.renderPagination(res.meta);
       return true;
@@ -120,6 +120,10 @@ export const PageEleves: any = {
   },
 
   renderPagination: function(meta: any) {
+    // meta est optionnel dans ApiResponse (voir types.ts) — sans lui, rien
+    // à afficher (revue code-reviewer, lot H, cohérent avec le fallback
+    // `res.meta?.total ?? 0` dans charger() ci-dessus).
+    if (!meta) return;
     const pag = document.getElementById('pag-eleves') as HTMLElement | null;
     if (!pag) return;
     const debut = ((meta.page - 1) * meta.limite) + 1;
@@ -142,7 +146,7 @@ export const PageEleves: any = {
     this._debounce = setTimeout(function() { self.charger(); }, 300);
   },
 
-  filtrerClasse: function(classeId) { this.classeId = classeId; this.page = 1; this.charger(); },
+  filtrerClasse: function(classeId: string) { this.classeId = classeId; this.page = 1; this.charger(); },
   voirFiche: async function(id: string) {
     try {
       const res = await Api.get('/eleves/' + id);

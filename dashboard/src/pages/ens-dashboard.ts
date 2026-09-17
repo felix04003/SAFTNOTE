@@ -104,8 +104,8 @@ export const PageEnsDashboard: any = {
     }
   },
 
-  _lancerAppel: function(creneauId) {
-    var c = (PageEnsDashboard._creneaux || []).find(function(x) { return String(x.creneau_id) === String(creneauId); });
+  _lancerAppel: function(creneauId: string) {
+    var c = (PageEnsDashboard._creneaux || []).find(function(x: any) { return String(x.creneau_id) === String(creneauId); });
     if (c) PageEnsAppel.lancerDepuisCreneau(c.creneau_id, c.matiere, c.classe, c.classe_id);
   },
 };

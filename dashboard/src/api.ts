@@ -43,7 +43,7 @@ export const Api = {
           const payload = data.data || data;
           if (!payload?.token || !payload?.refresh_token) return false;
 
-          localStorage.setItem(CONFIG.TOKEN_KEY, payload.token);
+          sessionStorage.setItem(CONFIG.TOKEN_KEY, payload.token);
           sessionStorage.setItem(CONFIG.REFRESH_TOKEN_KEY, payload.refresh_token);
           return true;
         } catch {
@@ -64,7 +64,7 @@ export const Api = {
     params?: Record<string, any>,
     opts: { dejaRafraichi?: boolean } = {}
   ): Promise<T> {
-    const token = localStorage.getItem(CONFIG.TOKEN_KEY);
+    const token = sessionStorage.getItem(CONFIG.TOKEN_KEY);
     const url = new URL(CONFIG.API_BASE + path);
     if (params) {
       Object.entries(params).forEach(([k, v]) => {

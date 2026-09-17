@@ -46,7 +46,7 @@ async function validerOTP() {
     const res = await Api.post('/auth/otp/valider', {
       telephone: _telephone, code, etablissement_code: _etabCode,
     });
-    localStorage.setItem(CONFIG.TOKEN_KEY, res.data.token);
+    sessionStorage.setItem(CONFIG.TOKEN_KEY, res.data.token);
     localStorage.setItem(CONFIG.USER_KEY, JSON.stringify(res.data.utilisateur));
     window.location.href = 'parent.html';
   } catch (e: any) {

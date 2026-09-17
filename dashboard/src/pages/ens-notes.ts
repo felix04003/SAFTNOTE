@@ -245,7 +245,7 @@ export const PageEnsNotes: any = {
       if (btnPublier) btnPublier.style.display = estPubliee ? 'none' : '';
       if (btnSauver)  btnSauver.style.display  = estPubliee ? 'none' : '';
 
-    } catch (e) {
+    } catch (e: any) {
       if (tbody) tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:30px;color:var(--rouge)">Erreur : ' + escapeHtml(e.message || '') + '</td></tr>';
     }
   },

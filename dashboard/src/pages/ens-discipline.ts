@@ -38,8 +38,8 @@ export const PageEnsDiscipline: any = {
     }
   },
 
-  filtrerClasse: function(classeId) { this._filtreClasseId = classeId; this._page = 1; this.charger(); },
-  filtrerType:   function(type)     { this._filtreType = type;         this._page = 1; this.charger(); },
+  filtrerClasse: function(classeId: string) { this._filtreClasseId = classeId; this._page = 1; this.charger(); },
+  filtrerType:   function(type: string)     { this._filtreType = type;         this._page = 1; this.charger(); },
 
   async charger() {
     const tbody = document.getElementById('tb-ens-sanctions') as HTMLElement | null;
