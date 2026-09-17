@@ -65,7 +65,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build Docker image
-        run: docker build -t ecolemanager-api:ci ./backend
+        # Contexte = racine du dépôt (lot F2) : backend/Dockerfile copie
+        # aussi migrations/, qui vit désormais à la racine (lot A).
+        run: docker build -t ecolemanager-api:ci -f backend/Dockerfile .
 
   # ──────────────────────────────────────────────────────
   #  Mobile : Tests unitaires (couche offline SQLite/sync/API)

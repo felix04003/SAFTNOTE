@@ -62,9 +62,12 @@ services:
 
   # ── API Backend ────────────────────────────────────────
   api:
+    # Lot F2 : le Dockerfile copie désormais backend/ ET migrations/ (racine
+    # du dépôt, depuis le lot A) — le contexte doit donc être le dossier
+    # parent (racine), pas ce dossier backend/.
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: backend/Dockerfile
     container_name: ecole_api
     restart: unless-stopped
     depends_on:
@@ -102,8 +105,8 @@ services:
   # ── Worker notifications ───────────────────────────────
   worker-notif:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: backend/Dockerfile
     container_name: ecole_worker_notif
     restart: unless-stopped
     depends_on:

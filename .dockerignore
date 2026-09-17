@@ -1,0 +1,43 @@
+# ═══════════════════════════════════════════════════════
+#  EcoleManager — .dockerignore (racine, lot F2)
+#
+#  Le contexte de build de backend/Dockerfile est désormais la racine du
+#  dépôt (pour copier migrations/, cf. lot A). Ce fichier évite d'envoyer
+#  tout le monorepo (mobile/, dashboard/, .git, node_modules) au démon
+#  Docker — NE PAS exclure backend/ ni migrations/, nécessaires au build.
+# ═══════════════════════════════════════════════════════
+
+# ── Autres apps du monorepo (non nécessaires à l'image API) ─────────
+mobile/
+dashboard/
+docs/
+scripts/
+graphify-out/
+
+# ── VCS / outils / IDE ───────────────────────────────────────────────
+.git/
+.github/
+.claude/
+.superpowers/
+.gstack/
+.vscode/
+.DS_Store
+
+# ── Dépendances et builds (réinstallés dans l'image) ─────────────────
+node_modules/
+**/node_modules/
+backend/coverage/
+backend/dist/
+**/*.log
+
+# ── Secrets et env (jamais dans l'image) ─────────────────────────────
+.env
+.env.*
+backend/.env
+backend/.env.*
+!backend/.env.example
+!backend/.env.production.example
+
+# ── Divers ────────────────────────────────────────────────────────────
+*.pdf
+backend/storage/bulletins/

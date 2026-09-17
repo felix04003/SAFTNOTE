@@ -68,6 +68,19 @@ services:
       - type: rewrite
         source: /parent
         destination: /parent.html
+    # En-têtes de sécurité (lot F3, finding E6/C5) : pendant du bloc
+    # add_header de nginx/templates/ecolemanager.conf.template pour le VPS,
+    # ici en syntaxe Render pour le static site du dashboard.
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
 
 databases:
   - name: ecolemanager-db

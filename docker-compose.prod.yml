@@ -9,6 +9,8 @@ version: '3.9'
 #   - NODE_ENV=production
 #   - Worker bulletins inclus
 #   - Ports directs non exposés (tout passe par Nginx)
+#   - dashboard-build : construit dashboard/dist dans un volume nommé avant
+#     que Nginx ne démarre (lot F1) ; aucun build Node n'est requis sur l'hôte
 
 services:
 
@@ -55,9 +57,11 @@ services:
   # ── API Backend ─────────────────────────────────────────────────
   api:
     image: ecole-manager-api:${IMAGE_TAG:-latest}
+    # Contexte de build = racine du dépôt (lot F2) : le Dockerfile copie à la
+    # fois backend/ et migrations/ (qui vit désormais à la racine, cf. lot A).
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: ecole_api_prod
     restart: always
     depends_on:
@@ -100,8 +104,8 @@ services:
   worker-notif:
     image: ecole-manager-api:${IMAGE_TAG:-latest}
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: ecole_worker_notif_prod
     restart: always
     depends_on:
@@ -128,8 +132,8 @@ services:
   worker-bulletins:
     image: ecole-manager-api:${IMAGE_TAG:-latest}
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: ecole_worker_bulletins_prod
     restart: always
     depends_on:
@@ -154,19 +158,68 @@ services:
     networks:
       - backend
 
+  # ── Dashboard — build statique (lot F1) ──────────────────────────
+  # Image Node éphémère : construit dashboard/dist dans un volume nommé
+  # partagé avec Nginx, puis se termine (pas de process qui tourne).
+  # Choix retenu plutôt qu'un build sur l'hôte dans deploy.sh : le VPS n'a
+  # ainsi pas besoin de Node installé, et `docker compose up --build`
+  # reconstruit le dashboard à chaque déploiement comme le reste de la stack.
+  dashboard-build:
+    image: node:20-alpine
+    container_name: ecole_dashboard_build
+    working_dir: /app
+    # UID/GID non-root explicite (revue lot F) : `npm ci` exécute les scripts
+    # d'installation des dépendances (postinstall...) directement sur le
+    # bind mount hôte ./dashboard ; éviter de le faire en root limite les
+    # dégâts en cas de dépendance npm compromise. Adapter au besoin à l'UID
+    # réel de l'utilisateur de déploiement sur le VPS (`id -u` côté hôte).
+    user: "1000:1000"
+    # Pas de :ro sur ./dashboard : npm ci doit pouvoir écrire node_modules/
+    # sur le host (dossier déjà ignoré par .gitignore). Le volume nommé
+    # dashboard_dist masque ./dashboard/dist pendant le build : `npm run
+    # build` écrit dans le volume, jamais sur le host.
+    volumes:
+      - ./dashboard:/app
+      - dashboard_dist:/app/dist
+    command: sh -c "npm ci && npm run build"
+
   # ── Nginx — Reverse proxy + TLS ─────────────────────────────────
   nginx:
     image: nginx:1.25-alpine
     container_name: ecole_nginx_prod
     restart: always
     depends_on:
-      - api
+      api:
+        condition: service_started
+      dashboard-build:
+        condition: service_completed_successfully
+    environment:
+      NGINX_DOMAIN: ${NGINX_DOMAIN}
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/templates:/etc/nginx/templates:ro
+      # L'image nginx:1.25-alpine embarque un /etc/nginx/conf.d/default.conf
+      # (listen 80, server_name localhost) qui n'est plus écrasé par bind
+      # mount depuis le passage à /etc/nginx/templates (lot F1) : il entrerait
+      # en conflit avec le vhost généré depuis ecolemanager.conf.template sur
+      # le port 80 (deux server sans default_server explicite). On le
+      # supprime via un script /docker-entrypoint.d/ (mécanisme officiel de
+      # l'image, exécuté par docker-entrypoint.sh APRÈS 20-envsubst-on-
+      # templates.sh grâce au tri numérique 20-*/99-*).
+      #
+      # ATTENTION : ne PAS remplacer ceci par un `command:` qui wrap `rm -f
+      # ... && exec nginx ...` — docker-entrypoint.sh ne lance les scripts de
+      # /docker-entrypoint.d/ (dont envsubst) que si le process exécuté est
+      # exactement `nginx`/`nginx-debug` ($1). Un `command: sh -c "..."`
+      # change $1 en "sh" et désactive silencieusement TOUT
+      # /docker-entrypoint.d/, y compris envsubst : nginx démarre alors sans
+      # aucun vhost (conf.d/ vide). Vérifié empiriquement lors de la revue de
+      # ce lot — voir historique de session pour la reproduction.
+      - ./nginx/docker-entrypoint.d/99-remove-default-conf.sh:/docker-entrypoint.d/99-remove-default-conf.sh:ro
+      - dashboard_dist:/var/www/dashboard:ro
       - certbot_www:/var/www/certbot:ro
       - certbot_conf:/etc/letsencrypt:ro
     networks:
@@ -194,6 +247,7 @@ services:
 volumes:
   pgdata_prod:
   redisdata_prod:
+  dashboard_dist:
   certbot_www:
   certbot_conf:
 

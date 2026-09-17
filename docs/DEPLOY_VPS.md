@@ -157,6 +157,7 @@ nano .env.production
 #   ADMIN_PHONE          → +221XXXXXXXXX
 #   FRONTEND_URL         → https://VOTRE-DOMAINE.com
 #   NGINX_DOMAIN         → api.VOTRE-DOMAINE.com
+#   TRUST_PROXY_HOPS     → 1 (un seul saut de proxy : Nginx devant l'API, lot B/F3)
 
 # Sécuriser le fichier
 chmod 600 .env.production
@@ -169,13 +170,15 @@ grep -n "REMPLACER\|TODO\|changeme" .env.production && echo "ATTENTION : placeho
 
 ## 7. Configurer Nginx avec votre domaine
 
-```bash
-# Remplacer le domaine dans la config Nginx
-# (adapter selon votre structure nginx/)
-grep -r "ecolemanager.com\|VOTRE-DOMAINE" nginx/
+Depuis le lot F1, la config Nginx est un template (`nginx/templates/ecolemanager.conf.template`)
+substitué automatiquement au démarrage du conteneur officiel `nginx:1.25-alpine`
+(mécanisme `envsubst` intégré à l'image, sur tout fichier `/etc/nginx/templates/*.template`).
+Il n'y a donc **rien à modifier dans les fichiers Nginx eux-mêmes** : il suffit
+de renseigner la variable `NGINX_DOMAIN` dans `.env.production` (étape 6).
 
-# Exemple de modification :
-sed -i 's/api.ecolemanager.com/api.VOTRE-DOMAINE.com/g' nginx/conf.d/api.conf
+```bash
+# Vérifier que NGINX_DOMAIN est bien renseigné (pas de placeholder)
+grep NGINX_DOMAIN .env.production
 ```
 
 ---
@@ -194,12 +197,22 @@ docker compose -f docker-compose.prod.yml ps
 docker compose -f docker-compose.prod.yml logs -f api
 
 # Résultat attendu — tous les services "healthy" :
-# ecole_postgres_prod   Up (healthy)
-# ecole_redis_prod      Up (healthy)
-# ecole_api_prod        Up (healthy)
-# ecole_nginx_prod      Up
-# ecole_certbot         Up
+# ecole_postgres_prod    Up (healthy)
+# ecole_redis_prod       Up (healthy)
+# ecole_api_prod         Up (healthy)
+# ecole_dashboard_build  Exited (0)   ← normal : construit dist/ puis se termine
+# ecole_nginx_prod       Up
+# ecole_certbot          Up
 ```
+
+> **Dashboard (lot F1)** : le service `dashboard-build` (image `node:20-alpine`)
+> exécute `npm ci && npm run build` dans `dashboard/` et écrit le résultat dans
+> le volume nommé `dashboard_dist`, monté en lecture seule dans `nginx` sur
+> `/var/www/dashboard`. Aucun build Node n'est requis sur l'hôte du VPS. Si
+> `docker compose ps` montre `dashboard-build` en erreur (exit code ≠ 0),
+> consulter `docker compose -f docker-compose.prod.yml logs dashboard-build`
+> avant de rejouer `up -d --build` — Nginx attend son succès pour démarrer
+> (`depends_on: condition: service_completed_successfully`).
 
 ---
 
@@ -207,15 +220,16 @@ docker compose -f docker-compose.prod.yml logs -f api
 
 ```bash
 # Runner de migrations idempotent (dossier migrations/ à la racine du dépôt,
-# 000 → 015, table de suivi _migrations). Relancer est sans effet si à jour.
+# table de suivi _migrations). Relancer est sans effet si à jour.
+#
+# Depuis le lot F2, l'image ecole-manager-api embarque déjà migrations/
+# (COPY dans backend/Dockerfile, contexte de build = racine du dépôt) : plus
+# besoin de bind-mount le dossier depuis l'hôte.
 #
 # À exécuter depuis la racine du dépôt cloné : le conteneur api porte déjà
 # DATABASE_URL et les dépendances Node, et il est le seul à joindre postgres
-# (réseau `backend` interne, aucun port publié). Le dossier migrations/ est
-# monté à la volée tant que l'image ne l'embarque pas (lot F).
-docker compose -f docker-compose.prod.yml run --rm \
-  -v "$PWD/migrations:/app/migrations:ro" \
-  api node src/utils/migrate.js
+# (réseau `backend` interne, aucun port publié).
+docker compose -f docker-compose.prod.yml run --rm api node src/utils/migrate.js
 
 # Vérifier les migrations enregistrées
 docker exec -i ecole_postgres_prod \
