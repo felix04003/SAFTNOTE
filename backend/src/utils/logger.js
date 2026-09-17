@@ -10,6 +10,12 @@ const formatSimple = printf(({ level, message, timestamp, ...meta }) => {
   return `${timestamp} [${level}] ${message}${metaStr}`;
 });
 
+// Les fichiers de logs ne sont utiles que si le filesystem est persistant.
+// Sur Render/Docker, le filesystem est éphémère et stdout est déjà capturé par la plateforme :
+// les transports fichiers restent donc désactivés par défaut, même en production,
+// et ne s'activent que si LOG_TO_FILE=true est explicitement positionné.
+const logVersFichier = process.env.LOG_TO_FILE === 'true';
+
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
   format: process.env.LOG_FORMAT === 'json'
@@ -17,7 +23,7 @@ const logger = winston.createLogger({
     : combine(timestamp({ format: 'HH:mm:ss' }), colorize(), formatSimple),
   transports: [
     new winston.transports.Console(),
-    ...(process.env.NODE_ENV === 'production'
+    ...(logVersFichier
       ? [
           new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
           new winston.transports.File({ filename: 'logs/combined.log' }),

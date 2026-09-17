@@ -86,7 +86,8 @@ src/
 ├── workers/
 │   ├── notification.worker.js      SMS + WhatsApp
 │   ├── calcul-moyennes.worker.js   PL/pgSQL
-│   └── generation-bulletins.worker.js  Puppeteer PDF
+│   ├── generation-bulletins.worker.js  Puppeteer PDF
+│   └── purge.worker.js             Purge quotidienne (sessions, OTP, tentatives, audit) — cron 3h UTC
 └── utils/
     ├── ApiError.js                 Erreurs métier avec codes HTTP
     ├── logger.js                   Winston
@@ -127,4 +128,5 @@ Appel saisie → presences.statut='absent'
 | `AT_API_KEY` | Clé API Africa's Talking |
 | `AT_USERNAME` | Username Africa's Talking |
 | `META_WA_ACCESS_TOKEN` | Token Meta Cloud API |
+| `LOG_TO_FILE` | `true`/`false` (défaut `false`) — active en plus les transports fichiers Winston (`logs/error.log`, `logs/combined.log`) ; laisser `false` sur Render/Docker sans volume persistant (stdout déjà capturé) |
 | `META_WA_PHONE_NUMBER_ID` | ID numéro WhatsApp Business |

@@ -4,6 +4,43 @@ Historique des versions par sprint. Format : version sémantique + date + résum
 
 ---
 
+## v0.6.0 — Campagne de correction audit · 2026-09-16/17 : durcissement sécurité, infra, hygiène
+
+Suite à l'audit du 2026-09-16 (6 critiques, 6 élevés, 6 moyens), correctifs appliqués branche
+`fix/audit-2026-09` (lots A→K, voir `PLAN-CORRECTION-EcoleManager-2026-09-16.md`) :
+
+- **Lot A** — Unification des migrations dans un seul dossier `migrations/`, seeds de test séparés
+  dans `backend/tests/seeds/` (refus en production).
+- **Lot B** — `trust proxy` correctement configuré (`TRUST_PROXY_HOPS`), refresh de session avec
+  rotation du refresh token et révocation en cas de réutilisation, purge Redis à la déconnexion,
+  support `REDIS_URL`.
+- **Lot C** — Retrait de `bulletins.voir` du rôle parent (IDOR corrigé) ; accès bulletins enfants
+  uniquement via `/parents/moi/enfants/:id/bulletins`.
+- **Lot D** — Stockage des bulletins PDF sur S3/R2 avec URL signée à durée limitée (au lieu de
+  l'URL brute stockée en base).
+- **Lot E** — OTP SMS : échec explicite (500) en production sans clé Africa's Talking configurée,
+  jamais de code OTP dans les logs.
+- **Lot F** — Infra Nginx (templates envsubst), Dockerfile avec contexte de build à la racine,
+  configuration Render (`render.yaml`).
+- **Lot G** — Mise à jour des dépendances (audit npm), retrait de `multer` inutilisé.
+- **Lot H** — Sécurité dashboard : CSP, SRI sur Chart.js, JWT en `sessionStorage` (au lieu de
+  `localStorage`), configuration `API_BASE` par variable d'environnement.
+- **Lot I** — RLS : politiques retirées (promesse de row-level security non tenue, désactivée
+  proprement plutôt que de rester en faux sentiment de sécurité).
+- **Lot J** — Extension de la couverture de tests (workers, routes de synchronisation), CI avec
+  services Postgres/Redis.
+- **Lot K** — Hygiène du dépôt : retrait de `dashboard/js/` (legacy, remplacé par le dashboard
+  Vite/TypeScript), `graphify-out/` et `.claude/` (config d'outillage dev, versionnés par erreur) ;
+  correction de l'interpolation SQL dans `purge.worker.js` (requête paramétrée) ; logs applicatifs
+  en console uniquement par défaut en production (`LOG_TO_FILE=true` pour réactiver les fichiers) ;
+  mise à jour de `CLAUDE.md`, `backend/README.md`.
+
+**Points d'attention pour le déploiement** : `AT_API_KEY`/`AT_USERNAME` doivent être saisies
+manuellement dans le dashboard Render avant tout redéploiement (voir rappel en fin de
+`PLAN-CORRECTION-EcoleManager-2026-09-16.md`), sous peine d'échec de démarrage du service (fail-closed).
+
+---
+
 ## v0.5.0 — Sprint 5 · 2026-03-30 : EDT Enseignant
 
 **Features :**
