@@ -291,6 +291,15 @@ async function shutdown(signal) {
     logger.info('✓ PostgreSQL déconnecté');
   } catch { /* ignore */ }
   try {
+    // RLS phase 1 pilote (migration 019, revue lot I) : ferme aussi le pool
+    // ecole_app_rls s'il a été ouvert (route GET /configs/matieres appelée
+    // au moins une fois) — sans ça ses connexions fuyaient/bloquaient
+    // l'extinction du process. closeDBRls() ne fait rien si le pool n'a
+    // jamais été créé (lazy).
+    const { closeDBRls } = require('./infrastructure/database/pool');
+    await closeDBRls();
+  } catch { /* ignore */ }
+  try {
     const { getRedis } = require('./infrastructure/cache/redis');
     await getRedis().quit();
     logger.info('✓ Redis déconnecté');

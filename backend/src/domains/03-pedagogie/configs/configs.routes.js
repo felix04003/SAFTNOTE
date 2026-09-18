@@ -5,6 +5,7 @@ const { z }      = require('zod');
 const { v4: uuid } = require('uuid');
 
 const { getDB }      = require('../../../infrastructure/database/pool');
+const { avecContexteEtablissement } = require('../../../infrastructure/database/rls');
 const { authentifier } = require('../../../middleware/auth.middleware');
 const { exigerPermission, isolerEtablissement } = require('../../../middleware/permission.middleware');
 const { valider }    = require('../../../middleware/validate.middleware');
@@ -219,16 +220,27 @@ async function fetchMatieres(db, etablissementId, actifSeulement) {
   );
 }
 
+// Route pilote RLS phase 1 (migration 019) : `matieres`/`disciplines_matieres`
+// portent une colonne etablissement_id directe et sont désormais protégées
+// par policy RLS réelle. Cette route lit via avecContexteEtablissement()
+// (pool ecole_app_rls, non propriétaire, donc soumis au RLS) au lieu de
+// getDB() (pool admin, propriétaire, exempté du RLS) — défense en
+// profondeur EN PLUS du garde applicatif isolerEtablissement() ci-dessus,
+// qui reste inchangé. Comportement observable (JSON, cache, erreurs)
+// strictement identique à avant.
 router.get('/configs/matieres', auth, isoler, perm('config.voir'), async (req, res, next) => {
   try {
-    const db = getDB();
     const cle = `matieres:${req.etablissement_id}`;
+    const chargerMatieres = () => avecContexteEtablissement(
+      req.etablissement_id,
+      (trx) => fetchMatieres(trx, req.etablissement_id, req.query.actif_seulement)
+    );
 
     let matieres;
     try {
-      matieres = await getOrSet(cle, () => fetchMatieres(db, req.etablissement_id, req.query.actif_seulement), 1800);
+      matieres = await getOrSet(cle, chargerMatieres, 1800);
     } catch {
-      matieres = await fetchMatieres(db, req.etablissement_id, req.query.actif_seulement);
+      matieres = await chargerMatieres();
     }
     return liste(res, matieres);
   } catch (err) { next(err); }
