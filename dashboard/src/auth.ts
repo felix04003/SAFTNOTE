@@ -6,22 +6,24 @@ export const Auth = {
     const res = await Api.post('/auth/connexion', {
       identifiant,
       mot_de_passe: motDePasse,
-      code_etablissement: codeEtab,
+      etablissement_code: codeEtab,
     });
     const data = res.data || res;
-    localStorage.setItem(CONFIG.TOKEN_KEY, data.token || data.access_token);
+    sessionStorage.setItem(CONFIG.TOKEN_KEY, data.token || data.access_token);
     localStorage.setItem(CONFIG.USER_KEY, JSON.stringify(data.user || data));
+    if (data.refresh_token) sessionStorage.setItem(CONFIG.REFRESH_TOKEN_KEY, data.refresh_token);
     return data;
   },
 
   logout: function() {
-    localStorage.removeItem(CONFIG.TOKEN_KEY);
+    sessionStorage.removeItem(CONFIG.TOKEN_KEY);
     localStorage.removeItem(CONFIG.USER_KEY);
+    sessionStorage.removeItem(CONFIG.REFRESH_TOKEN_KEY);
     location.href = 'login.html';
   },
 
   getToken: function(): string | null {
-    return localStorage.getItem(CONFIG.TOKEN_KEY);
+    return sessionStorage.getItem(CONFIG.TOKEN_KEY);
   },
 
   getUser: function(): any {
@@ -29,7 +31,7 @@ export const Auth = {
   },
 
   isAuthenticated: function(): boolean {
-    const token = localStorage.getItem(CONFIG.TOKEN_KEY);
+    const token = sessionStorage.getItem(CONFIG.TOKEN_KEY);
     if (!token) return false;
     return !!Auth.getUser();
   },

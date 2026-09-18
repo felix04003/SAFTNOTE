@@ -58,7 +58,8 @@ Portail dédié aux parents avec login sans mot de passe (OTP SMS en 2 étapes).
 - `etablissements.code_officiel` — pas `.code`
 - `parents_eleves` — pas `parents` — colonnes `parent_id` / `eleve_id`
 - OTP max **3 tentatives** (contrainte `nb_tentatives <= 3`)
-- En dev : si `AT_API_KEY` absent → OTP loggé via `logger.warn` (visible dans console backend)
+- En dev/test : si `AT_API_KEY` absent → OTP loggé via `logger.warn` (visible dans console backend)
+- En production : `AT_API_KEY`/`AT_USERNAME` sont obligatoires (lot E, audit 2026-09) — `validateEnv()` fait refuser le démarrage du serveur si absentes, pour ne jamais risquer de logguer un code OTP en clair
 - OTP valide **10 minutes** (`expire_at = NOW() + INTERVAL '10 minutes'`)
 
 ## Liens

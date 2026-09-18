@@ -268,3 +268,17 @@ init().then(() => {
   logger.error('Démarrage worker échoué', { error: err.message });
   process.exit(1);
 });
+
+// ── Exports (lot J, E5) ──────────────────────────────────────────
+// Ajout uniquement pour permettre les tests unitaires des fonctions pures
+// (traiterNotification, templates, helpers) séparément du câblage BullMQ.
+// N'affecte pas le comportement au démarrage (init().then(...) ci-dessus).
+module.exports = {
+  traiterNotification,
+  TEMPLATES_SMS,
+  doitEnvoyerNotification,
+  dansPlageHoraire,
+  parseHeure,
+  getCategorie,
+  getContexteNotification,
+};

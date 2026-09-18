@@ -1,6 +1,14 @@
 'use strict';
 
 jest.mock('../../src/infrastructure/database/pool');
+// Route pilote RLS (GET /configs/matieres) : avecContexteEtablissement()
+// ouvre normalement une vraie transaction sur le pool ecole_app_rls
+// (getDBRls) — en test unitaire, on la simplifie pour rejouer le même
+// mock knex que les autres routes (voir beforeEach ci-dessous), afin de
+// ne pas dépendre d'une base réelle ici. La couverture RLS "réelle"
+// (policies, isolation effective) est vérifiée par un script d'intégration
+// contre une vraie base, pas par ce test unitaire.
+jest.mock('../../src/infrastructure/database/rls');
 jest.mock('../../src/infrastructure/cache/redis', () => ({
   connectRedis: jest.fn(), getRedis: jest.fn(), getOrSet: jest.fn((k, fn) => fn()),
   invalidatePattern: jest.fn(), healthCheck: jest.fn(),
@@ -31,6 +39,7 @@ jest.mock('../../src/middleware/permission.middleware', () => ({
 
 const request = require('supertest');
 const { getDB } = require('../../src/infrastructure/database/pool');
+const { avecContexteEtablissement } = require('../../src/infrastructure/database/rls');
 const { mockQuery, createMockDB, IDS } = require('../helpers/mockKnex');
 const { createTestApp } = require('../helpers/testApp');
 
@@ -43,6 +52,10 @@ describe('Configs Routes', () => {
   beforeEach(() => {
     db = createMockDB();
     getDB.mockReturnValue(db);
+    // GET /configs/matieres (route pilote RLS) exécute son callback via
+    // avecContexteEtablissement(etablissementId, fn) — on rejoue le même
+    // mock knex `db` en guise de `trx`, cf. commentaire jest.mock ci-dessus.
+    avecContexteEtablissement.mockImplementation((etablissementId, fn) => fn(db));
   });
 
   // ── GET /configs/coefficients ───────────────────────────────────

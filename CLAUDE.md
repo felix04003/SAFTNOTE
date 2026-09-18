@@ -19,8 +19,9 @@ d'Afrique de l'Ouest francophone (Sénégal, Côte d'Ivoire, Mali, Burkina Faso�
 **Stack technique :**
 - Backend : Node.js 20 + Express + PostgreSQL 15 + Redis + BullMQ
 - Mobile : React Native 0.76 + Expo SDK 52 + SQLite (offline-first)
-- Dashboard : HTML/CSS/JS vanilla (aucune dépendance NPM)
-- Infra : Docker Compose (dev) + PM2 + Nginx (prod)
+- Dashboard : Vite + TypeScript + Vitest (compilé en `dashboard/dist/`, plus « zéro dépendance NPM » depuis la migration vers l'outillage Vite)
+- Infra : Docker Compose (dev) ; déploiement cible **Render** (API + Postgres + Redis managés via `render.yaml`) ; Nginx/Docker Compose prod (`docker-compose.prod.yml`) documenté comme alternative auto-hébergée (VPS), voir `docs/DEPLOY_VPS.md`
+- Migrations : dossier unique `migrations/` à la racine (000→018), appliqué par `backend/src/utils/migrate.js` (table de suivi `_migrations`) ; seeds de test séparés dans `backend/tests/seeds/`, jamais appliqués en production (`TRUST_PROXY_HOPS` documenté dans `.env.example` pour le comptage IP réel derrière Nginx/Render)
 
 ---
 
@@ -70,9 +71,10 @@ ecolemanager/
 │   │   ├── middleware/             ✅ auth JWT, erreurs, rate-limit, validation
 │   │   ├── workers/                ✅ notification.worker.js
 │   │   └── utils/                  ✅ helpers divers
-│   ├── tests/                     ✅ 60 tests unitaires (9 suites Jest)
+│   ├── tests/                     ✅ 172 tests unitaires/intégration (22 suites Jest)
 │   │   ├── helpers/               ✅ mockKnex, testApp, fixtures
-│   │   └── domains/               ✅ 9 fichiers de test
+│   │   ├── seeds/                 ✅ seeds de test SQL (jamais appliqués en prod)
+│   │   └── domains/               ✅ fichiers de test par domaine
 │   ├── .eslintrc.js               ✅ ESLint config
 │   ├── jest.config.js             ✅ Configuration Jest
 │   ├── package.json
@@ -112,32 +114,30 @@ ecolemanager/
 │   ├── 005_domaine5_securite.sql   ✅ sessions, tokens, audit
 │   ├── 006_donnees_reference.sql   ✅ seed données de référence
 │   ├── 007_vues_et_fonctions.sql   ✅ vues calculées, fonctions PL/pgSQL
-│   └── run_all_migrations.sql      ✅ Script d'exécution complet
+│   ├── 008_index_performance.sql   ✅ index de performance
+│   ├── 009_fix_statut_checks.sql   ✅ contraintes CHECK statuts
+│   ├── 010_security_hardening.sql  ✅ durcissement sécurité
+│   ├── 011_rgpd_consentements.sql  ✅ consentements RGPD
+│   ├── 012_chiffrement_medical.sql ✅ chiffrement données médicales
+│   ├── 013_fix_presences_statut_non_saisi.sql      ✅ statuts appels/presences
+│   ├── 014_fix_notes_voir_eleve_permissions.sql    ✅ permission notes.voir_eleve (staff)
+│   ├── 015_fix_discipline_enseignant_permissions.sql ✅ permissions discipline (enseignant)
+│   └── run_all_migrations.sql      ⚠️  Legacy psql (\i + schema_migrations) —
+│                                       préférer `cd backend && npm run migrate`
 │
-└── dashboard/              ← Dashboard admin (HTML/CSS/JS vanilla — zéro dépendance NPM)
-    ├── index.html          ✅ Structure HTML + scripts externes
+│   Seeds de test (hors migrations) : backend/tests/seeds/*.sql,
+│   appliqués par `cd backend && npm run seed:test` (jamais en production).
+│
+└── dashboard/              ← Dashboard admin (Vite + TypeScript + Vitest, compilé en dist/)
+    ├── index.html          ✅ Structure HTML (scripts compilés par Vite, plus de js/ legacy)
     ├── login.html          ✅ Page de connexion (identifiant, mdp, code établissement)
     ├── inscription.html    ✅ Page de création d'un nouvel établissement (formulaire setup)
     ├── css/
     │   └── style.css       ✅ Toute la feuille de style
-    └── js/
-        ├── config.js       ✅ API_BASE, TOKEN_KEY, USER_KEY
-        ├── api.js          ✅ Fetch wrapper avec JWT, 401 redirect, ApiError
-        ├── auth.js         ✅ login(), logout(), getUser(), requireAuth(), populateSidebar()
-        ├── ui.js           ✅ toast(), openModal(), closeModal(), sparkline(), cn(), init2()
-        ├── router.js       ✅ goto(), TITRES, PAGE_HOOKS, hash routing
-        ├── data-mock.js    ⚠️  Données fictives — en cours de retrait (remplacé par API réelle)
-        ├── app.js          ✅ DOMContentLoaded init, auth check, sparklines, hash routing
-        └── pages/
-            ├── eleves.js       ✅ GET /eleves (paginé, recherche, filtre classe)
-            ├── classes.js      ✅ GET /classes (grille avec moyennes, présence)
-            ├── enseignants.js  ✅ GET /enseignants (tableau)
-            ├── notes.js        ✅ GET /evaluations
-            ├── bulletins.js    ✅ GET /bulletins
-            ├── absences.js     ✅ GET /presences/absences
-            ├── edt.js          ✅ GET /enseignants/moi/edt
-            ├── alertes.js      ✅ GET /evenements
-            └── parametres.js   ✅ GET/PUT /etablissement
+    ├── src/                ✅ Sources TypeScript (remplace l'ancien dashboard/js/, supprimé — lot K)
+    ├── tests/              ✅ 65 tests Vitest
+    ├── vite.config.ts / vitest.config.ts / tsconfig.json
+    └── dist/               ← build de production (généré, non versionné)
 ```
 
 ---
@@ -157,7 +157,12 @@ Tous les 9 domaines sont **implémentés et testés** (60/60 tests passent).
 | 7 | discipline | 4 endpoints (sanctions CRUD, dossier élève) | 232 | 5 ✅ |
 | 8 | evenements | 4 endpoints (agenda CRUD) | 183 | 6 ✅ |
 | 9 | securite | 4 endpoints (audit, sessions, blocage) | 180 | 7 ✅ |
-| **Total** | | **39 endpoints** | **2 323** | **60/60** |
+| **Total (état initial, 9 domaines)** | | **39 endpoints** | **2 323** | **60/60** |
+
+> Note : ce tableau reflète l'implémentation initiale des 9 domaines. Depuis, la campagne de
+> correction de l'audit 2026-09 (lots A→J) a ajouté des domaines, migrations et tests
+> supplémentaires. **Total actuel backend : 172 tests (22 suites Jest)**, voir `npm test` dans
+> `backend/`.
 
 ### 📖 Documentation API
 
@@ -170,20 +175,19 @@ Tous les 9 domaines sont **implémentés et testés** (60/60 tests passent).
 - **Workflow** : `.github/workflows/ci.yml`
 - **Déclenché sur** : push `main`/`develop` + pull requests vers `main`
 - **Jobs** :
-  1. `backend-lint-test` — ESLint + Jest (108 tests, couverture)
+  1. `backend-lint-test` — ESLint + Jest (172 tests, couverture)
   2. `backend-docker` — Build image Docker (après tests)
   3. `mobile-typecheck` — TypeScript `tsc --noEmit`
 - **ESLint** : `backend/.eslintrc.js` — 0 erreurs, <60 warnings
 
 ### 🖥️ Dashboard — Architecture
 
-- **Approche** : HTML/CSS/JS vanilla, zéro framework, zéro build step
-- **Auth** : JWT stocké dans `localStorage`, redirect vers `login.html` si 401
-- **API client** : `js/api.js` — fetch wrapper avec token automatique
-- **Fallback mock** : Les données fictives (`data-mock.js`) sont en cours de retrait — les pages appellent désormais l'API réelle
-- **Routing** : Hash-based (`#eleves`, `#notes`, etc.) via `js/router.js`
-- **Pages dynamiques** : Chaque `js/pages/*.js` s'enregistre dans `PAGE_HOOKS[nomPage]`
-- **Serveur dev** : `npx serve dashboard -l 3001` (ou via `preview_start dashboard`)
+- **Approche** : Vite + TypeScript + Vitest, buildé en `dashboard/dist/` (l'ancien `dashboard/js/`
+  vanilla non compilé a été supprimé au lot K, hygiène dépôt — il n'était plus référencé par aucun HTML)
+- **Auth** : JWT stocké dans `sessionStorage` (migré depuis `localStorage` au lot H), redirect vers `login.html` si 401
+- **Routing** : Hash-based (`#eleves`, `#notes`, etc.)
+- **Tests** : 65 tests Vitest (`dashboard/tests/`)
+- **Serveur dev** : `npm run dev` dans `dashboard/` (Vite) ; build prod : `npm run build`
 
 ### 🔜 Travail restant
 
@@ -194,7 +198,8 @@ Tous les 9 domaines sont **implémentés et testés** (60/60 tests passent).
 - [x] Backend : domaine setup — création établissement + directeur (POST /setup, POST /inscription, GET /setup/status, GET /dashboard)
 - [x] Dashboard : page inscription.html — formulaire de création d'établissement
 - [x] Dashboard : retrait des données fictives (data-mock.js) — pages branchées sur API réelle
-- [ ] Build mobile EAS + déploiement serveur (PM2 + Nginx)
+- [x] Déploiement Render (API + Postgres + Redis managés, `render.yaml`) ; alternative VPS/Docker+Nginx documentée dans `docs/DEPLOY_VPS.md`
+- [ ] Build mobile EAS + publication stores
 - [x] Tests d'intégration avec vraie base PostgreSQL
 - [x] Optimisations performance (index SQL, cache Redis stratégique)
 - [x] Monitoring (health checks avancés, métriques, alertes)
@@ -327,8 +332,11 @@ cd backend && npm run dev
 # Mobile en mode Expo
 cd mobile && npx expo start
 
-# Exécuter les migrations
-psql $DATABASE_URL -f migrations/run_all_migrations.sql
+# Exécuter les migrations (runner idempotent, dossier migrations/ racine)
+cd backend && npm run migrate
+
+# Injecter les comptes de test E2E (dev uniquement)
+cd backend && npm run seed:test
 
 # ── LINT & TESTS ─────────────────────────────────────────────────
 
@@ -345,7 +353,7 @@ docker exec -it ecolemanager_postgres psql -U ecolemanager -d ecolemanager_dev
 
 # Reset complet (⚠️ supprime toutes les données)
 docker-compose down -v && docker-compose up -d
-sleep 5 && psql $DATABASE_URL -f migrations/run_all_migrations.sql
+sleep 5 && (cd backend && npm run migrate && npm run seed:test)
 
 # ── DÉPLOIEMENT ──────────────────────────────────────────────────
 
@@ -425,6 +433,10 @@ META_WA_TOKEN         → WhatsApp Business API
 | 17 | Tests d'intégration (73 tests, 10 suites, vraie DB) | ✅ |
 | 18 | Monitoring `/health/deep` + `/metrics` + alertes SMS | ✅ |
 | 19 | Build mobile EAS + CI verte (108 tests, TypeScript, Docker) | ✅ |
+| 20 | Campagne de correction audit 2026-09 (lots A→K : migrations unifiées, sessions/refresh, IDOR bulletins, stockage S3, OTP prod, infra Render/Nginx, dépendances, sécurité dashboard, hygiène dépôt) | ✅ (voir `docs/CHANGELOG.md`) |
+
+> Les compteurs de tests ci-dessus sont historiques (au moment de chaque étape). Compteurs
+> actuels : backend 172 tests (22 suites Jest), dashboard 65 tests (Vitest).
 
 ---
 

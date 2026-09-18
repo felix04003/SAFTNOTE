@@ -2,13 +2,22 @@
 
 const { execSync } = require('child_process');
 const path = require('path');
-const fs = require('fs');
+
+const { run: runMigrations } = require('../../src/utils/migrate');
 
 /**
  * globalSetup — Crée la base de test et exécute les migrations.
  *
- * Utilise `docker exec` sur le conteneur ecole_postgres
- * (psql n'est pas installé localement).
+ * La création/suppression de la base passe par `docker exec` sur le conteneur
+ * ecole_postgres (psql n'est pas installé localement) ; les migrations sont
+ * ensuite appliquées par le runner Node `src/utils/migrate.js`, le même qu'en
+ * dev, sur Render et en production — plus de liste de fichiers à maintenir ici.
+ *
+ * Les seeds `backend/tests/seeds/*.sql` ne sont volontairement PAS appliqués :
+ * ils ciblent la base de développement (parcours E2E Playwright, établissement
+ * TEST_LBD) et s'appuient sur des données créées par l'application. Les tests
+ * d'intégration construisent leurs propres fixtures (tests/integration/helpers.js)
+ * après un TRUNCATE complet, qui effacerait ces seeds de toute façon.
  */
 module.exports = async function globalSetup() {
   const DB_NAME = 'ecole_manager_test';
@@ -27,20 +36,6 @@ module.exports = async function globalSetup() {
     ).toString();
   }
 
-  /**
-   * Exécute un fichier SQL copié dans le conteneur.
-   */
-  function psqlFile(database, hostPath) {
-    const containerPath = `/tmp/${path.basename(hostPath)}`;
-    // Copier le fichier dans le conteneur
-    execSync(`docker cp "${hostPath}" ${CONTAINER}:${containerPath}`, opts);
-    // Exécuter
-    return execSync(
-      `docker exec ${CONTAINER} psql -U ${DB_USER} -d ${database} -f ${containerPath}`,
-      opts
-    ).toString();
-  }
-
   // 1. Drop + Create la base de test
   try {
     psql('postgres', `DROP DATABASE IF EXISTS ${DB_NAME};`);
@@ -49,40 +44,27 @@ module.exports = async function globalSetup() {
   psql('postgres', `CREATE DATABASE ${DB_NAME} OWNER ${DB_USER};`);
   console.log(`✓ Base ${DB_NAME} créée`);
 
-  // 2. Appliquer les migrations
-  const migrationsDir = path.resolve(__dirname, '..', '..', '..', 'migrations');
+  // 2. Appliquer les migrations avec le runner de production.
+  //    globalSetup s'exécute avant setupFiles (setEnv.js) : on pose donc
+  //    explicitement la connexion et le dossier de migrations, puis on
+  //    restaure l'environnement pour ne pas polluer les workers Jest.
+  const host     = process.env.POSTGRES_HOST     || 'localhost';
+  const port     = process.env.POSTGRES_PORT     || '5433';
+  const password = process.env.POSTGRES_PASSWORD || 'ecole_password_dev';
 
-  const migrationFiles = [
-    '000_extensions.sql',
-    '000_extensions_types.sql',
-    '001_domaine1_identites.sql',
-    '002_domaine2_acteurs.sql',
-    '003_domaine3_pedagogie.sql',
-    '004_domaine4_vie_scolaire.sql',
-    '005_domaine5_securite.sql',
-    '006_donnees_reference.sql',
-    '007_vues_et_fonctions.sql',
-    '008_index_performance.sql',
-    '009_fix_statut_checks.sql',
-    '010_security_hardening.sql',
-    '011_rgpd_consentements.sql',
-    '012_chiffrement_medical.sql',
-  ];
+  const ancienneUrl = process.env.DATABASE_URL;
+  const ancienDir   = process.env.MIGRATIONS_DIR;
 
-  for (const file of migrationFiles) {
-    const filePath = path.join(migrationsDir, file);
-    if (!fs.existsSync(filePath)) {
-      console.warn(`  ⚠ ${file} non trouvé, ignoré`);
-      continue;
-    }
-    try {
-      psqlFile(DB_NAME, filePath);
-      console.log(`  ✓ ${file}`);
-    } catch (err) {
-      const stderr = err.stderr?.toString().slice(0, 300) || err.message;
-      console.error(`  ✗ ${file} — ${stderr}`);
-      throw new Error(`Migration ${file} échouée`);
-    }
+  process.env.DATABASE_URL   = `postgresql://${DB_USER}:${password}@${host}:${port}/${DB_NAME}`;
+  process.env.MIGRATIONS_DIR = path.resolve(__dirname, '..', '..', '..', 'migrations');
+
+  try {
+    await runMigrations();
+  } finally {
+    if (ancienneUrl === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = ancienneUrl;
+    if (ancienDir === undefined) delete process.env.MIGRATIONS_DIR;
+    else process.env.MIGRATIONS_DIR = ancienDir;
   }
 
   // 3. Corriger journal_audit si la table partitionnée n'a pas été créée

@@ -10,6 +10,7 @@ const { isolerEtablissement } = require('../middleware/permission.middleware');
 const { valider }    = require('../middleware/validate.middleware');
 const { ok }         = require('../utils/reponse');
 const logger         = require('../utils/logger');
+const { getUrlSignee, DUREE_URL_SIGNEE_SECONDES } = require('../infrastructure/storage/storage.service');
 
 const router = express.Router();
 
@@ -136,7 +137,7 @@ router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) =>
           .join('periodes as p', 'p.id', 'mg.periode_id')
           .where({ 'pe.parent_id': utilisateur_id, 'mg.bulletin_genere': true })
           .where('mg.updated_at', '>', syncDepuis)
-          .select('i.eleve_id', 'mg.moyenne_generale', 'mg.rang', 'mg.rang_sur', 'mg.mention', 'mg.bulletin_url', 'p.numero as trimestre'),
+          .select('i.eleve_id', 'mg.moyenne_generale', 'mg.rang', 'mg.rang_sur', 'mg.mention', 'mg.bulletin_key', 'p.numero as trimestre'),
 
         // EDT classes des enfants
         db('emplois_du_temps as edt')
@@ -152,7 +153,23 @@ router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) =>
           .distinct(),
       ]);
 
-      payload = { enfants, notes, absences, bulletins, edt };
+      // Lot D (finding C2) : bulletin_key (clé S3 interne) n'est jamais exposé
+      // tel quel ; le mobile continue de consommer un champ `bulletin_url`
+      // (mobile/src/services/sync/syncService.ts, mobile/app/(app)/parent/
+      // bulletins.tsx) — on y met une URL signée fraîche. ATTENTION : cette
+      // URL expire au bout d'1h alors que le payload de sync peut rester en
+      // cache local plus longtemps ; si l'utilisateur tape sur "Télécharger"
+      // après expiration, le lien échouera. Limitation connue et non résolue
+      // dans ce lot — une resynchronisation ou un endpoint de re-signature à
+      // la demande côté mobile serait nécessaire pour la lever complètement.
+      const bulletinsAvecUrl = await Promise.all(
+        bulletins.map(async ({ bulletin_key, ...reste }) => ({
+          ...reste,
+          bulletin_url: bulletin_key ? await getUrlSignee(bulletin_key, DUREE_URL_SIGNEE_SECONDES) : null,
+        }))
+      );
+
+      payload = { enfants, notes, absences, bulletins: bulletinsAvecUrl, edt };
     }
 
     return ok(res, { sync_at: syncAt, payload });
@@ -181,6 +198,33 @@ router.post('/sync/operations', authentifier, isolerEtablissement,
           case 'notes.saisir': {
             const { evaluation_id, eleve_id, inscription_id, valeur, est_absent, absence_justifiee } = op.payload;
 
+            // Audit 2026-09 (lot J -> correctif) : POST /sync/operations traite
+            // un batch hétérogène d'opérations, chacune avec ses propres
+            // identifiants dans op.payload — isolerEtablissement (qui ne
+            // connaît que req.params) ne peut pas les couvrir. On vérifie donc
+            // ici, par opération, que l'évaluation référencée appartient bien
+            // à l'établissement de la session AVANT toute écriture (même
+            // garde que isolerEtablissement pour le paramètre evaluation_id,
+            // et que PUT /evaluations/:evaluation_id/notes du domaine
+            // pédagogie). Sans ce garde, un enseignant authentifié pouvait
+            // saisir une note dans un établissement qui n'est pas le sien en
+            // devinant/obtenant un evaluation_id/eleve_id/inscription_id
+            // valide d'un autre établissement.
+            const evaluationRow = await db('evaluations as ev')
+              .join('affectations_enseignants as ae', 'ae.id', 'ev.affectation_id')
+              .join('classes as c', 'c.id', 'ae.classe_id')
+              .join('annees_scolaires as a', 'a.id', 'c.annee_scolaire_id')
+              .where({ 'ev.id': evaluation_id, 'a.etablissement_id': req.etablissement_id })
+              .first('ev.id', 'ae.classe_id');
+
+            if (!evaluationRow) {
+              // 404 déguisé en échec d'opération plutôt qu'un 403 : on ne
+              // confirme pas l'existence d'une évaluation d'un autre
+              // établissement (cohérent avec isolerEtablissement).
+              resultats.push({ op_id: op.id, statut: 'erreur', code: 'RESSOURCE_INTROUVABLE' });
+              break;
+            }
+
             // notes.eleve_id référence eleves.id, mais le payload mobile suit
             // la même convention que le reste de l'API (utilisateurs.id — voir
             // GET /sync ci-dessus, section "eleves" pour l'enseignant, qui
@@ -201,6 +245,20 @@ router.post('/sync/operations', authentifier, isolerEtablissement,
               break;
             }
 
+            // Vérifier que l'inscription référencée appartient bien à CET
+            // élève ET à la classe de l'évaluation (donc au même
+            // établissement, déjà vérifié ci-dessus) — empêche de combiner un
+            // evaluation_id valide de l'établissement A avec un eleve_id/
+            // inscription_id forgé d'un établissement B.
+            const inscriptionRow = await db('inscriptions')
+              .where({ id: inscription_id, eleve_id: eleveRow.id, classe_id: evaluationRow.classe_id })
+              .first('id');
+
+            if (!inscriptionRow) {
+              resultats.push({ op_id: op.id, statut: 'erreur', code: 'RESSOURCE_INTROUVABLE' });
+              break;
+            }
+
             await db('notes')
               .insert({ id: uuid(), evaluation_id, eleve_id: eleveRow.id, inscription_id, valeur, est_absent, absence_justifiee, saisie_par: req.session.utilisateur_id })
               .onConflict(['evaluation_id', 'eleve_id'])
@@ -211,12 +269,42 @@ router.post('/sync/operations', authentifier, isolerEtablissement,
 
           case 'presences.saisir': {
             const { appel_id, inscription_id, statut, minutes_retard } = op.payload;
-            // Vérifier que l'appel n'est pas clôturé
-            const appel = await db('appels').where({ id: appel_id, statut: 'ouvert' }).first('id');
+            // Vérifier que l'appel n'est pas clôturé ET qu'il appartient bien
+            // à l'établissement de la session. appels n'a pas de colonne
+            // etablissement_id directe : il faut remonter emplois_du_temps ->
+            // affectations_enseignants -> classes -> annees_scolaires (même
+            // pattern que GET /appels/cours et POST /appels, domaine
+            // vie-scolaire). Audit 2026-09 : sans ce garde, un enseignant
+            // pouvait saisir une présence sur un appel d'un autre
+            // établissement en devinant/obtenant son appel_id.
+            const appel = await db('appels as ap')
+              .join('emplois_du_temps as edt', 'edt.id', 'ap.emploi_du_temps_id')
+              .join('affectations_enseignants as ae', 'ae.id', 'edt.affectation_id')
+              .join('classes as c', 'c.id', 'ae.classe_id')
+              .join('annees_scolaires as a', 'a.id', 'c.annee_scolaire_id')
+              .where({ 'ap.id': appel_id, 'ap.statut': 'ouvert', 'a.etablissement_id': req.etablissement_id })
+              .first('ap.id', 'ae.classe_id');
             if (!appel) {
+              // Un appel clôturé, inexistant, ou d'un autre établissement
+              // renvoie le même code : ne pas distinguer les deux derniers
+              // cas pour ne pas confirmer l'existence de l'appel ailleurs.
               resultats.push({ op_id: op.id, statut: 'erreur', code: 'APPEL_CLOTURE' });
               break;
             }
+
+            // Vérifier que l'inscription référencée appartient bien à la
+            // classe de cet appel (donc au même établissement) — empêche de
+            // combiner un appel_id valide de l'établissement A avec un
+            // inscription_id forgé d'un établissement B.
+            const inscriptionRow = await db('inscriptions')
+              .where({ id: inscription_id, classe_id: appel.classe_id })
+              .first('id');
+
+            if (!inscriptionRow) {
+              resultats.push({ op_id: op.id, statut: 'erreur', code: 'RESSOURCE_INTROUVABLE' });
+              break;
+            }
+
             // presences n'a pas de colonne updated_at — modifie_at (voir
             // migration 011 / GET /sync ci-dessus qui utilise déjà
             // COALESCE(modifie_at, saisie_at)). Reproduit en direct :

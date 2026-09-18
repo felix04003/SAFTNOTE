@@ -157,3 +157,22 @@ describe('GET /api/v1/eleves/:eleve_id', () => {
       .expect(404);
   });
 });
+
+// ── Audit 2026-09, finding 1 — bulletins.voir retirée du rôle eleve ──
+//
+// Décision utilisateur explicite : les élèves n'ont pas accès aux
+// bulletins. Migration 017 retire bulletins.voir du rôle eleve ;
+// aucune route dédiée self-service n'est créée en remplacement.
+
+describe('GET /api/v1/bulletins (accès élève — doit être refusé)', () => {
+  it('devrait refuser un élève authentifié, faute de permission bulletins.voir', async () => {
+    const eleveToken = await creerSession(seed.eleves[0].user.id, seed.etablissement.id);
+
+    const res = await request
+      .get('/api/v1/bulletins')
+      .set('Authorization', `Bearer ${eleveToken}`)
+      .expect(403);
+
+    expect(res.body.code).toBe('PERMISSION_INSUFFISANTE');
+  });
+});

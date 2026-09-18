@@ -139,3 +139,109 @@ describe('GET /api/v1/parents/moi/enfants/:id/absences', () => {
       });
   });
 });
+
+// ── Lot C (finding C4) — bulletins.voir retirée du rôle parent ───
+//
+// Un parent ne doit plus jamais pouvoir passer par les routes
+// génériques /bulletins* (non filtrées par parents_eleves — IDOR).
+// Il doit continuer à accéder aux bulletins de SES enfants via
+// /parents/moi/enfants/:id/bulletins (filtré par verifierLienParentEnfant).
+
+describe('GET /api/v1/bulletins (accès parent — doit être refusé)', () => {
+  it('devrait refuser un parent sans la permission bulletins.voir', async () => {
+    const res = await request
+      .get('/api/v1/bulletins')
+      .set('Authorization', `Bearer ${tokenParent}`)
+      .expect(403);
+
+    expect(res.body.code).toBe('PERMISSION_INSUFFISANTE');
+  });
+});
+
+describe('GET /api/v1/bulletins/:id (accès parent — doit être refusé)', () => {
+  it('devrait refuser un parent même pour le bulletin de son propre enfant', async () => {
+    // La permission manque avant même la résolution de :id — peu importe
+    // à qui appartient le bulletin, l'accès générique doit être coupé.
+    const res = await request
+      .get(`/api/v1/bulletins/${seed.eleves[0].eleve.id}`)
+      .set('Authorization', `Bearer ${tokenParent}`)
+      .expect(403);
+
+    expect(res.body.code).toBe('PERMISSION_INSUFFISANTE');
+  });
+
+  it('devrait refuser un parent pour le bulletin d\'un élève qui n\'est pas son enfant', async () => {
+    const res = await request
+      .get(`/api/v1/bulletins/${seed.eleves[1].eleve.id}`)
+      .set('Authorization', `Bearer ${tokenParent}`)
+      .expect(403);
+
+    expect(res.body.code).toBe('PERMISSION_INSUFFISANTE');
+  });
+});
+
+describe('GET /api/v1/bulletins/:id/download (accès parent — doit être refusé)', () => {
+  it('devrait refuser un parent, même pour un bulletin qui n\'est pas celui d\'un de ses enfants', async () => {
+    const res = await request
+      .get(`/api/v1/bulletins/${seed.eleves[1].eleve.id}/download`)
+      .set('Authorization', `Bearer ${tokenParent}`)
+      .expect(403);
+
+    expect(res.body.code).toBe('PERMISSION_INSUFFISANTE');
+  });
+});
+
+// ── Non-régression : la route dédiée continue de fonctionner ─────
+
+describe('GET /api/v1/parents/moi/enfants/:id/bulletins (non-régression)', () => {
+  it('devrait retourner 200 pour son propre enfant, sans dépendre de bulletins.voir', async () => {
+    const eleveId = seed.eleves[0].user.id;
+
+    const res = await request
+      .get(`/api/v1/parents/moi/enfants/${eleveId}/bulletins`)
+      .set('Authorization', `Bearer ${tokenParent}`)
+      .expect(200);
+
+    expect(res.body.succes).toBe(true);
+    expect(res.body.data).toHaveProperty('bulletins');
+    expect(Array.isArray(res.body.data.bulletins)).toBe(true);
+  });
+
+  it('devrait refuser l\'accès aux bulletins d\'un élève non lié au parent', async () => {
+    const autreEleveId = seed.eleves[1].user.id;
+
+    await request
+      .get(`/api/v1/parents/moi/enfants/${autreEleveId}/bulletins`)
+      .set('Authorization', `Bearer ${tokenParent}`)
+      .expect(403);
+  });
+});
+
+// ── Audit 2026-09, finding 2 — GET /moyennes/eleve/:eleve_id ─────
+//
+// Cette route était gardée par exigerPermission('notes.voir_eleve')
+// seul, sans vérifier que l'appelant est autorisé pour CET élève
+// précis (IDOR). Corrigé avec autoriserAccesEleve('notes.voir_eleve'),
+// même pattern que /parents/moi/enfants/:id/notes et /absences.
+
+describe('GET /api/v1/moyennes/eleve/:eleve_id (accès parent)', () => {
+  it('devrait refuser un parent pour un élève qui n\'est pas son enfant', async () => {
+    const autreEleveId = seed.eleves[1].user.id; // non lié à ce parent
+
+    await request
+      .get(`/api/v1/moyennes/eleve/${autreEleveId}`)
+      .set('Authorization', `Bearer ${tokenParent}`)
+      .expect(403);
+  });
+
+  it('devrait autoriser un parent pour son propre enfant', async () => {
+    const eleveId = seed.eleves[0].user.id;
+
+    const res = await request
+      .get(`/api/v1/moyennes/eleve/${eleveId}`)
+      .set('Authorization', `Bearer ${tokenParent}`)
+      .expect(200);
+
+    expect(res.body.succes).toBe(true);
+  });
+});

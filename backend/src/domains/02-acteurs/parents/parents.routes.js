@@ -7,6 +7,8 @@ const { authentifier } = require('../../../middleware/auth.middleware');
 const { isolerEtablissement } = require('../../../middleware/permission.middleware');
 const { ok, liste }  = require('../../../utils/reponse');
 const ApiError       = require('../../../utils/ApiError');
+const logger         = require('../../../utils/logger');
+const { getUrlSignee, DUREE_URL_SIGNEE_SECONDES } = require('../../../infrastructure/storage/storage.service');
 
 const router = express.Router();
 const auth   = authentifier;
@@ -296,7 +298,7 @@ router.get('/parents/moi/enfants/:id/bulletins', auth, isoler, async (req, res, 
         'mg.moyenne_generale', 'mg.rang', 'mg.rang_sur',
         'mg.mention', 'mg.decision_conseil', 'mg.appreciation_conseil',
         'mg.nb_absences_justifiees', 'mg.nb_absences_injustifiees', 'mg.nb_retards',
-        'mg.bulletin_url', 'mg.bulletin_genere_at', 'mg.valide_at'
+        'mg.bulletin_key', 'mg.bulletin_genere_at', 'mg.valide_at'
       );
 
     const bulletinsComplets = await Promise.all(
@@ -315,7 +317,23 @@ router.get('/parents/moi/enfants/:id/bulletins', auth, isoler, async (req, res, 
             'mm.moyenne', 'mm.coefficient', 'mm.rang_dans_classe',
             'mm.appreciation_enseignant', 'mm.est_complete'
           );
-        return { ...bulletin, matieres };
+
+        // Lot D (finding C2) : le champ SQL interne est bulletin_key (clé S3),
+        // mais le contrat JSON exposé au client (dashboard + mobile) reste
+        // `bulletin_url`, pour ne pas casser mobile/src/services/sync/syncService.ts
+        // ni mobile/app/(app)/parent/bulletins.tsx qui consomment ce nom de
+        // champ tel quel. La valeur exposée est désormais toujours une URL
+        // signée fraîche (jamais la clé brute), ou null si pas encore généré.
+        const { bulletin_key, ...resteBulletin } = bulletin;
+        let bulletin_url = null;
+        if (bulletin_key) {
+          bulletin_url = await getUrlSignee(bulletin_key, DUREE_URL_SIGNEE_SECONDES);
+          if (!bulletin_url) {
+            logger.warn('Bulletin parent: échec génération URL signée', { bulletinId: bulletin.id });
+          }
+        }
+
+        return { ...resteBulletin, bulletin_url, matieres };
       })
     );
 

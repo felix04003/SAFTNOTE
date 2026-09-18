@@ -21,8 +21,13 @@ export const authEventEmitter = new EventEmitter();
 // ── Classe ApiClient ─────────────────────────────────────────────
 class ApiClient {
   private token: string | null = null;
+  private refreshToken: string | null = null;
+  // Dédoublonne les rafraîchissements concurrents (plusieurs requêtes en
+  // 401 en même temps ne doivent déclencher qu'un seul appel /auth/refresh).
+  private rafraichissementEnCours: Promise<boolean> | null = null;
 
   setToken(t: string | null) { this.token = t; }
+  setRefreshToken(t: string | null) { this.refreshToken = t; }
 
   async estConnecte(): Promise<boolean> {
     const state = await Network.getNetworkStateAsync();
@@ -35,11 +40,50 @@ class ApiClient {
     return h;
   }
 
+  /**
+   * Tente un rafraîchissement du token via POST /auth/refresh.
+   * Utilise fetch() directement (pas this.request) pour éviter toute
+   * récursion. En cas de succès, met à jour le token/refresh_token en
+   * mémoire et émet 'token_rafraichi' pour que authStore les persiste.
+   */
+  private async tenterRafraichissement(): Promise<boolean> {
+    if (!this.refreshToken) return false;
+
+    if (!this.rafraichissementEnCours) {
+      this.rafraichissementEnCours = (async () => {
+        try {
+          const response = await fetch(`${BASE_URL}/auth/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh_token: this.refreshToken }),
+          });
+
+          if (!response.ok) return false;
+
+          const data = await response.json();
+          const payload = data.data ?? data;
+          if (!payload?.token || !payload?.refresh_token) return false;
+
+          this.setToken(payload.token);
+          this.setRefreshToken(payload.refresh_token);
+          authEventEmitter.emit('token_rafraichi', { token: payload.token, refresh_token: payload.refresh_token });
+          return true;
+        } catch {
+          return false;
+        } finally {
+          this.rafraichissementEnCours = null;
+        }
+      })();
+    }
+
+    return this.rafraichissementEnCours;
+  }
+
   async request<T = any>(
     method: string,
     path: string,
     body?: object,
-    opts: { tentatives?: number } = {}
+    opts: { tentatives?: number; _dejaRafraichi?: boolean } = {}
   ): Promise<T> {
     const url = `${BASE_URL}${path}`;
     const tentativesMax = opts.tentatives ?? 2;
@@ -52,8 +96,15 @@ class ApiClient {
           ...(body ? { body: JSON.stringify(body) } : {}),
         });
 
-        // Token expiré ou révoqué
+        // Token expiré ou révoqué : tenter un refresh une seule fois puis
+        // rejouer la requête d'origine, sinon forcer la déconnexion.
         if (response.status === 401) {
+          if (!opts._dejaRafraichi) {
+            const rafraichi = await this.tenterRafraichissement();
+            if (rafraichi) {
+              return this.request<T>(method, path, body, { ...opts, _dejaRafraichi: true });
+            }
+          }
           authEventEmitter.emit('deconnexion');
           throw new ApiError(401, 'Session expirée — reconnectez-vous', 'SESSION_EXPIREE');
         }
