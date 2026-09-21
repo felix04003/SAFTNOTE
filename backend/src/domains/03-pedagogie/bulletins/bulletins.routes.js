@@ -11,6 +11,7 @@ const { ok, liste, paginee, getPagination } = require('../../../utils/reponse');
 const ApiError       = require('../../../utils/ApiError');
 const logger         = require('../../../utils/logger');
 const { enqueuerGenerationBulletins, getQueue, QUEUES } = require('../../../infrastructure/queue/bullmq');
+const { getUrlSignee, isDisponible, DUREE_URL_SIGNEE_SECONDES } = require('../../../infrastructure/storage/storage.service');
 
 const router = express.Router();
 const auth   = authentifier;
@@ -120,10 +121,18 @@ router.get('/bulletins', auth, isoler, perm('bulletins.voir'), async (req, res, 
         'p.numero as trimestre', 'p.libelle as periode',
         'mg.moyenne_generale', 'mg.rang', 'mg.rang_sur',
         'mg.mention', 'mg.decision_conseil',
-        'mg.bulletin_genere', 'mg.bulletin_url', 'mg.valide_at'
+        'mg.bulletin_genere', 'mg.bulletin_key', 'mg.valide_at'
       );
 
-    return paginee(res, bulletins, { total: parseInt(count), page, limite });
+    // Lot D (finding C2) : ne plus exposer bulletin_key (clé interne S3) ni une
+    // URL non signée — seule GET /bulletins/:id/download génère une URL signée
+    // fraîche. On expose ici juste un booléen de disponibilité pour l'UI liste.
+    const bulletinsSansCle = bulletins.map(({ bulletin_key, ...reste }) => ({
+      ...reste,
+      bulletin_disponible: Boolean(bulletin_key),
+    }));
+
+    return paginee(res, bulletinsSansCle, { total: parseInt(count), page, limite });
   } catch (err) { next(err); }
 });
 
@@ -196,8 +205,13 @@ router.get('/bulletins/:id', auth, isoler, perm('bulletins.voir'), async (req, r
         retards: bulletin.nb_retards,
       },
       validation: {
+        // Lot D (finding C2) : ne plus exposer bulletin_key (clé S3 interne) ni
+        // d'URL non signée ici — GET /bulletins/:id/download génère l'URL
+        // signée à la demande. Aucun usage de ce champ côté dashboard
+        // (vérifié dans dashboard/src/pages/bulletins.ts) ni mobile pour cet
+        // endpoint précis, donc pas de contrat à préserver.
         valide_at: bulletin.valide_at, bulletin_genere: bulletin.bulletin_genere,
-        bulletin_url: bulletin.bulletin_url,
+        bulletin_disponible: Boolean(bulletin.bulletin_key),
       },
     });
   } catch (err) { next(err); }
@@ -309,19 +323,34 @@ router.put('/bulletins/:id/valider', auth, isoler, perm('bulletins.valider'),
 // ═════════════════════════════════════════════════════════════════
 router.get('/bulletins/:id/download', auth, isoler, perm('bulletins.voir'), async (req, res, next) => {
   try {
+    if (!isDisponible()) {
+      throw ApiError.serviceIndisponible(
+        'Le service de stockage des bulletins est indisponible',
+        'STOCKAGE_INDISPONIBLE'
+      );
+    }
+
     const db = getDB();
 
     const bulletin = await db('moyennes_generales as mg')
       .join('inscriptions as i',     'i.id', 'mg.inscription_id')
       .join('annees_scolaires as a', 'a.id', 'i.annee_scolaire_id')
       .where({ 'mg.id': req.params.id, 'a.etablissement_id': req.etablissement_id, 'mg.bulletin_genere': true })
-      .first('mg.bulletin_url', 'mg.valide_at');
+      .first('mg.bulletin_key', 'mg.valide_at');
 
     if (!bulletin) throw ApiError.nonTrouve('Bulletin introuvable ou non encore généré');
     if (!bulletin.valide_at) throw ApiError.interdit('Ce bulletin n\'a pas encore été validé');
-    if (!bulletin.bulletin_url) throw ApiError.nonTrouve('Le fichier PDF n\'est pas encore disponible');
+    if (!bulletin.bulletin_key) throw ApiError.nonTrouve('Le fichier PDF n\'est pas encore disponible');
 
-    return ok(res, { download_url: bulletin.bulletin_url, expire_dans: '1h' });
+    const downloadUrl = await getUrlSignee(bulletin.bulletin_key, DUREE_URL_SIGNEE_SECONDES);
+    if (!downloadUrl) {
+      throw ApiError.serviceIndisponible(
+        'Échec de génération de l\'URL de téléchargement',
+        'STOCKAGE_INDISPONIBLE'
+      );
+    }
+
+    return ok(res, { download_url: downloadUrl, expire_dans: '1h' });
   } catch (err) { next(err); }
 });
 

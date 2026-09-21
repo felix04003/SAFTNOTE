@@ -57,9 +57,11 @@ async function purgerDonnees() {
     const politique = await db('politique_securite')
       .min('conservation_audit_jours as min_jours')
       .first();
-    const joursConservation = politique?.min_jours || 365;
+    const valeurBrute = politique?.min_jours;
+    // Garde : n'accepter qu'un entier positif issu de la base, sinon repli sur la valeur par défaut.
+    const joursConservation = Number.isInteger(valeurBrute) && valeurBrute > 0 ? valeurBrute : 365;
     const deleted = await db('journal_audit')
-      .where('created_at', '<', db.raw(`NOW() - INTERVAL '${joursConservation} days'`))
+      .where('created_at', '<', db.raw("NOW() - (? || ' days')::interval", [joursConservation]))
       .delete();
     resultats.journal_audit = deleted;
   } catch (err) {

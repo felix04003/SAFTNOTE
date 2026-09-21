@@ -47,6 +47,10 @@ class ApiError extends Error {
   static erreurServeur(message = 'Erreur interne du serveur') {
     return new ApiError(500, message, 'ERREUR_SERVEUR');
   }
+
+  static serviceIndisponible(message = 'Service temporairement indisponible', code = 'SERVICE_INDISPONIBLE') {
+    return new ApiError(503, message, code);
+  }
 }
 
 module.exports = ApiError;

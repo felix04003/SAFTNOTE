@@ -4,6 +4,20 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>EcoleManager — Inscription</title>
+<!-- CSP (revue code-reviewer, lot H) :
+     - Pas de frame-ancestors : cette directive est ignorée par les
+       navigateurs quand la CSP est livrée via une balise <meta> (spec CSP3 —
+       comme report-uri/report-to/sandbox, seul un en-tête HTTP la fait
+       respecter). La protection anti-clickjacking réelle vient de l'en-tête
+       X-Frame-Options: DENY (render.yaml, service ecolemanager-dashboard).
+     - connect-src est codé en dur sur l'URL de prod et DOIT être mis à jour
+       manuellement dans les 7 fichiers HTML si VITE_API_BASE change (voir
+       dashboard/.env.example) — sinon tous les fetch() sont bloqués
+       silencieusement par la CSP (erreur réseau opaque, rien dans l'UI).
+     - style-src garde 'unsafe-inline' volontairement, uniquement pour le
+       <link> Google Fonts ci-dessous — sans rapport avec le compromis
+       script-src 'unsafe-inline' des pages index/enseignant/parent.html. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self' https://ecolemanager-api.onrender.com; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; form-action 'self';">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">

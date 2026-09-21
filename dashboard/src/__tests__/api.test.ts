@@ -24,6 +24,7 @@ describe('Api.get', () => {
   beforeEach(() => {
     vi.mocked(fetch).mockClear();
     localStorage.clear();
+    sessionStorage.clear();
   });
 
   it('appelle fetch avec la méthode GET', async () => {
@@ -35,8 +36,8 @@ describe('Api.get', () => {
     );
   });
 
-  it('inclut le token Authorization si présent', async () => {
-    localStorage.setItem(CONFIG.TOKEN_KEY, 'mon-token-jwt');
+  it('inclut le token Authorization si présent (sessionStorage — lot H, finding E6)', async () => {
+    sessionStorage.setItem(CONFIG.TOKEN_KEY, 'mon-token-jwt');
     mockFetch(200, true, { success: true, data: {} });
     await Api.get('/protected');
     const opts = vi.mocked(fetch).mock.calls[0][1] as RequestInit;
@@ -93,6 +94,51 @@ describe('Api.put', () => {
       expect.any(String),
       expect.objectContaining({ method: 'PUT' }),
     );
+  });
+});
+
+describe('Api.request — 401 avec refresh token (B5)', () => {
+  beforeEach(() => {
+    vi.mocked(fetch).mockClear();
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
+  it('401 puis refresh réussi → requête rejouée avec succès', async () => {
+    sessionStorage.setItem(CONFIG.REFRESH_TOKEN_KEY, 'ancien-refresh-token');
+
+    mockFetch(401, false, { error: 'Token expiré' });                                   // 1er appel /secret
+    mockFetch(200, true, { data: { token: 'nouveau-token', refresh_token: 'nouveau-refresh' } }); // POST /auth/refresh
+    mockFetch(200, true, { success: true, data: { ok: true } });                        // /secret rejoué
+
+    const result = await Api.get('/secret');
+
+    expect(result).toEqual({ success: true, data: { ok: true } });
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(fetch).mock.calls[1][0]).toContain('/auth/refresh');
+    expect(sessionStorage.getItem(CONFIG.TOKEN_KEY)).toBe('nouveau-token');
+    expect(sessionStorage.getItem(CONFIG.REFRESH_TOKEN_KEY)).toBe('nouveau-refresh');
+  });
+
+  it('401 puis refresh échoué → redirige vers login.html comme avant, pas de boucle', async () => {
+    sessionStorage.setItem(CONFIG.REFRESH_TOKEN_KEY, 'ancien-refresh-token');
+
+    mockFetch(401, false, { error: 'Token expiré' });      // 1er appel /secret
+    mockFetch(401, false, { error: 'Refresh invalide' });  // POST /auth/refresh échoue
+
+    await expect(Api.get('/secret')).rejects.toBeInstanceOf(ApiError);
+
+    expect(fetch).toHaveBeenCalledTimes(2); // pas de 3e appel (pas de rejouer)
+    expect(window.location.href).toContain('login.html');
+  });
+
+  it('401 sans refresh token en sessionStorage → redirige immédiatement (comportement inchangé)', async () => {
+    mockFetch(401, false, { error: 'Non autorisé' });
+
+    await expect(Api.get('/secret')).rejects.toBeInstanceOf(ApiError);
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(window.location.href).toContain('login.html');
   });
 });
 

@@ -41,6 +41,11 @@ export POSTGRES_PORT="5433"
 export POSTGRES_PASSWORD="ecole_password_dev"
 
 # ── 4. Lancer les tests ──────────────────────────────────────
+# La base ecole_manager_test est (re)créée puis migrée par
+# backend/tests/integration/globalSetup.js, qui appelle le runner
+# src/utils/migrate.js (migrations/ à la racine, 000 → 015).
+# Les seeds E2E (backend/tests/seeds/) ne concernent que la base de
+# développement : `cd backend && npm run migrate && npm run seed:test`.
 echo ""
 echo "▶ Lancement des tests d'intégration…"
 echo ""

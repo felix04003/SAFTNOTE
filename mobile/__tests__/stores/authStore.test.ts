@@ -24,18 +24,37 @@ jest.mock('expo-sqlite', () => ({
   openDatabaseAsync: jest.fn().mockResolvedValue(mockDbInstance),
 }));
 
-const mockApiSetToken   = jest.fn();
-const mockConnexion     = jest.fn();
-const mockValiderOTP    = jest.fn();
-const mockDeconnexion   = jest.fn().mockResolvedValue(undefined);
+const mockApiSetToken        = jest.fn();
+const mockApiSetRefreshToken = jest.fn();
+const mockConnexion          = jest.fn();
+const mockValiderOTP         = jest.fn();
+const mockDeconnexion        = jest.fn().mockResolvedValue(undefined);
+
+// Emetteur minimal réutilisé pour simuler 'token_rafraichi' émis par
+// ApiClient après un refresh réussi (voir client.ts).
+class MockEventEmitter {
+  private listeners: Record<string, Function[]> = {};
+  on(event: string, fn: Function) {
+    this.listeners[event] = [...(this.listeners[event] || []), fn];
+    return () => { this.listeners[event] = (this.listeners[event] || []).filter(f => f !== fn); };
+  }
+  emit(event: string, ...args: any[]) {
+    (this.listeners[event] || []).forEach(fn => fn(...args));
+  }
+}
+const mockAuthEventEmitter = new MockEventEmitter();
 
 jest.mock('../../src/services/api/client', () => ({
-  api: { setToken: (...args: any[]) => mockApiSetToken(...args) },
+  api: {
+    setToken:        (...args: any[]) => mockApiSetToken(...args),
+    setRefreshToken: (...args: any[]) => mockApiSetRefreshToken(...args),
+  },
   authApi: {
     connexion:   (...args: any[]) => mockConnexion(...args),
     validerOTP:  (...args: any[]) => mockValiderOTP(...args),
     deconnexion: () => mockDeconnexion(),
   },
+  authEventEmitter: mockAuthEventEmitter,
 }));
 
 jest.mock('../../src/services/storage/database', () => ({
@@ -43,8 +62,13 @@ jest.mock('../../src/services/storage/database', () => ({
 }));
 
 // ── Import sous test ─────────────────────────────────────────────
+// require() (pas `import`) : authStore.ts enregistre un listener
+// 'token_rafraichi' dès son chargement, donc mockAuthEventEmitter doit déjà
+// être initialisé. Les `import` ES sont hoissés par Babel au-dessus des
+// `const` de ce fichier ; un require() explicite ici garantit l'ordre
+// d'exécution réel (après la définition de mockAuthEventEmitter ci-dessus).
 
-import { useAuthStore } from '../../src/stores/authStore';
+const { useAuthStore } = require('../../src/stores/authStore');
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -58,8 +82,11 @@ const SESSION_FIXTURE = {
 
 const TOKEN_FIXTURE = 'jwt.token.fixture';
 
+const REFRESH_TOKEN_FIXTURE = 'refresh.token.fixture';
+
 const API_RESPONSE = {
   token: TOKEN_FIXTURE,
+  refresh_token: REFRESH_TOKEN_FIXTURE,
   utilisateur: {
     id:               'user-001',
     etablissement_id: 'etab-001',
@@ -87,6 +114,7 @@ describe('chargerSession()', () => {
   it('charge la session depuis SecureStore si token et session present', async () => {
     mockGetItemAsync
       .mockResolvedValueOnce(TOKEN_FIXTURE)
+      .mockResolvedValueOnce(REFRESH_TOKEN_FIXTURE)
       .mockResolvedValueOnce(JSON.stringify(SESSION_FIXTURE));
 
     await useAuthStore.getState().chargerSession();
@@ -96,6 +124,7 @@ describe('chargerSession()', () => {
     expect(state.token).toBe(TOKEN_FIXTURE);
     expect(state.session?.utilisateur_id).toBe('user-001');
     expect(mockApiSetToken).toHaveBeenCalledWith(TOKEN_FIXTURE);
+    expect(mockApiSetRefreshToken).toHaveBeenCalledWith(REFRESH_TOKEN_FIXTURE);
   });
 
   it('reste deconnecte si aucune session en store', async () => {
@@ -132,7 +161,9 @@ describe('connexionMDP()', () => {
     expect(state.token).toBe(TOKEN_FIXTURE);
     expect(state.session?.nom_complet).toBe('Moussa Diallo');
     expect(mockSetItemAsync).toHaveBeenCalledWith('jwt_token', TOKEN_FIXTURE);
+    expect(mockSetItemAsync).toHaveBeenCalledWith('refresh_token', REFRESH_TOKEN_FIXTURE);
     expect(mockSetItemAsync).toHaveBeenCalledWith('session', expect.any(String));
+    expect(mockApiSetRefreshToken).toHaveBeenCalledWith(REFRESH_TOKEN_FIXTURE);
   });
 
   it('propage l erreur si l API echoue', async () => {
@@ -190,15 +221,17 @@ describe('deconnexion()', () => {
     await useAuthStore.getState().deconnexion();
 
     expect(mockDeleteItemAsync).toHaveBeenCalledWith('jwt_token');
+    expect(mockDeleteItemAsync).toHaveBeenCalledWith('refresh_token');
     expect(mockDeleteItemAsync).toHaveBeenCalledWith('session');
   });
 
-  it('appelle api.setToken(null)', async () => {
+  it('appelle api.setToken(null) et api.setRefreshToken(null)', async () => {
     useAuthStore.setState({ session: SESSION_FIXTURE, token: TOKEN_FIXTURE, estConnecte: true });
 
     await useAuthStore.getState().deconnexion();
 
     expect(mockApiSetToken).toHaveBeenCalledWith(null);
+    expect(mockApiSetRefreshToken).toHaveBeenCalledWith(null);
   });
 
   it('vide la BD locale via execAsync', async () => {
@@ -209,6 +242,22 @@ describe('deconnexion()', () => {
     expect(mockExecAsync).toHaveBeenCalled();
     const sql = mockExecAsync.mock.calls[0][0] as string;
     expect(sql).toContain('DELETE FROM session');
+  });
+});
+
+describe('événement token_rafraichi (B5 — refresh émis par ApiClient)', () => {
+  it('persiste le nouveau token/refresh_token dans SecureStore et met à jour le store', async () => {
+    mockAuthEventEmitter.emit('token_rafraichi', {
+      token: 'nouveau.jwt.token',
+      refresh_token: 'nouveau.refresh.token',
+    });
+    // L'écouteur est async — laisser la microtask queue se vider
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(mockSetItemAsync).toHaveBeenCalledWith('jwt_token', 'nouveau.jwt.token');
+    expect(mockSetItemAsync).toHaveBeenCalledWith('refresh_token', 'nouveau.refresh.token');
+    expect(useAuthStore.getState().token).toBe('nouveau.jwt.token');
   });
 });
 

@@ -1,0 +1,41 @@
+-- ============================================================
+-- MIGRATION 017 — Retirer bulletins.voir du rôle eleve (IDOR)
+--
+-- Finding audit 2026-09 (lot D, finding 1) : les routes génériques
+-- GET /bulletins, GET /bulletins/:id, GET /bulletins/:id/download
+-- et GET /bulletins/classes (backend/src/domains/03-pedagogie/
+-- bulletins/bulletins.routes.js) n'exigent que la permission
+-- 'bulletins.voir', sans filtrage par élève. Un élève possédant
+-- cette permission générique peut donc consulter (et télécharger)
+-- le bulletin de N'IMPORTE QUEL élève de l'établissement, pas
+-- seulement le sien — IDOR (Insecure Direct Object Reference).
+-- Exactement le même problème que celui corrigé pour le rôle
+-- parent à la migration 016.
+--
+-- Décision utilisateur explicite (audit 2026-09) : « Les élèves ne
+-- peuvent pas avoir accès aux bulletins. » Contrairement au rôle
+-- parent, aucune route dédiée self-service (ex: type
+-- /eleves/moi/bulletins) n'existe ni n'est créée pour compenser :
+-- les élèves n'ont tout simplement plus accès aux bulletins via
+-- l'API, quelle que soit la route.
+--
+-- Décision validée : retirer la permission plutôt que d'ajouter un
+-- filtrage par élève sur les routes génériques (correctif le plus
+-- petit et le plus sûr — même approche que la migration 016).
+--
+-- ATTENTION déploiement : le cache Redis des permissions
+-- (clé `user:<id>:perms:<etablissement_id>`, TTL 8h — voir
+-- backend/src/middleware/permission.middleware.js) n'est PAS purgé
+-- par cette migration. Les sessions élève déjà en cache continueront
+-- donc d'avoir accès aux routes génériques jusqu'à expiration du
+-- cache (max 8h après leur dernier chargement de permissions). Pour
+-- une purge immédiate au déploiement :
+--   redis-cli --scan --pattern 'user:*:perms:*' | xargs -r redis-cli del
+--
+-- Idempotent : DELETE conditionnel via sous-requêtes, aucune erreur
+-- si la permission a déjà été retirée ou n'existe pas.
+-- ============================================================
+
+DELETE FROM roles_permissions
+WHERE role_id = (SELECT id FROM roles WHERE code = 'eleve')
+  AND permission_id = (SELECT id FROM permissions WHERE code = 'bulletins.voir');

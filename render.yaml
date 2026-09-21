@@ -12,6 +12,8 @@ services:
         value: production
       - key: PORT
         value: 3010
+      - key: TRUST_PROXY_HOPS
+        value: "1"
       - key: DATABASE_URL
         fromDatabase:
           name: ecolemanager-db
@@ -20,10 +22,17 @@ services:
         generateValue: true
       - key: REDIS_URL
         value: ""          # Redis non dispo plan gratuit — cache désactivé
+      # Africa's Talking (SMS OTP) — obligatoire en production depuis le lot E
+      # (finding E1, audit 2026-09) : sans ces deux variables, env.js
+      # (validateEnv(), appelé au boot) fait crasher le démarrage du service
+      # plutôt que de risquer de logguer les codes OTP en clair. À saisir
+      # manuellement dans le dashboard Render (Settings > Environment) —
+      # `sync: false` évite qu'un déploiement écrase une clé déjà configurée
+      # avec une valeur vide.
       - key: AT_API_KEY
-        value: ""          # Africa's Talking — à renseigner pour activer SMS
+        sync: false
       - key: AT_USERNAME
-        value: sandbox
+        sync: false
       - key: META_WA_TOKEN
         value: ""          # WhatsApp Business — à renseigner pour activer WA
       - key: S3_ENDPOINT
@@ -46,6 +55,13 @@ services:
     buildCommand: cd dashboard && npm ci && npm run build
     staticPublishPath: ./dashboard/dist
     pullRequestPreviewsEnabled: false
+    # VITE_API_BASE (lot H, finding E6) : Vite lit cette variable au moment
+    # du build (buildCommand ci-dessus), pas à l'exécution — un site statique
+    # n'a pas de runtime Node. Elle doit donc être définie ici pour être
+    # inlinée dans le bundle. Pointe vers le service API du même render.yaml.
+    envVars:
+      - key: VITE_API_BASE
+        value: https://ecolemanager-api.onrender.com/api/v1
     routes:
       - type: rewrite
         source: /login
@@ -59,6 +75,19 @@ services:
       - type: rewrite
         source: /parent
         destination: /parent.html
+    # En-têtes de sécurité (lot F3, finding E6/C5) : pendant du bloc
+    # add_header de nginx/templates/ecolemanager.conf.template pour le VPS,
+    # ici en syntaxe Render pour le static site du dashboard.
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
 
 databases:
   - name: ecolemanager-db

@@ -1,96 +1,92 @@
 'use strict';
 
-const { execSync } = require('child_process');
+const { Client } = require('pg');
 const path = require('path');
-const fs = require('fs');
+
+const { run: runMigrations } = require('../../src/utils/migrate');
 
 /**
  * globalSetup — Crée la base de test et exécute les migrations.
  *
- * Utilise `docker exec` sur le conteneur ecole_postgres
- * (psql n'est pas installé localement).
+ * CI (lot J) : la création/suppression de la base passait par `docker exec
+ * ecole_postgres psql ...`, qui suppose un conteneur Docker nommé
+ * "ecole_postgres" — vrai en dev local (docker-compose), FAUX dans le job
+ * GitHub Actions `backend-integration` (service `postgres:16-alpine` de la
+ * CI, exposé en TCP sur localhost:5433, sans conteneur nommé
+ * "ecole_postgres" ni accès docker exec depuis le job). Résultat : le job
+ * échouait systématiquement avec "No such container: ecole_postgres"
+ * (jamais détecté avant car les tests d'intégration n'avaient jamais tourné
+ * en CI avant le lot J). Corrigé en se connectant directement en TCP via le
+ * driver `pg` (déjà une dépendance du projet, utilisé par migrate.js) —
+ * fonctionne identiquement en local (docker-compose expose 5433) et en CI
+ * (le service postgres de la CI expose aussi 5433), sans dépendre du nom
+ * ou de l'existence d'un conteneur Docker précis.
+ *
+ * Les migrations sont ensuite appliquées par le runner Node
+ * `src/utils/migrate.js`, le même qu'en dev, sur Render et en production —
+ * plus de liste de fichiers à maintenir ici.
+ *
+ * Les seeds `backend/tests/seeds/*.sql` ne sont volontairement PAS appliqués :
+ * ils ciblent la base de développement (parcours E2E Playwright, établissement
+ * TEST_LBD) et s'appuient sur des données créées par l'application. Les tests
+ * d'intégration construisent leurs propres fixtures (tests/integration/helpers.js)
+ * après un TRUNCATE complet, qui effacerait ces seeds de toute façon.
  */
 module.exports = async function globalSetup() {
-  const DB_NAME = 'ecole_manager_test';
-  const DB_USER = process.env.POSTGRES_USER || 'ecole_user';
-  const CONTAINER = process.env.PG_CONTAINER || 'ecole_postgres';
-
-  const opts = { stdio: 'pipe', timeout: 60000 };
-
-  /**
-   * Exécute une commande SQL via docker exec psql.
-   */
-  function psql(database, sql) {
-    return execSync(
-      `docker exec ${CONTAINER} psql -U ${DB_USER} -d ${database} -c "${sql}"`,
-      opts
-    ).toString();
-  }
+  const DB_NAME  = 'ecole_manager_test';
+  const DB_USER  = process.env.POSTGRES_USER     || 'ecole_user';
+  const HOST     = process.env.POSTGRES_HOST     || 'localhost';
+  const PORT     = parseInt(process.env.POSTGRES_PORT) || 5433;
+  const PASSWORD = process.env.POSTGRES_PASSWORD || 'ecole_password_dev';
 
   /**
-   * Exécute un fichier SQL copié dans le conteneur.
+   * Exécute une requête SQL sur `database` via une connexion pg dédiée,
+   * fermée immédiatement après (DROP/CREATE DATABASE ne peuvent pas
+   * s'exécuter dans une connexion pool/transaction réutilisée).
    */
-  function psqlFile(database, hostPath) {
-    const containerPath = `/tmp/${path.basename(hostPath)}`;
-    // Copier le fichier dans le conteneur
-    execSync(`docker cp "${hostPath}" ${CONTAINER}:${containerPath}`, opts);
-    // Exécuter
-    return execSync(
-      `docker exec ${CONTAINER} psql -U ${DB_USER} -d ${database} -f ${containerPath}`,
-      opts
-    ).toString();
+  async function psql(database, sql) {
+    const client = new Client({ host: HOST, port: PORT, user: DB_USER, password: PASSWORD, database });
+    await client.connect();
+    try {
+      return await client.query(sql);
+    } finally {
+      await client.end();
+    }
   }
 
   // 1. Drop + Create la base de test
   try {
-    psql('postgres', `DROP DATABASE IF EXISTS ${DB_NAME};`);
+    await psql('postgres', `DROP DATABASE IF EXISTS ${DB_NAME};`);
   } catch { /* ignore */ }
 
-  psql('postgres', `CREATE DATABASE ${DB_NAME} OWNER ${DB_USER};`);
+  await psql('postgres', `CREATE DATABASE ${DB_NAME} OWNER ${DB_USER};`);
   console.log(`✓ Base ${DB_NAME} créée`);
 
-  // 2. Appliquer les migrations
-  const migrationsDir = path.resolve(__dirname, '..', '..', '..', 'migrations');
+  // 2. Appliquer les migrations avec le runner de production.
+  //    globalSetup s'exécute avant setupFiles (setEnv.js) : on pose donc
+  //    explicitement la connexion et le dossier de migrations, puis on
+  //    restaure l'environnement pour ne pas polluer les workers Jest.
+  const ancienneUrl = process.env.DATABASE_URL;
+  const ancienDir   = process.env.MIGRATIONS_DIR;
 
-  const migrationFiles = [
-    '000_extensions.sql',
-    '000_extensions_types.sql',
-    '001_domaine1_identites.sql',
-    '002_domaine2_acteurs.sql',
-    '003_domaine3_pedagogie.sql',
-    '004_domaine4_vie_scolaire.sql',
-    '005_domaine5_securite.sql',
-    '006_donnees_reference.sql',
-    '007_vues_et_fonctions.sql',
-    '008_index_performance.sql',
-    '009_fix_statut_checks.sql',
-    '010_security_hardening.sql',
-    '011_rgpd_consentements.sql',
-    '012_chiffrement_medical.sql',
-  ];
+  process.env.DATABASE_URL   = `postgresql://${DB_USER}:${PASSWORD}@${HOST}:${PORT}/${DB_NAME}`;
+  process.env.MIGRATIONS_DIR = path.resolve(__dirname, '..', '..', '..', 'migrations');
 
-  for (const file of migrationFiles) {
-    const filePath = path.join(migrationsDir, file);
-    if (!fs.existsSync(filePath)) {
-      console.warn(`  ⚠ ${file} non trouvé, ignoré`);
-      continue;
-    }
-    try {
-      psqlFile(DB_NAME, filePath);
-      console.log(`  ✓ ${file}`);
-    } catch (err) {
-      const stderr = err.stderr?.toString().slice(0, 300) || err.message;
-      console.error(`  ✗ ${file} — ${stderr}`);
-      throw new Error(`Migration ${file} échouée`);
-    }
+  try {
+    await runMigrations();
+  } finally {
+    if (ancienneUrl === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = ancienneUrl;
+    if (ancienDir === undefined) delete process.env.MIGRATIONS_DIR;
+    else process.env.MIGRATIONS_DIR = ancienDir;
   }
 
   // 3. Corriger journal_audit si la table partitionnée n'a pas été créée
   try {
-    psql(DB_NAME, "SELECT 1 FROM journal_audit LIMIT 0;");
+    await psql(DB_NAME, 'SELECT 1 FROM journal_audit LIMIT 0;');
   } catch {
     console.log('  ⚠ journal_audit partitionnée absente — création simple');
-    psql(DB_NAME, `
+    await psql(DB_NAME, `
       CREATE TABLE IF NOT EXISTS journal_audit (
         id BIGSERIAL PRIMARY KEY,
         etablissement_id UUID REFERENCES etablissements(id) ON DELETE SET NULL,

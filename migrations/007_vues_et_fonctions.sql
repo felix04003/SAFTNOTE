@@ -35,7 +35,7 @@ SELECT
     u.prenom                        AS eleve_prenom,
     u.date_naissance                AS eleve_naissance,
     e.matricule                     AS eleve_matricule,
-    i.redoublant,
+    e.redoublant,
 
     -- Classe
     n.nom || ' ' || cl.nom          AS classe_libelle,

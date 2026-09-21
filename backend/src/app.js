@@ -36,6 +36,16 @@ const { initQueues } = require('./infrastructure/queue/bullmq');
 // ── App ──────────────────────────────────────────────────────────
 const app = express();
 
+// Derrière un proxy (Nginx, Render…), req.ip doit refléter le client réel,
+// pas l'IP du proxy — sinon le rate limiting (global + auth) est partagé
+// par tous les utilisateurs. TRUST_PROXY_HOPS = nombre de sauts de proxy
+// devant l'app (1 en général : Nginx ou le load balancer Render).
+// `|| 1` ne convient pas ici : TRUST_PROXY_HOPS=0 (déploiement sans proxy
+// devant l'app) est une valeur valide mais falsy en JS — Number.isNaN
+// distingue "non défini/invalide" (→ défaut 1) de "explicitement 0".
+const trustProxyHops = Number.parseInt(process.env.TRUST_PROXY_HOPS, 10);
+app.set('trust proxy', Number.isNaN(trustProxyHops) ? 1 : trustProxyHops);
+
 // ── Sécurité & parsing ──────────────────────────────────────────
 app.use(helmet());
 app.use(cors({
@@ -279,6 +289,15 @@ async function shutdown(signal) {
     const { getDB } = require('./infrastructure/database/pool');
     await getDB().destroy();
     logger.info('✓ PostgreSQL déconnecté');
+  } catch { /* ignore */ }
+  try {
+    // RLS phase 1 pilote (migration 019, revue lot I) : ferme aussi le pool
+    // ecole_app_rls s'il a été ouvert (route GET /configs/matieres appelée
+    // au moins une fois) — sans ça ses connexions fuyaient/bloquaient
+    // l'extinction du process. closeDBRls() ne fait rien si le pool n'a
+    // jamais été créé (lazy).
+    const { closeDBRls } = require('./infrastructure/database/pool');
+    await closeDBRls();
   } catch { /* ignore */ }
   try {
     const { getRedis } = require('./infrastructure/cache/redis');

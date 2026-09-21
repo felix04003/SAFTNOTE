@@ -78,8 +78,8 @@ postgres-data/
 *.tar.gz
 
 # Tooling
-.claude/worktrees/
+.claude/
 .superpowers/
 .gstack/
-mobile/package-lock.json
 dashboard/dist/
+graphify-out/

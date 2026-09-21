@@ -10,6 +10,7 @@ vi.stubGlobal('fetch', vi.fn());
 // Réinitialisation avant chaque test
 beforeEach(() => {
   localStorage.clear();
+  sessionStorage.clear();
   vi.mocked(fetch).mockClear();
   (window as any).location.href = '';
   (window as any).location.hash = '';

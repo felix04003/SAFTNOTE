@@ -16,7 +16,20 @@ const REDIS_BASE_OPTIONS = {
   },
 };
 
+// `app.js` décide d'initialiser Redis si REDIS_URL OU REDIS_HOST est défini
+// (ex: Render fournit REDIS_URL). Les fabriques doivent donc lire REDIS_URL
+// en priorité — sinon un REDIS_URL sans REDIS_HOST associé se traduisait par
+// une connexion silencieuse vers localhost:6379.
 function createClient() {
+  if (process.env.REDIS_URL) {
+    return new Redis(process.env.REDIS_URL, {
+      enableReadyCheck: true,
+      maxRetriesPerRequest: 3,
+      lazyConnect: true,
+      retryStrategy: REDIS_BASE_OPTIONS.retryStrategy,
+    });
+  }
+
   return new Redis({
     ...REDIS_BASE_OPTIONS,
     enableReadyCheck: true,
@@ -27,6 +40,14 @@ function createClient() {
 
 /** Crée un client Redis compatible BullMQ (maxRetriesPerRequest: null requis). */
 function createBullMQConnection() {
+  if (process.env.REDIS_URL) {
+    return new Redis(process.env.REDIS_URL, {
+      maxRetriesPerRequest: null,
+      enableReadyCheck: false,
+      retryStrategy: REDIS_BASE_OPTIONS.retryStrategy,
+    });
+  }
+
   return new Redis({
     ...REDIS_BASE_OPTIONS,
     maxRetriesPerRequest: null,
@@ -92,4 +113,4 @@ async function healthCheck() {
   }
 }
 
-module.exports = { connectRedis, getRedis, createBullMQConnection, getOrSet, invalidatePattern, healthCheck };
+module.exports = { connectRedis, getRedis, createClient, createBullMQConnection, getOrSet, invalidatePattern, healthCheck };

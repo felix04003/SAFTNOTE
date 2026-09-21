@@ -34,6 +34,7 @@ function reponseErreur(status: number, data: any) {
 beforeEach(() => {
   jest.clearAllMocks();
   api.setToken(null);
+  api.setRefreshToken(null);
 });
 
 describe('retry sur erreur réseau', () => {
@@ -110,6 +111,51 @@ describe('réponse serveur !ok → ApiError avec le code renvoyé, pas de retry'
 
     await expect(api.get('/test')).rejects.toMatchObject({ code: 'ERREUR', statusCode: 500 });
     expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('401 avec refresh token disponible (B5)', () => {
+  it('401 puis refresh réussi → requête rejouée avec le nouveau token, 200 final', async () => {
+    api.setRefreshToken('ancien.refresh.token');
+
+    mockFetch
+      .mockResolvedValueOnce(reponseErreur(401, { erreur: 'Token expiré' })) // 1er appel /test
+      .mockResolvedValueOnce(reponseOk({ data: { token: 'nouveau.jwt', refresh_token: 'nouveau.refresh' } })) // POST /auth/refresh
+      .mockResolvedValueOnce(reponseOk({ data: { ok: true } })); // requête /test rejouée
+
+    const listenerRafraichi = jest.fn();
+    const offRafraichi = authEventEmitter.on('token_rafraichi', listenerRafraichi);
+    const listenerDeconnexion = jest.fn();
+    const offDeconnexion = authEventEmitter.on('deconnexion', listenerDeconnexion);
+
+    const result = await api.get('/test');
+
+    expect(result).toEqual({ ok: true });
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(mockFetch.mock.calls[1][0]).toContain('/auth/refresh');
+    expect(listenerRafraichi).toHaveBeenCalledWith({ token: 'nouveau.jwt', refresh_token: 'nouveau.refresh' });
+    expect(listenerDeconnexion).not.toHaveBeenCalled();
+
+    offRafraichi();
+    offDeconnexion();
+  });
+
+  it('401 puis refresh échoué → événement deconnexion émis une seule fois, pas de boucle infinie', async () => {
+    api.setRefreshToken('ancien.refresh.token');
+
+    mockFetch
+      .mockResolvedValueOnce(reponseErreur(401, { erreur: 'Token expiré' })) // 1er appel /test
+      .mockResolvedValueOnce(reponseErreur(401, { erreur: 'Refresh invalide' })); // POST /auth/refresh échoue
+
+    const listener = jest.fn();
+    const off = authEventEmitter.on('deconnexion', listener);
+
+    await expect(api.get('/test')).rejects.toMatchObject({ code: 'SESSION_EXPIREE' });
+
+    expect(mockFetch).toHaveBeenCalledTimes(2); // /test + /auth/refresh, pas de rejouer
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    off();
   });
 });
 

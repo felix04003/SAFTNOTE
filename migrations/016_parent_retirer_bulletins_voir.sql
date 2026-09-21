@@ -1,0 +1,44 @@
+-- ============================================================
+-- MIGRATION 016 — Retirer bulletins.voir du rôle parent (IDOR)
+--
+-- Finding audit 2026-09 (lot C, C4) : les routes génériques
+-- GET /bulletins, GET /bulletins/:id, GET /bulletins/:id/download
+-- et GET /bulletins/classes (backend/src/domains/03-pedagogie/
+-- bulletins/bulletins.routes.js) n'exigent que la permission
+-- 'bulletins.voir', sans filtrage par lien parents_eleves. Un
+-- parent possédant cette permission générique peut donc consulter
+-- (et télécharger) le bulletin de N'IMPORTE QUEL élève de
+-- l'établissement, pas seulement celui de ses propres enfants —
+-- IDOR (Insecure Direct Object Reference).
+--
+-- Les parents n'ont pas besoin de 'bulletins.voir' pour accéder à
+-- leurs propres enfants : les routes dédiées
+--   GET /parents/moi/enfants/:id/bulletins
+--   GET /parents/moi/enfants/:id/notes
+--   GET /parents/moi/enfants/:id/absences
+-- (backend/src/domains/02-acteurs/parents/parents.routes.js)
+-- passent par verifierLienParentEnfant() et ne dépendent d'aucune
+-- permission générique — elles continuent de fonctionner à
+-- l'identique après cette migration.
+--
+-- Décision validée : retirer la permission plutôt que d'ajouter un
+-- filtrage par élève sur les routes génériques (correctif le plus
+-- petit et le plus sûr — cf. PLAN-CORRECTION-EcoleManager-2026-09-16.md,
+-- Lot C).
+--
+-- ATTENTION déploiement : le cache Redis des permissions
+-- (clé `user:<id>:perms:<etablissement_id>`, TTL 8h — voir
+-- backend/src/middleware/permission.middleware.js) n'est PAS purgé
+-- par cette migration. Les sessions parent déjà en cache continueront
+-- donc d'avoir accès aux routes génériques jusqu'à expiration du
+-- cache (max 8h après leur dernier chargement de permissions). Pour
+-- une purge immédiate au déploiement :
+--   redis-cli --scan --pattern 'user:*:perms:*' | xargs -r redis-cli del
+--
+-- Idempotent : DELETE conditionnel via sous-requêtes, aucune erreur
+-- si la permission a déjà été retirée ou n'existe pas.
+-- ============================================================
+
+DELETE FROM roles_permissions
+WHERE role_id = (SELECT id FROM roles WHERE code = 'parent')
+  AND permission_id = (SELECT id FROM permissions WHERE code = 'bulletins.voir');
