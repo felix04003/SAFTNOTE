@@ -3,8 +3,17 @@ services:
     name: ecolemanager-api
     runtime: node
     rootDir: backend
-    buildCommand: npm ci
-    preDeployCommand: node src/utils/migrate.js
+    # preDeployCommand n'est disponible que sur les plans payants Render —
+    # ce service tourne en `plan: free`, la validation du Blueprint refuse
+    # ce champ ("pre-deploy command is not supported for free tier
+    # services"), empêchant la synchronisation de TOUT le Blueprint (donc
+    # aussi la création du site statique ecolemanager-dashboard ci-dessous,
+    # jamais provisionné tant que cette erreur bloquait la synchro).
+    # Migration repliée dans buildCommand : les variables d'env du service
+    # (dont DATABASE_URL) sont bien disponibles pendant le build sur Render,
+    # et un échec de migrate.js fait échouer le build — même garde-fou
+    # qu'un preDeployCommand, sans dépendre d'un plan payant.
+    buildCommand: npm ci && node src/utils/migrate.js
     startCommand: node src/app.js
     healthCheckPath: /api/v1/health
     envVars:
