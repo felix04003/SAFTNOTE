@@ -23,6 +23,13 @@ services:
         value: 3010
       - key: TRUST_PROXY_HOPS
         value: "1"
+      # FRONTEND_URL manquait ici : sans elle, app.js retombe sur la
+      # whitelist CORS localhost par défaut, bloquant TOUTE requête depuis
+      # le vrai dashboard en production (constaté : préflight OPTIONS sans
+      # en-tête Access-Control-Allow-Origin, "Failed to fetch" côté
+      # navigateur sur ecolemanager-dashboard.onrender.com).
+      - key: FRONTEND_URL
+        value: https://ecolemanager-dashboard.onrender.com
       - key: DATABASE_URL
         fromDatabase:
           name: ecolemanager-db
