@@ -760,7 +760,16 @@ router.post('/etablissements/register', limiterRegister,
     directeur_prenom:    z.string().min(2),
     directeur_telephone: z.string().regex(/^\+?[0-9]{8,15}$/, 'Numéro invalide'),
     directeur_email:     z.string().email().optional().or(z.literal('')),
-    directeur_mdp:       z.string().min(6),
+    // Harmonisé avec schemaSetup (setup.routes.js) et avec l'exigence de
+    // complexité déjà appliquée à la réinitialisation via
+    // validerMotDePasse() ci-dessus (audit 2026-09) : la création de compte
+    // via ce second parcours d'inscription n'imposait qu'un minimum de 6
+    // caractères, sans complexité — écart de sécurité corrigé ici.
+    directeur_mdp: z.string()
+      .min(8, 'Minimum 8 caractères')
+      .regex(/[a-z]/, 'Le mot de passe doit contenir au moins une minuscule')
+      .regex(/[A-Z]/, 'Le mot de passe doit contenir au moins une majuscule')
+      .regex(/[0-9]/, 'Le mot de passe doit contenir au moins un chiffre'),
     // Année scolaire initiale (optionnel — déduite si absent)
     annee_libelle:  z.string().regex(/^\d{4}-\d{4}$/).optional(),
   })),

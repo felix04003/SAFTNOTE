@@ -169,6 +169,14 @@ td.nc{font-weight:600;color:var(--g900)}
 .fi:focus,.fs:focus{border-color:var(--vert)}
 .fr{display:grid;grid-template-columns:1fr 1fr;gap:13px}
 
+/* Bouton afficher/masquer le mot de passe (audit sécurité 2026-09) */
+.pwd-wrap{position:relative}
+.pwd-wrap .fi{padding-right:38px}
+.pwd-toggle{position:absolute;top:50%;right:4px;transform:translateY(-50%);width:30px;height:30px;border:none;background:transparent;color:var(--g400);cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:6px;transition:color .15s,background .15s}
+.pwd-toggle:hover{color:var(--g700);background:var(--g100)}
+.pwd-toggle:focus-visible{outline:2px solid var(--vert);outline-offset:1px}
+.pwd-toggle svg{width:17px;height:17px}
+
 /* MODAL */
 .mo{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;align-items:center;justify-content:center}
 .mo.open{display:flex}

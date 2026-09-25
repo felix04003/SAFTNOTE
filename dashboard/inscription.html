@@ -249,11 +249,21 @@
         <div class="fg-2">
           <div class="fg" style="margin-bottom:0">
             <label class="fl">Mot de passe <span style="color:var(--rouge)">*</span></label>
-            <input class="fi" id="dir-mdp" type="password" placeholder="8 caractères min.">
+            <div class="pwd-wrap">
+              <input class="fi" id="dir-mdp" type="password" placeholder="Min. 8, 1 maj., 1 chiffre">
+              <button type="button" class="pwd-toggle" id="toggle-dir-mdp" aria-label="Afficher le mot de passe" aria-pressed="false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
           </div>
           <div class="fg" style="margin-bottom:0">
             <label class="fl">Confirmer le mot de passe <span style="color:var(--rouge)">*</span></label>
-            <input class="fi" id="dir-mdp2" type="password" placeholder="Répétez le mot de passe">
+            <div class="pwd-wrap">
+              <input class="fi" id="dir-mdp2" type="password" placeholder="Répétez le mot de passe">
+              <button type="button" class="pwd-toggle" id="toggle-dir-mdp2" aria-label="Afficher le mot de passe" aria-pressed="false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
           </div>
         </div>
 

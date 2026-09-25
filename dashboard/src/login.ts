@@ -7,6 +7,24 @@ if (Auth.isAuthenticated()) {
   window.location.href = 'index.html';
 }
 
+// Bouton afficher/masquer le mot de passe (audit sécurité 2026-09).
+// Icône SVG fixe (oeil ouvert) dans le HTML — on ne change que le type de
+// l'input et l'état aria-pressed, pas le SVG, pour rester simple et éviter
+// tout innerHTML dynamique (CSP script-src 'self', pas d'inline).
+function initTogglesMotDePasse() {
+  document.querySelectorAll('.pwd-toggle').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const wrap  = btn.closest('.pwd-wrap');
+      const input = wrap?.querySelector('input') as HTMLInputElement | null;
+      if (!input) return;
+      const masque = input.type === 'password';
+      input.type = masque ? 'text' : 'password';
+      btn.setAttribute('aria-pressed', String(masque));
+      btn.setAttribute('aria-label', masque ? 'Masquer le mot de passe' : 'Afficher le mot de passe');
+    });
+  });
+}
+
 function onglet(id: string) {
   document.querySelectorAll('.login-tab').forEach(function(t: Element, i: number) {
     t.classList.toggle('actif', (i === 0 && id === 'connexion') || (i === 1 && id === 'inscription'));
@@ -55,8 +73,12 @@ async function handleInscription() {
     if (errEl) { errEl.textContent = 'Veuillez remplir tous les champs obligatoires (*)'; errEl.classList.add('show'); }
     return;
   }
-  if (mdp.length < 6) {
-    if (errEl) { errEl.textContent = 'Le mot de passe doit contenir au moins 6 caractères'; errEl.classList.add('show'); }
+  if (mdp.length < 8) {
+    if (errEl) { errEl.textContent = 'Le mot de passe doit contenir au moins 8 caractères'; errEl.classList.add('show'); }
+    return;
+  }
+  if (!/[a-z]/.test(mdp) || !/[A-Z]/.test(mdp) || !/[0-9]/.test(mdp)) {
+    if (errEl) { errEl.textContent = 'Le mot de passe doit contenir au moins une majuscule, une minuscule et un chiffre'; errEl.classList.add('show'); }
     return;
   }
 
@@ -107,6 +129,7 @@ function allerConnexion() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  initTogglesMotDePasse();
   document.getElementById('login-form')?.addEventListener('submit', handleLogin);
   document.getElementById('btn-tab-connexion')?.addEventListener('click', () => onglet('connexion'));
   document.getElementById('btn-tab-inscription')?.addEventListener('click', () => onglet('inscription'));

@@ -8,6 +8,21 @@ if (window.innerWidth <= 768) {
   if (logoMobile) logoMobile.style.display = 'block';
 }
 
+// Bouton afficher/masquer le mot de passe (audit sécurité 2026-09).
+function initTogglesMotDePasse() {
+  document.querySelectorAll('.pwd-toggle').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const wrap  = btn.closest('.pwd-wrap');
+      const input = wrap?.querySelector('input') as HTMLInputElement | null;
+      if (!input) return;
+      const masque = input.type === 'password';
+      input.type = masque ? 'text' : 'password';
+      btn.setAttribute('aria-pressed', String(masque));
+      btn.setAttribute('aria-label', masque ? 'Masquer le mot de passe' : 'Afficher le mot de passe');
+    });
+  });
+}
+
 let paysSelectionne = 'SN';
 
 function selectPays(btn: HTMLElement) {
@@ -104,6 +119,9 @@ async function soumettre() {
   if (!dirTel)    return showErr('Le numéro de téléphone est obligatoire.');
   if (!/^\+?[0-9]{8,15}$/.test(dirTel.replace(/\s/g,''))) return showErr('Numéro de téléphone invalide (format : +221771234567).');
   if (!mdp || mdp.length < 8) return showErr('Le mot de passe doit contenir au moins 8 caractères.');
+  if (!/[a-z]/.test(mdp) || !/[A-Z]/.test(mdp) || !/[0-9]/.test(mdp)) {
+    return showErr('Le mot de passe doit contenir au moins une majuscule, une minuscule et un chiffre.');
+  }
   if (mdp !== mdp2) return showErr('Les mots de passe ne correspondent pas.');
 
   const btn = document.getElementById('btn-inscrire') as HTMLButtonElement | null;
@@ -143,6 +161,7 @@ async function soumettre() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  initTogglesMotDePasse();
   document.querySelectorAll('.pays-btn').forEach((btn) => {
     btn.addEventListener('click', () => selectPays(btn as HTMLElement));
   });
