@@ -82,16 +82,11 @@ function showErr(msg: string) {
 function etape2() {
   document.getElementById('ins-err')?.classList.remove('show');
   const nom  = ((document.getElementById('etab-nom') as HTMLInputElement | null)?.value || '').trim();
-  const code = ((document.getElementById('etab-code') as HTMLInputElement | null)?.value || '').trim().toUpperCase();
   const pays = getPays();
 
   if (!nom)  return showErr("Le nom de l'\u00e9tablissement est obligatoire.");
-  if (!code) return showErr('Le code \u00e9tablissement est obligatoire.');
-  if (!/^[A-Z0-9_-]{2,20}$/.test(code)) return showErr('Code invalide : lettres majuscules, chiffres, tirets uniquement (2-20 caract\u00e8res).');
   if (!pays) return showErr('Veuillez s\u00e9lectionner ou saisir le pays.');
 
-  const etabCode = document.getElementById('etab-code') as HTMLInputElement | null;
-  if (etabCode) etabCode.value = code;
   allerEtape(2);
 }
 
@@ -99,12 +94,10 @@ async function soumettre() {
   document.getElementById('ins-err')?.classList.remove('show');
 
   const nom    = ((document.getElementById('etab-nom') as HTMLInputElement | null)?.value || '').trim();
-  const code   = ((document.getElementById('etab-code') as HTMLInputElement | null)?.value || '').trim().toUpperCase();
   const type   = (document.getElementById('etab-type') as HTMLSelectElement | null)?.value || '';
   const pays   = getPays();
   const ville  = ((document.getElementById('etab-ville') as HTMLInputElement | null)?.value || '').trim();
   const etabTel   = ((document.getElementById('etab-tel') as HTMLInputElement | null)?.value || '').trim();
-  const etabEmail = ((document.getElementById('etab-email') as HTMLInputElement | null)?.value || '').trim();
 
   const dirNom    = ((document.getElementById('dir-nom') as HTMLInputElement | null)?.value || '').trim();
   const dirPrenom = ((document.getElementById('dir-prenom') as HTMLInputElement | null)?.value || '').trim();
@@ -129,15 +122,14 @@ async function soumettre() {
 
   try {
     const payload: any = {
-      etablissement: { nom, code_officiel: code, type, pays },
+      etablissement: { nom, type, pays },
       directeur: {
         nom: dirNom, prenom: dirPrenom, email: dirEmail,
         telephone: dirTel.replace(/\s/g,''), mot_de_passe: mdp,
       }
     };
-    if (ville)     payload.etablissement.ville    = ville;
-    if (etabTel)   payload.etablissement.telephone = etabTel.replace(/\s/g,'');
-    if (etabEmail) payload.etablissement.email     = etabEmail;
+    if (ville)   payload.etablissement.ville     = ville;
+    if (etabTel) payload.etablissement.telephone = etabTel.replace(/\s/g,'');
 
     const res = await fetch(CONFIG.API_BASE + '/inscription', {
       method: 'POST',

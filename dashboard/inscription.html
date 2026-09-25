@@ -161,23 +161,16 @@
           <input class="fi" id="etab-nom" type="text" placeholder="Ex : Lycée Blaise Diagne" required>
         </div>
 
-        <div class="fg-2">
-          <div class="fg" style="margin-bottom:0">
-            <label class="fl">Code établissement <span style="color:var(--rouge)">*</span></label>
-            <input class="fi" id="etab-code" type="text" placeholder="Ex : LBD001" style="text-transform:uppercase"
-              pattern="[A-Z0-9_-]+" title="Majuscules, chiffres, tirets uniquement">
-            <div style="font-size:10.5px;color:var(--g400);margin-top:4px">Code unique pour la connexion</div>
-          </div>
-          <div class="fg" style="margin-bottom:0">
-            <label class="fl">Type d'établissement</label>
-            <select class="fi" id="etab-type">
-              <option value="lycee">Lycée</option>
-              <option value="college">Collège</option>
-              <option value="ecole_primaire">École primaire</option>
-              <option value="universite">Université / BTS</option>
-              <option value="formation_pro">Formation professionnelle</option>
-            </select>
-          </div>
+        <div class="fg">
+          <label class="fl">Type d'établissement</label>
+          <select class="fi" id="etab-type">
+            <option value="lycee">Lycée</option>
+            <option value="college">Collège</option>
+            <option value="ecole_primaire">École primaire</option>
+            <option value="universite">Université / BTS</option>
+            <option value="formation_pro">Formation professionnelle</option>
+          </select>
+          <div style="font-size:10.5px;color:var(--g400);margin-top:4px">Le code établissement sera généré automatiquement à la création.</div>
         </div>
 
         <div class="fg" style="margin-top:14px">
@@ -205,11 +198,6 @@
             <label class="fl">Téléphone école</label>
             <input class="fi" id="etab-tel" type="tel" placeholder="+221 77 000 00 00">
           </div>
-        </div>
-
-        <div class="fg" style="margin-top:14px">
-          <label class="fl">Email officiel</label>
-          <input class="fi" id="etab-email" type="email" placeholder="contact@mon-ecole.sn">
         </div>
 
         <button class="btn btn-p btn-full" type="button" id="btn-etape2" style="margin-top:8px">
@@ -302,7 +290,7 @@
         </div>
 
         <div style="background:var(--warning-lt);border:1.5px solid var(--warning);border-radius:var(--rs);padding:12px 14px;font-size:12px;color:var(--g700);margin-bottom:20px;line-height:1.5">
-          ⚠️ <strong>Prochaines étapes :</strong> connectez-vous, puis créez votre <strong>année scolaire</strong>, vos <strong>classes</strong>, ajoutez vos <strong>enseignants</strong> et vos <strong>élèves</strong>.
+          ⚠️ <strong>Prochaines étapes :</strong> connectez-vous, puis créez vos <strong>classes</strong>, ajoutez vos <strong>enseignants</strong> et vos <strong>élèves</strong>. Votre année scolaire courante a déjà été créée automatiquement.
         </div>
 
         <a class="btn btn-p btn-full" href="login.html">

@@ -58,6 +58,77 @@ const schemaSetup = z.object({
 });
 
 /**
+ * Schéma du self-service /inscription (fusion parcours 1 + parcours 2,
+ * audit 2026-09) — distinct de schemaSetup, réservé au bootstrap interne
+ * /setup (jamais appelé depuis l'UI). Contrairement à schemaSetup :
+ *   - Pas de code_officiel : généré côté serveur (genererCodeUnique), pour
+ *     ne plus demander à un utilisateur self-service de choisir un
+ *     identifiant technique unique système.
+ *   - Pas d'annee_scolaire : l'année scolaire courante est calculée et
+ *     créée automatiquement (comme le faisait déjà /etablissements/register
+ *     dans auth.routes.js), au lieu de la demander dans le wizard.
+ *   - Pas d'etablissement.email : un seul email est désormais demandé (celui
+ *     du directeur, à l'étape 2 du wizard), pour éviter de le demander deux
+ *     fois dans le même parcours.
+ */
+const schemaInscription = z.object({
+  etablissement: z.object({
+    nom:       z.string().min(2),
+    type:      z.enum(['ecole_primaire', 'college', 'lycee', 'universite', 'formation_pro']).default('lycee'),
+    pays:      z.string().min(2).default('SN'),
+    ville:     z.string().optional(),
+    telephone: z.string().optional(),
+  }),
+  directeur: z.object({
+    nom:          z.string().min(2),
+    prenom:       z.string().min(2),
+    email:        z.string().email(),
+    telephone:    z.string().regex(/^\+?[0-9]{8,15}$/, 'Numéro invalide'),
+    mot_de_passe: z.string()
+      .min(8, 'Minimum 8 caractères')
+      .regex(/[a-z]/, 'Le mot de passe doit contenir au moins une minuscule')
+      .regex(/[A-Z]/, 'Le mot de passe doit contenir au moins une majuscule')
+      .regex(/[0-9]/, 'Le mot de passe doit contenir au moins un chiffre'),
+  }),
+});
+
+// Niveaux créés par défaut pour toute nouvelle école self-service — repris
+// tel quel du parcours /etablissements/register (auth.routes.js), qui
+// insère toujours ces 7 niveaux quel que soit le type d'établissement
+// choisi (limitation préexistante, hors du périmètre de cette fusion).
+const NIVEAUX_DEFAUT = [
+  { nom: '6ème',      nom_court: '6e',   ordre: 1, cycle: 'college' },
+  { nom: '5ème',      nom_court: '5e',   ordre: 2, cycle: 'college' },
+  { nom: '4ème',      nom_court: '4e',   ordre: 3, cycle: 'college' },
+  { nom: '3ème',      nom_court: '3e',   ordre: 4, cycle: 'college' },
+  { nom: '2nde',      nom_court: '2nde', ordre: 5, cycle: 'lycee'   },
+  { nom: '1ère',      nom_court: '1ere', ordre: 6, cycle: 'lycee'   },
+  { nom: 'Terminale', nom_court: 'Tle',  ordre: 7, cycle: 'lycee'   },
+];
+
+/**
+ * Génère un code établissement unique (initiales du nom + ville + 4 chiffres
+ * aléatoires, ex. LBD-DAKAR-4821), avec vérification d'unicité en base et
+ * plusieurs tentatives en cas de collision — auth.routes.js ne fait, lui,
+ * aucune vérification avant insert (repose uniquement sur la contrainte
+ * UNIQUE en base + le handler d'erreur Postgres 23505). Ici on vérifie
+ * explicitement avant insertion pour renvoyer une erreur claire plutôt que
+ * de dépendre du hasard d'un conflit non prévu par l'appelant.
+ */
+async function genererCodeUnique(db, nom, ville) {
+  const initiales = nom.trim().split(/\s+/).slice(0, 3).map(w => w[0].toUpperCase()).join('');
+  const villeSlug = (ville || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 8) || 'ECOLE';
+
+  for (let tentative = 0; tentative < 5; tentative++) {
+    const rand4 = String(Math.floor(1000 + Math.random() * 9000));
+    const code  = `${initiales}-${villeSlug}-${rand4}`;
+    const existe = await db('etablissements').where({ code_officiel: code }).first('id');
+    if (!existe) return code;
+  }
+  throw new Error('Impossible de générer un code établissement unique — réessayez.');
+}
+
+/**
  * Divise une année scolaire en périodes de durée égale.
  */
 function calculerPeriodes(dateDebutStr, dateFinStr, nbPeriodes, typePeriode) {
@@ -208,36 +279,41 @@ router.post('/setup', valider(schemaSetup), async (req, res, next) => {
 });
 
 // ── POST /inscription — Créer un nouvel établissement (toujours ouvert) ─
-router.post('/inscription', valider(schemaSetup), async (req, res, next) => {
+router.post('/inscription', valider(schemaInscription), async (req, res, next) => {
   const db = getDB();
   const { etablissement: etabData, directeur: dirData } = req.body;
 
   try {
-    // Vérifier unicité du code
-    const codeExiste = await db('etablissements')
-      .where({ code_officiel: etabData.code_officiel })
-      .first('id');
-    if (codeExiste) {
-      throw ApiError.conflit('Ce code établissement est déjà utilisé. Choisissez un autre code.');
-    }
-
     // Vérifier unicité de l'email directeur (global)
     const emailExiste = await db('utilisateurs').where({ email: dirData.email }).first('id');
     if (emailExiste) {
       throw ApiError.conflit('Cet email est déjà associé à un compte existant.');
     }
 
+    const codeOfficiel = await genererCodeUnique(db, etabData.nom, etabData.ville);
+
+    // Année scolaire courante calculée automatiquement (règle sept.→juil.,
+    // identique à l'ancien parcours /etablissements/register), sans la
+    // demander dans le wizard.
+    const now   = new Date();
+    const annee = now.getMonth() >= 7
+      ? `${now.getFullYear()}-${now.getFullYear() + 1}`
+      : `${now.getFullYear() - 1}-${now.getFullYear()}`;
+    const [anneeStartYear] = annee.split('-').map(Number);
+    const anneeDateDebut = `${anneeStartYear}-09-01`;
+    const anneeDateFin   = `${anneeStartYear + 1}-07-31`;
+    const periodes = calculerPeriodes(anneeDateDebut, anneeDateFin, 3, 'trimestre');
+
     await db.transaction(async trx => {
       const etabId = uuid();
       const [etab] = await trx('etablissements').insert({
         id:            etabId,
         nom:           etabData.nom,
-        code_officiel: etabData.code_officiel,
+        code_officiel: codeOfficiel,
         type:          etabData.type,
         pays:          etabData.pays,
         ville:         etabData.ville || null,
         telephone:     etabData.telephone || null,
-        email:         etabData.email || null,
         actif:         true,
       }).returning('*');
 
@@ -269,10 +345,29 @@ router.post('/inscription', valider(schemaSetup), async (req, res, next) => {
         actif:            true,
       });
 
+      const [anneeRow] = await trx('annees_scolaires').insert({
+        etablissement_id: etabId,
+        libelle:          annee,
+        date_debut:       anneeDateDebut,
+        date_fin:         anneeDateFin,
+        nb_periodes:      3,
+        type_periode:     'trimestre',
+        est_courante:     true,
+      }).returning('id');
+
+      await trx('periodes').insert(
+        periodes.map(p => ({ ...p, annee_scolaire_id: anneeRow.id }))
+      );
+
+      await trx('niveaux').insert(
+        NIVEAUX_DEFAUT.map(n => ({ id: uuid(), etablissement_id: etabId, actif: true, ...n }))
+      );
+
       logger.info('Inscription nouvel établissement', {
         etablissement_id:   etabId,
-        etablissement_code: etabData.code_officiel,
+        etablissement_code: codeOfficiel,
         directeur_id:       utilisateurId,
+        annee_scolaire:     annee,
       });
 
       return cree(res, {
@@ -286,7 +381,7 @@ router.post('/inscription', valider(schemaSetup), async (req, res, next) => {
         },
         connexion: {
           identifiant:        dirData.email,
-          etablissement_code: etabData.code_officiel,
+          etablissement_code: codeOfficiel,
           note:               'Utilisez ces identifiants pour vous connecter sur EcoleManager.',
         },
       });
