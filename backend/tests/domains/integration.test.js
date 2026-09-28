@@ -41,12 +41,14 @@ const { createTestApp } = require('../helpers/testApp');
 
 // ── Chargement des routeurs APRÈS les mocks ────────────────────────
 const authRouter      = require('../../src/domains/02-acteurs/auth/auth.routes');
+const setupRouter     = require('../../src/domains/setup/setup.routes');
 const identitesRouter = require('../../src/domains/01-identites/identites.routes');
 const elevesRouter    = require('../../src/domains/02-acteurs/eleves/eleves.routes');
 const evaluationsRouter = require('../../src/domains/03-pedagogie/evaluations/evaluations.routes');
 
 // ── Apps de test par domaine ─────────────────────────────────────────
 const authApp      = createTestApp(authRouter);
+const setupApp     = createTestApp(setupRouter);
 const identitesApp = createTestApp(identitesRouter);
 const elevesApp    = createTestApp(elevesRouter);
 const evalsApp     = createTestApp(evaluationsRouter);
@@ -54,8 +56,15 @@ const evalsApp     = createTestApp(evaluationsRouter);
 // ═══════════════════════════════════════════════════════════════════
 // WORKFLOW 1 : Inscription établissement
 // ═══════════════════════════════════════════════════════════════════
+//
+// POST /etablissements/register (auth.routes.js) a été retiré (fusion des
+// parcours d'inscription, audit 2026-09) : POST /inscription
+// (setup.routes.js) est désormais l'unique route publique de création
+// d'établissement — ce workflow cible donc setupApp/POST /inscription,
+// avec le payload imbriqué {etablissement, directeur} de schemaInscription
+// (plus de code_officiel ni annee_scolaire côté client : générés serveur).
 
-describe('Workflow 1 — POST /etablissements/register', () => {
+describe('Workflow 1 — POST /inscription', () => {
   let db;
 
   beforeEach(() => {
@@ -63,44 +72,50 @@ describe('Workflow 1 — POST /etablissements/register', () => {
     getDB.mockReturnValue(db);
   });
 
-  test('crée école + directeur + année scolaire + 7 niveaux et retourne le code officiel', async () => {
+  test('crée école + directeur + année scolaire + 7 niveaux et retourne le code officiel généré', async () => {
+    // 1. SELECT utilisateurs WHERE email = ... (unicité directeur)
+    db.mockReturnValueOnce(mockQuery(undefined));
+    // 2. SELECT etablissements WHERE code_officiel = ... (genererCodeUnique, 1ère tentative libre)
+    db.mockReturnValueOnce(mockQuery(undefined));
+
     // db.transaction mock : exécute la fonction avec db comme trx
     db.transaction.mockImplementation(async (fn) => {
       const trx = jest.fn();
 
-      // 1. INSERT etablissements
-      trx.mockReturnValueOnce(mockQuery(undefined));
-      // 2. INSERT annees_scolaires
-      trx.mockReturnValueOnce(mockQuery(undefined));
-      // 3. INSERT utilisateurs (directeur)
-      trx.mockReturnValueOnce(mockQuery(undefined));
-      // 4. SELECT roles WHERE code = 'directeur'
-      trx.mockReturnValueOnce(mockQuery({ id: 'role-dir-001' }));
-      // 5. INSERT utilisateur_roles
-      trx.mockReturnValueOnce(mockQuery(undefined));
-      // 6. INSERT configs_systeme_notes (onConflict)
+      // 3. INSERT etablissements .returning('*')
+      trx.mockReturnValueOnce(mockQuery([{
+        id: IDS.etablissement, nom: 'Lycée Blaise Diagne',
+        code_officiel: 'LBD-DAKAR-1234', type: 'lycee', pays: 'SN',
+      }]));
+      // 4. INSERT configs_systeme_notes (onConflict/ignore)
       const configChain = mockQuery(undefined);
       configChain.onConflict = jest.fn().mockReturnValue(configChain);
       configChain.ignore = jest.fn().mockReturnValue(configChain);
       trx.mockReturnValueOnce(configChain);
-      // 7. INSERT niveaux (7 niveaux par défaut)
+      // 5. INSERT utilisateurs (directeur)
+      trx.mockReturnValueOnce(mockQuery(undefined));
+      // 6. SELECT roles WHERE code = 'directeur'
+      trx.mockReturnValueOnce(mockQuery({ id: 'role-dir-001' }));
+      // 7. INSERT utilisateur_roles
+      trx.mockReturnValueOnce(mockQuery(undefined));
+      // 8. INSERT annees_scolaires .returning('id')
+      trx.mockReturnValueOnce(mockQuery([{ id: IDS.annee }]));
+      // 9. INSERT periodes
+      trx.mockReturnValueOnce(mockQuery(undefined));
+      // 10. INSERT niveaux (7 niveaux par défaut)
       trx.mockReturnValueOnce(mockQuery(undefined));
 
       await fn(trx);
     });
 
-    const res = await request(authApp)
-      .post('/etablissements/register')
+    const res = await request(setupApp)
+      .post('/inscription')
       .send({
-        nom: 'Lycée Blaise Diagne',
-        type: 'lycee',
-        pays: 'Sénégal',
-        ville: 'Dakar',
-        directeur_nom: 'Diallo',
-        directeur_prenom: 'Moussa',
-        directeur_telephone: '+221771234567',
-        directeur_email: 'directeur@lbd.sn',
-        directeur_mdp: 'Test1234',
+        etablissement: { nom: 'Lycée Blaise Diagne', type: 'lycee', pays: 'SN', ville: 'Dakar' },
+        directeur: {
+          nom: 'Diallo', prenom: 'Moussa', email: 'directeur@lbd.sn',
+          telephone: '+221771234567', mot_de_passe: 'Test1234',
+        },
       })
       .expect(201);
 
@@ -108,21 +123,21 @@ describe('Workflow 1 — POST /etablissements/register', () => {
     expect(res.body.data).toHaveProperty('etablissement');
     expect(res.body.data.etablissement).toHaveProperty('id');
     expect(res.body.data.etablissement).toHaveProperty('code_officiel');
-    expect(res.body.data).toHaveProperty('annee_scolaire');
-    expect(res.body.data).toHaveProperty('message');
-    expect(res.body.data.message).toMatch(/code/i);
+    expect(res.body.data).toHaveProperty('connexion');
+    expect(res.body.data.connexion).toHaveProperty('etablissement_code');
+    expect(res.body.data.connexion.identifiant).toBe('directeur@lbd.sn');
   });
 
   test('retourne 422 si champs obligatoires manquants', async () => {
-    const res = await request(authApp)
-      .post('/etablissements/register')
+    const res = await request(setupApp)
+      .post('/inscription')
       .send({
-        nom: 'X', // trop court (min 3)
-        ville: 'Dakar',
-        directeur_nom: 'Diallo',
-        directeur_prenom: 'Moussa',
-        directeur_telephone: '+221771234567',
-        directeur_mdp: 'Test1234',
+        etablissement: { nom: 'X' }, // trop court (min 2 mais champ email attendu ailleurs)
+        directeur: {
+          nom: 'Diallo', prenom: 'Moussa',
+          telephone: '+221771234567', mot_de_passe: 'Test1234',
+          // email manquant, requis
+        },
       })
       .expect(422);
 
@@ -130,15 +145,29 @@ describe('Workflow 1 — POST /etablissements/register', () => {
   });
 
   test('retourne 422 si numéro de téléphone invalide', async () => {
-    const res = await request(authApp)
-      .post('/etablissements/register')
+    const res = await request(setupApp)
+      .post('/inscription')
       .send({
-        nom: 'Lycée Test',
-        ville: 'Dakar',
-        directeur_nom: 'Diallo',
-        directeur_prenom: 'Moussa',
-        directeur_telephone: 'pas-un-numero',
-        directeur_mdp: 'Test1234',
+        etablissement: { nom: 'Lycée Test', pays: 'SN' },
+        directeur: {
+          nom: 'Diallo', prenom: 'Moussa', email: 'test@lbd.sn',
+          telephone: 'pas-un-numero', mot_de_passe: 'Test1234',
+        },
+      })
+      .expect(422);
+
+    expect(res.body.succes).toBe(false);
+  });
+
+  test('retourne 422 si mot de passe sans complexité requise', async () => {
+    const res = await request(setupApp)
+      .post('/inscription')
+      .send({
+        etablissement: { nom: 'Lycée Test', pays: 'SN' },
+        directeur: {
+          nom: 'Diallo', prenom: 'Moussa', email: 'test2@lbd.sn',
+          telephone: '+221771234567', mot_de_passe: 'faible',
+        },
       })
       .expect(422);
 

@@ -8,9 +8,10 @@
  *  GET  /dashboard     — stats agrégées de l'établissement (authentifié)
  */
 
-const express  = require('express');
-const { z }    = require('zod');
-const bcrypt   = require('bcryptjs');
+const express    = require('express');
+const rateLimit  = require('express-rate-limit');
+const { z }      = require('zod');
+const bcrypt     = require('bcryptjs');
 const { v4: uuid } = require('uuid');
 
 const { getDB }    = require('../../infrastructure/database/pool');
@@ -278,8 +279,21 @@ router.post('/setup', valider(schemaSetup), async (req, res, next) => {
   }
 });
 
+// Rate-limité (audit 2026-09, fusion des parcours d'inscription) : c'est
+// désormais l'unique route publique de création de compte, elle reprend
+// donc la protection que portait POST /etablissements/register (retirée
+// de auth.routes.js) — sans quoi la fusion aurait supprimé le seul
+// rate-limiting existant sur la création de comptes en self-service.
+const limiterInscription = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 heure
+  max:      parseInt(process.env.RATE_LIMIT_REGISTER_MAX) || 5,
+  message:  { succes: false, erreur: 'Trop de tentatives — réessayez dans 1 heure', code: 'RATE_LIMIT' },
+  standardHeaders: true,
+  legacyHeaders:   false,
+});
+
 // ── POST /inscription — Créer un nouvel établissement (toujours ouvert) ─
-router.post('/inscription', valider(schemaInscription), async (req, res, next) => {
+router.post('/inscription', limiterInscription, valider(schemaInscription), async (req, res, next) => {
   const db = getDB();
   const { etablissement: etabData, directeur: dirData } = req.body;
 
