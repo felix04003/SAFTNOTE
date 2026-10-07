@@ -47,6 +47,9 @@ async function validerOTP() {
       telephone: _telephone, code, etablissement_code: _etabCode,
     });
     sessionStorage.setItem(CONFIG.TOKEN_KEY, res.data.token);
+    // Sans refresh_token, la session du parent s'arrêtait au bout de 30 min
+    // (un nouveau SMS à chaque fois) au lieu d'être prolongée silencieusement.
+    if (res.data.refresh_token) sessionStorage.setItem(CONFIG.REFRESH_TOKEN_KEY, res.data.refresh_token);
     localStorage.setItem(CONFIG.USER_KEY, JSON.stringify(res.data.utilisateur));
     window.location.href = 'parent.html';
   } catch (e: any) {

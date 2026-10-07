@@ -353,7 +353,16 @@ router.post('/auth/otp/valider', limiterAuth, valider(schemaOtpValider), async (
 
     const utilisateur = await db('utilisateurs')
       .where({ id: otp.utilisateur_id, actif: true })
-      .first('id', 'nom', 'prenom', 'telephone', 'mdp_a_changer');
+      .first('id', 'nom', 'prenom', 'telephone', 'mdp_a_changer', 'etablissement_id');
+
+    // Le compte doit appartenir à l'établissement dont le code est fourni.
+    // Sans ce contrôle, un code demandé pour l'école A pouvait être validé
+    // avec le code de l'école B et ouvrait une session B pour un utilisateur
+    // de A (JWT eid = B, aucun rôle). Même réponse que pour un code faux :
+    // ne pas révéler dans quel établissement le numéro existe.
+    if (!utilisateur || utilisateur.etablissement_id !== etablissement.id) {
+      throw ApiError.otpInvalide('Code invalide, expiré ou trop de tentatives');
+    }
 
     // Récupérer le rôle pour ce couple utilisateur/établissement
     const roleRow = await db('utilisateur_roles as ur')

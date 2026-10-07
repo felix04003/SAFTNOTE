@@ -87,8 +87,17 @@ export const Api = {
           return Api.request<T>(method, path, body, params, { dejaRafraichi: true });
         }
       }
+      // Session définitivement perdue : la purger AVANT de rediriger. Sinon
+      // login.html voit un jeton encore présent (mais périmé), croit
+      // l'utilisateur connecté et le renvoie ici : boucle de redirections
+      // et rafale de requêtes 401 jusqu'au rate limit.
+      let ancienRole = '';
+      try { ancienRole = (JSON.parse(localStorage.getItem(CONFIG.USER_KEY) || 'null') || {}).role || ''; } catch { /* profil illisible */ }
+      sessionStorage.removeItem(CONFIG.TOKEN_KEY);
+      sessionStorage.removeItem(CONFIG.REFRESH_TOKEN_KEY);
+      localStorage.removeItem(CONFIG.USER_KEY);
       const isLoginPage = location.pathname.includes('login') || location.pathname.includes('parent-login');
-      if (!isLoginPage) location.href = 'login.html';
+      if (!isLoginPage) location.href = ancienRole.toLowerCase() === 'parent' ? 'parent-login.html' : 'login.html';
       throw new ApiError('Non autorisé', 'UNAUTHORIZED', 401);
     }
 

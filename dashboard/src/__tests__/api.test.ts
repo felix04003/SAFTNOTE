@@ -175,3 +175,41 @@ describe('Api.request — erreurs du serveur', () => {
     expect(window.location.href).toBe('');
   });
 });
+
+describe('Api.request — session perdue (401 sans refresh possible)', () => {
+  beforeEach(() => {
+    (window as any).location.pathname = '/parent.html';
+    (window as any).location.href = '';
+  });
+
+  it('purge le jeton, le refresh_token et le profil avant de rediriger (pas de boucle login ↔ page)', async () => {
+    sessionStorage.setItem(CONFIG.TOKEN_KEY, 'jeton-perime');
+    localStorage.setItem(CONFIG.USER_KEY, JSON.stringify({ role: 'enseignant' }));
+    mockFetch(401, false, { erreur: 'Token expiré' });
+
+    await expect(Api.get('/eleves')).rejects.toMatchObject({ status: 401 });
+
+    expect(sessionStorage.getItem(CONFIG.TOKEN_KEY)).toBeNull();
+    expect(localStorage.getItem(CONFIG.USER_KEY)).toBeNull();
+    expect(window.location.href).toBe('login.html');
+  });
+
+  it('un parent est renvoyé vers sa propre page de connexion (SMS)', async () => {
+    sessionStorage.setItem(CONFIG.TOKEN_KEY, 'jeton-perime');
+    localStorage.setItem(CONFIG.USER_KEY, JSON.stringify({ role: 'parent' }));
+    mockFetch(401, false, { erreur: 'Token expiré' });
+
+    await expect(Api.get('/parents/moi/enfants')).rejects.toBeInstanceOf(ApiError);
+
+    expect(window.location.href).toBe('parent-login.html');
+  });
+
+  it('sur une page de connexion : purge mais pas de redirection', async () => {
+    (window as any).location.pathname = '/parent-login.html';
+    sessionStorage.setItem(CONFIG.TOKEN_KEY, 'x');
+    mockFetch(401, false, { erreur: 'Code incorrect' });
+
+    await expect(Api.post('/auth/otp/valider', {})).rejects.toBeInstanceOf(ApiError);
+    expect(window.location.href).toBe('');
+  });
+});
