@@ -15,6 +15,7 @@ jest.mock('../../src/infrastructure/cache/redis', () => ({
 jest.mock('bullmq', () => ({
   Worker: jest.fn().mockImplementation(() => ({ on: jest.fn() })),
 }));
+jest.mock('../../src/infrastructure/notifications/plafond-sms', () => ({ consommationMois: jest.fn(), decision: jest.fn(), alerterSiSeuilFranchi: jest.fn() }));
 jest.mock('../../src/infrastructure/notifications/sms.service', () => ({ envoyerSMS: jest.fn() }));
 jest.mock('../../src/infrastructure/notifications/whatsapp.service', () => ({ envoyerTemplate: jest.fn() }));
 jest.mock('../../src/utils/logger', () => ({

@@ -3,8 +3,12 @@
 const express = require('express');
 const { getDB }    = require('../infrastructure/database/pool');
 const { authentifier }                        = require('../middleware/auth.middleware');
-const { isolerEtablissement }                 = require('../middleware/permission.middleware');
+const { isolerEtablissement, exigerPermission } = require('../middleware/permission.middleware');
+const { valider }  = require('../middleware/validate.middleware');
+const { z }        = require('zod');
 const { ok }       = require('../utils/reponse');
+const logger       = require('../utils/logger');
+const { consommationMois, decision, cleMois } = require('../infrastructure/notifications/plafond-sms');
 
 const router = express.Router();
 const auth   = authentifier;
@@ -278,5 +282,46 @@ router.get('/notifications', auth, isoler, async function(req, res, next) {
     next(err);
   }
 });
+
+// ── Plafond mensuel de SMS (migration 023) ─────────────────────
+
+function vueConsommation(conso, maintenant = new Date()) {
+  return {
+    mois:        cleMois(maintenant),
+    utilises:    conso.utilises,
+    plafond:     conso.plafond,                       // 0 = illimité
+    pourcentage: conso.pourcentage,
+    // Ce qui se passe maintenant pour les parents de cet établissement
+    notes_et_bulletins_bloques: !decision(conso, 'quotidien').autorise,
+    urgences_bloquees:          !decision(conso, 'urgence').autorise,
+  };
+}
+
+// GET /notifications/sms/consommation — SMS de notification utilisés ce mois-ci
+router.get('/notifications/sms/consommation', auth, isoler, exigerPermission('config.voir'), async function(req, res, next) {
+  try {
+    const conso = await consommationMois(getDB(), req.etablissement_id);
+    return ok(res, vueConsommation(conso));
+  } catch (err) { next(err); }
+});
+
+// PUT /notifications/sms/plafond — règle le plafond mensuel (0 = illimité)
+router.put('/notifications/sms/plafond', auth, isoler, exigerPermission('config.modifier'),
+  valider(z.object({ plafond: z.number().int().min(0).max(100000) })),
+  async function(req, res, next) {
+    try {
+      const db = getDB();
+      // Nouveau plafond => les alertes 80 % / 100 % repartent de zéro
+      await db('politique_securite')
+        .insert({ etablissement_id: req.etablissement_id, sms_plafond_mensuel: req.body.plafond })
+        .onConflict('etablissement_id')
+        .merge({ sms_plafond_mensuel: req.body.plafond, sms_alerte_palier: 0, sms_alerte_mois: null });
+      logger.info('Plafond SMS modifié', { etablissement_id: req.etablissement_id, plafond: req.body.plafond, par: req.session.utilisateur_id });
+
+      const conso = await consommationMois(db, req.etablissement_id);
+      return ok(res, vueConsommation(conso));
+    } catch (err) { next(err); }
+  }
+);
 
 module.exports = router;

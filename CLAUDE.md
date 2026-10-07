@@ -21,7 +21,7 @@ d'Afrique de l'Ouest francophone (Sénégal, Côte d'Ivoire, Mali, Burkina Faso�
 - Mobile : React Native 0.76 + Expo SDK 52 + SQLite (offline-first)
 - Dashboard : Vite + TypeScript + Vitest (compilé en `dashboard/dist/`, plus « zéro dépendance NPM » depuis la migration vers l'outillage Vite)
 - Infra : Docker Compose (dev) ; déploiement cible **Render** (API + Postgres + Redis managés via `render.yaml`) ; Nginx/Docker Compose prod (`docker-compose.prod.yml`) documenté comme alternative auto-hébergée (VPS), voir `docs/DEPLOY_VPS.md`
-- Migrations : dossier unique `migrations/` à la racine (000→022), appliqué par `backend/src/utils/migrate.js` (table de suivi `_migrations`) ; seeds de test séparés dans `backend/tests/seeds/`, jamais appliqués en production (`TRUST_PROXY_HOPS` documenté dans `.env.example` pour le comptage IP réel derrière Nginx/Render)
+- Migrations : dossier unique `migrations/` à la racine (000→023), appliqué par `backend/src/utils/migrate.js` (table de suivi `_migrations`) ; seeds de test séparés dans `backend/tests/seeds/`, jamais appliqués en production (`TRUST_PROXY_HOPS` documenté dans `.env.example` pour le comptage IP réel derrière Nginx/Render)
 
 ---
 
@@ -69,9 +69,9 @@ ecolemanager/
 │   │   │   ├── notifications/      ✅ SMS (Africa's Talking) + WhatsApp
 │   │   │   └── storage/            ✅ Cloudflare R2 / S3
 │   │   ├── middleware/             ✅ auth JWT, erreurs, rate-limit, validation
-│   │   ├── workers/                ✅ notification.worker.js
+│   │   ├── workers/                ✅ notification.worker.js (câblage BullMQ) + notification.processor.js (traitement, testé sur base réelle)
 │   │   └── utils/                  ✅ helpers divers
-│   ├── tests/                     ✅ 360 tests unitaires (38 suites Jest) + tests d'intégration
+│   ├── tests/                     ✅ 370 tests unitaires (39 suites Jest) + tests d'intégration
 │   │   ├── helpers/               ✅ mockKnex, testApp, fixtures
 │   │   ├── seeds/                 ✅ seeds de test SQL (jamais appliqués en prod)
 │   │   └── domains/               ✅ fichiers de test par domaine
@@ -129,6 +129,7 @@ ecolemanager/
 │   ├── 020_mdp_a_changer.sql                       ✅ utilisateurs.mdp_a_changer (changement de mot de passe obligatoire)
 │   ├── 021_politique_securite_defaut.sql           ✅ trigger : chaque établissement reçoit sa politique_securite + rattrapage
 │   ├── 022_est_compte_bloque_par_etablissement.sql ✅ blocage force brute selon la politique de l'établissement (défauts stricts 5/15 sinon)
+│   ├── 023_plafond_sms.sql                         ✅ plafond mensuel de SMS par établissement + segments dans journal_notifications
 │   └── run_all_migrations.sql      ⚠️  Legacy psql (\i + schema_migrations) —
 │                                       préférer `cd backend && npm run migrate`
 │
@@ -169,7 +170,7 @@ Tous les 9 domaines sont **implémentés et testés** (60/60 tests passent).
 
 > Note : ce tableau reflète l'implémentation initiale des 9 domaines. Depuis, la campagne de
 > correction de l'audit 2026-09 (lots A→J) a ajouté des domaines, migrations et tests
-> supplémentaires. **Total actuel backend : 360 tests (38 suites Jest)**, voir `npm test` dans
+> supplémentaires. **Total actuel backend : 370 tests (39 suites Jest)**, voir `npm test` dans
 > `backend/`.
 
 ### 📖 Documentation API
@@ -183,7 +184,7 @@ Tous les 9 domaines sont **implémentés et testés** (60/60 tests passent).
 - **Workflow** : `.github/workflows/ci.yml`
 - **Déclenché sur** : push `main`/`develop` + pull requests vers `main`
 - **Jobs** :
-  1. `backend-lint-test` — ESLint + Jest (360 tests, couverture, services Postgres/Redis réels)
+  1. `backend-lint-test` — ESLint + Jest (370 tests, couverture, services Postgres/Redis réels)
   2. `backend-docker` — Build image Docker (après tests)
   3. `mobile-typecheck` — TypeScript `tsc --noEmit`
 - **ESLint** : `backend/.eslintrc.js` — 0 erreurs, <60 warnings
@@ -425,7 +426,9 @@ META_WA_TOKEN         → WhatsApp Business API
 11. **SMS** : tout texte doit tenir dans l'alphabet SMS de base (pas de tiret long « — », pas de « ê », pas d'emoji : l'UCS-2 coûte 2 à 3 segments au lieu d'1). `envoyerSMS` convertit et borne à 3 segments via `utils/sms-texte.js`, mais écrire les gabarits directement conformes ; `tests/workers/sms-gabarits.test.js` garantit 1 segment pour chaque gabarit de `notification.worker.js`. Ne jamais journaliser le contenu d'un SMS ni un mot de passe
 12. **Sessions OTP** : `POST /auth/otp/valider` n'ouvre une session que dans l'établissement auquel le compte appartient (`utilisateur.etablissement_id`). Ne jamais créer de session (`creerSession`) pour un couple utilisateur/établissement sans avoir vérifié cette appartenance
 13. **Expiration côté dashboard** : quand `/auth/refresh` échoue, `Api.request` purge `em_token`, `em_refresh_token` et `em_user` AVANT de rediriger (sinon boucle `login.html` ↔ page). Les parents sont renvoyés vers `parent-login.html`
-14. **Tests manuels** : `npm run test:integration` crée puis SUPPRIME la base `ecole_manager_test` ; utiliser un autre nom de base pour des essais à la main, et lancer `redis-server --dir /tmp` (jamais depuis le dépôt : `dump.rdb`)
+14. **Notifications SMS** : le traitement vit dans `workers/notification.processor.js` (testable) ; `notification.worker.js` ne fait que le câblage BullMQ. Un report d'envoi (`statut: 'delayed'`) se fait dans le worker par `job.moveToDelayed(date, jeton)` puis `throw new DelayedError()` (BullMQ 5). Un job `nouvelle_note`/`absence`/`sanction` DOIT porter `inscription_id` (le worker retrouve le parent par l'inscription). Une panne du journal après l'envoi ne doit jamais faire échouer le job (le SMS serait renvoyé et refacturé). Les tests unitaires du worker sont simulés : toute modification de ses requêtes SQL se vérifie avec `tests/integration/notifications-worker.integration.test.js`
+15. **Plafond SMS** : `politique_securite.sms_plafond_mensuel` (0 = illimité, défaut 3000 segments/mois) borne les SMS de NOTIFICATION via `infrastructure/notifications/plafond-sms.js` (80 % → alerte directeur, 100 % → notes/bulletins bloqués, 150 % → tout bloqué). Ne jamais y soumettre le code de connexion ni le mot de passe provisoire. Réglage : `PUT /notifications/sms/plafond`, suivi : `GET /notifications/sms/consommation`
+16. **Tests manuels** : `npm run test:integration` crée puis SUPPRIME la base `ecole_manager_test` ; utiliser un autre nom de base pour des essais à la main, et lancer `redis-server --dir /tmp` (jamais depuis le dépôt : `dump.rdb`)
 
 ---
 
@@ -458,10 +461,11 @@ META_WA_TOKEN         → WhatsApp Business API
 | 23 | Normalisation E.164 des téléphones (enseignants, parents, directeur, connexion, OTP) + politique de mot de passe unique pour tous les profils (corrige la politique d'établissement jamais appliquée à la réinitialisation) | ✅ |
 | 24 | Changement de mot de passe obligatoire pour les comptes à mot de passe provisoire (migration 020, `POST /auth/changer-mot-de-passe`, écrans dashboard + mobile) ; messages de doublons précis ; messages d'erreur du serveur enfin affichés par le dashboard (`erreur`) ; redirection après connexion dashboard | ✅ |
 | 25 | Politique de sécurité créée automatiquement pour chaque établissement (migration 021) ; session OTP limitée à l'établissement du compte ; boucle d'expiration du dashboard corrigée ; plan d'évolution `docs/PLAN-evolutions-comptes-2026-10.md` (mots de passe, parent multi-établissements, web vs mobile) | ✅ (plan : phases 2-5 à exécuter) |
-| 26 | Phase 2 mots de passe : audit des comptes prévisibles, mot de passe provisoire par SMS (+ renvoi), blocage de connexion par établissement (migration 022) | ✅ (2.4 optionnelle ; 2.5 gabarits SMS en 1 segment ✅ ; 2.6 plafond de dépense à faire) |
+| 26 | Phase 2 mots de passe : audit des comptes prévisibles, mot de passe provisoire par SMS (+ renvoi), blocage de connexion par établissement (migration 022) | ✅ (2.4 optionnelle ; 2.5 et 2.6 ✅) |
+| 27 | Notifications SMS réparées sur base réelle (le worker ne trouvait jamais le parent : aucun SMS n'avait pu partir), publication des notes → un SMS par parent, contrôle d'établissement sur la publication, report horaire BullMQ 5, plafond mensuel de SMS par établissement avec alertes (migration 023) | ✅ |
 
 > Les compteurs de tests ci-dessus sont historiques (au moment de chaque étape). Compteurs
-> actuels (vérifiés le 2026-10-07) : backend 360 tests (38 suites Jest) + intégration sur base réelle (`npm run test:integration`), dashboard 84 tests (Vitest).
+> actuels (vérifiés le 2026-10-07) : backend 370 tests (39 suites Jest) + 143 tests d'intégration sur base réelle (17 suites, `npm run test:integration`), dashboard 84 tests (Vitest).
 
 ---
 

@@ -71,6 +71,7 @@ async function envoyerSMS(telephones, message) {
     return {
       succes: true,
       messageIds: succes.map(r => r.messageId),
+      segments,
       recipients: data?.SMSMessageData?.Recipients,
     };
 

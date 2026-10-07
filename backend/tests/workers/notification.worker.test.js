@@ -20,6 +20,14 @@ jest.mock('../../src/infrastructure/cache/redis', () => ({
 }));
 jest.mock('bullmq', () => ({
   Worker: jest.fn().mockImplementation(() => ({ on: jest.fn() })),
+  DelayedError: class DelayedError extends Error {},
+}));
+// Plafond mensuel : requêtes SQL propres, testées sur base réelle
+// (tests/integration/plafond-sms.integration.test.js) ; ici « illimité ».
+jest.mock('../../src/infrastructure/notifications/plafond-sms', () => ({
+  consommationMois: jest.fn().mockResolvedValue({ utilises: 0, plafond: 0, pourcentage: null, alerteMois: null, alertePalier: 0 }),
+  decision: jest.fn().mockReturnValue({ autorise: true }),
+  alerterSiSeuilFranchi: jest.fn().mockResolvedValue(null),
 }));
 jest.mock('../../src/infrastructure/notifications/sms.service', () => ({
   envoyerSMS: jest.fn(),
@@ -42,6 +50,8 @@ const {
   doitEnvoyerNotification,
   dansPlageHoraire,
   getCategorie,
+  prochaineOuverture,
+  processeur,
 } = require('../../src/workers/notification.worker');
 
 describe('notification.worker — TEMPLATES_SMS', () => {
@@ -216,4 +226,43 @@ describe('notification.worker — traiterNotification', () => {
   // ci-dessus vérifie la partie testable : traiterNotification() propage bien
   // l'erreur (ne l'avale pas), ce qui est la condition nécessaire pour que
   // BullMQ déclenche un retry.
+});
+
+
+describe('notification.worker — report hors plage horaire', () => {
+  test('prochaineOuverture : aujourd\'hui si l\'ouverture n\'est pas passée, demain sinon', () => {
+    const avant = new Date(2026, 9, 7, 5, 0, 0);      // 05:00
+    const apres = new Date(2026, 9, 7, 22, 30, 0);    // 22:30
+    expect(new Date(prochaineOuverture('07:00', avant))).toEqual(new Date(2026, 9, 7, 7, 0, 0));
+    expect(new Date(prochaineOuverture('07:00', apres))).toEqual(new Date(2026, 9, 8, 7, 0, 0));
+    expect(new Date(prochaineOuverture('08:30', apres))).toEqual(new Date(2026, 9, 8, 8, 30, 0));
+  });
+
+  test('prochaineOuverture : défaut 07:00 si aucune heure n\'est définie', () => {
+    expect(new Date(prochaineOuverture(undefined, new Date(2026, 9, 7, 23, 0, 0)))).toEqual(new Date(2026, 9, 8, 7, 0, 0));
+  });
+
+  test('processeur : un résultat « delayed » reporte le job avec son jeton puis lève DelayedError', async () => {
+    const { DelayedError } = require('bullmq');
+    const db = createMockDB();
+    getDB.mockReturnValue(db);
+    // parent hors plage : fenêtre de 1 minute à une heure où il n'est jamais « maintenant »
+    const maintenant = new Date();
+    const ailleurs = new Date(maintenant.getTime() + 6 * 3600 * 1000);
+    const hh = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    db.mockReturnValueOnce(mockQuery({
+      nom: 'Diallo', prenom: 'Moussa', eleve_id: 'e', parent_id: 'p', etablissement_id: 'etab', telephone: '+221770000001',
+      canal_prefere: 'sms', a_whatsapp: false, notif_absences: true, notif_notes: true, notif_bulletins: true,
+      heure_debut_notif: hh(ailleurs), heure_fin_notif: hh(new Date(ailleurs.getTime() + 60000)), etablissement: 'Lycée',
+    }));
+    const job = { id: 'j', data: { type_notif: 'nouvelle_note', inscription_id: 'i' }, moveToDelayed: jest.fn().mockResolvedValue(undefined) };
+
+    await expect(processeur(job, 'jeton-42')).rejects.toBeInstanceOf(DelayedError);
+
+    expect(job.moveToDelayed).toHaveBeenCalledTimes(1);
+    const [quand, jeton] = job.moveToDelayed.mock.calls[0];
+    expect(jeton).toBe('jeton-42');
+    expect(quand).toBeGreaterThan(Date.now());
+    expect(envoyerSMS).not.toHaveBeenCalled();
+  });
 });

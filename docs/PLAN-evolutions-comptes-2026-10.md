@@ -38,7 +38,7 @@ Règles d'exécution (valables pour toutes les phases) :
 | 2.3 Blocage de connexion par établissement | ✅ fait (migration 022) |
 | 2.4 Réglage de la politique par le directeur | ⏳ optionnelle, non faite |
 | 2.5 Gabarits SMS en un segment | ✅ fait (voir ci-dessous) |
-| 2.6 Fiabiliser et plafonner les notifications | ⏳ à faire |
+| 2.6 Fiabiliser et plafonner les notifications | ✅ fait (voir ci-dessous) |
 | Phase 3 | ⏳ 3.1 → 3.3 puis 3.6 à lancer ; 3.4 différée |
 
 ---
@@ -63,7 +63,7 @@ Règles d'exécution (valables pour toutes les phases) :
 | C4 | ~~Le mot de passe provisoire est renvoyé en clair au directeur~~ **Corrigé** (2.2) : envoyé par SMS, renvoyé au directeur seulement si le SMS échoue | — | 2 ✅ |
 | C5 | ~~Mots de passe faibles antérieurs~~ **Outil livré** (2.1) : à exécuter sur la base de production (simulation d'abord) | — | 2 ✅ / 5 |
 | C11 | ~~Gabarits SMS en UCS-2 (tiret long, « ê »), 2 à 3 segments facturés~~ **Corrigé** (2.5) : les 6 gabarits tiennent en 1 segment GSM-7, et `envoyerSMS` convertit tout message | — | 2.5 ✅ |
-| C12 | `nouvelle_note` : `evaluations.routes.js` met en file `{ evaluation_id }` sans `inscription_id`, alors que le worker en a besoin pour retrouver le parent (`notification.worker.js`, requête sur `i.id`). **Probable** : ces SMS ne partent jamais ou font échouer le job — non exécuté ici | À vérifier | 2.6 |
+| C12 | ~~Notifications jamais envoyées~~ **Confirmé sur base réelle puis corrigé** (2.6) : le worker ne retrouvait jamais le parent (jointure `inscriptions.eleve_id` → `utilisateurs` au lieu de `eleves`) — donc AUCUN SMS d'absence, de retard, de sanction ni de note n'avait pu partir ; en plus : journal rejeté (`etablissement_id` NOT NULL), `nouvelle_note` sans `inscription_id`, report horaire cassé avec BullMQ 5 | — | 2.6 ✅ |
 | C6 | Dashboard, page **enseignant** : `ens-app.ts` appelle `Auth.populateSidebar()`, qui cible `sb-nom`, `sb-role`, `sb-etab` alors que la page utilise `sb-user-nom`, `sb-user-role`, `sb-user-avatar`, `sb-etab-nom` → nom, rôle, avatar et établissement restent vides. (Les pages admin `app.ts` et parent `par-app.ts` les renseignent correctement.) | Faible (UX) | 4 |
 | C7 | `login.html` n'a pas de lien vers `parent-login.html` (l'inverse existe) : un parent qui arrive sur la page du personnel ne trouve pas sa connexion | Faible (UX) | 4 |
 | C8 | Le dashboard est **en ligne uniquement** : l'appel et les notes d'un enseignant ne fonctionnent pas hors connexion (contrainte terrain n°1 du projet) | Structurelle, à documenter et à signaler dans l'interface | 4 |
@@ -143,7 +143,21 @@ Mesure faite sur les gabarits de `workers/notification.worker.js` (données d'ex
 - Test unitaire : pour chaque gabarit et ses données d'exemple, `segments === 1` (sauf cas explicitement listés).
 - Critère d'acceptation : le test de mesure ci-dessus passe à 1 segment pour les 6 gabarits.
 
-### 2.6 — Fiabiliser et plafonner l'envoi des notifications (C12)
+### 2.6 — Fiabiliser et plafonner l'envoi des notifications (C12) — ✅ FAIT
+
+Réalisé (détail du chantier, mesuré sur base réelle) :
+
+**a) Le worker ne fonctionnait pas.** Les tests du worker étaient entièrement simulés : exécuté sur PostgreSQL, il répondait « parent introuvable » pour toutes les notifications. Corrigé : jointure `inscriptions → eleves → utilisateurs`, préférences en `LEFT JOIN` (un parent sans préférences reçoit les défauts), journal complet (`etablissement_id`, `eleve_id`), journal d'échec réparé, **une panne du journal après l'envoi ne relance plus le SMS** (BullMQ l'aurait renvoyé et refacturé). Le traitement est séparé du câblage BullMQ (`workers/notification.processor.js`) pour être testable sur base réelle.
+
+**b) Publication des notes** (`PUT /evaluations/:id/publier`) : un job `nouvelle_note` par élève ayant une note (pas pour un absent justifié ni un dispensé) avec son `inscription_id` ; publication atomique (un second appel ne renotifie pas) ; **contrôle d'établissement ajouté** (avant : n'importe quel utilisateur pouvant publier pouvait publier les notes d'un autre établissement).
+
+**c) Report hors plage horaire** : avec BullMQ 5, le worker doit appeler `job.moveToDelayed(date, jeton)` puis lever `DelayedError` ; l'ancien code produisait des erreurs « Missing lock » et reportait toujours à *demain* même avant l'ouverture de la plage. Corrigé et vérifié avec la vraie file : un parent dont la plage est 20 h-21 h, notifié à 12 h 55, reçoit son SMS à 20 h le jour même.
+
+**d) Plafond mensuel** (migration 023) : `politique_securite.sms_plafond_mensuel` (défaut 3 000 segments/mois, 0 = illimité). Au plafond, notes et bulletins ne partent plus (blocage tracé dans `journal_notifications`, statut `annule`, code `PLAFOND_SMS`) ; absences, retards, sanctions et convocations continuent jusqu'à 150 % (butoir). Le directeur reçoit un SMS à 80 % puis à 100 %, une seule fois par palier et par mois (réservation atomique). Les codes de connexion et les mots de passe provisoires ne sont jamais bloqués. `GET /notifications/sms/consommation` et `PUT /notifications/sms/plafond`. Les segments réels sont enregistrés par message.
+
+**Constaté, non traité** : `bulletin_disponible` et `convocation` ont un gabarit mais **aucun code ne les met en file** (seuls absence/retard, sanction et note le font). Interface du dashboard pour le plafond : non faite (API seulement).
+
+Plan d'origine de la tâche :
 
 - Vérifier par un test d'intégration que publier les notes d'une évaluation crée bien une notification par parent
   concerné ; si le job est mal formé (C12), faire éclater `{ evaluation_id }` en un job par inscription côté route ou
