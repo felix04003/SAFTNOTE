@@ -71,7 +71,7 @@ ecolemanager/
 │   │   ├── middleware/             ✅ auth JWT, erreurs, rate-limit, validation
 │   │   ├── workers/                ✅ notification.worker.js
 │   │   └── utils/                  ✅ helpers divers
-│   ├── tests/                     ✅ 225 tests unitaires/intégration (27 suites Jest)
+│   ├── tests/                     ✅ 278 tests unitaires/intégration (30 suites Jest)
 │   │   ├── helpers/               ✅ mockKnex, testApp, fixtures
 │   │   ├── seeds/                 ✅ seeds de test SQL (jamais appliqués en prod)
 │   │   └── domains/               ✅ fichiers de test par domaine
@@ -139,7 +139,7 @@ ecolemanager/
     ├── css/
     │   └── style.css       ✅ Toute la feuille de style
     ├── src/                ✅ Sources TypeScript (remplace l'ancien dashboard/js/, supprimé — lot K)
-    ├── tests/              ✅ 65 tests Vitest
+    ├── tests/              ✅ 72 tests Vitest
     ├── vite.config.ts / vitest.config.ts / tsconfig.json
     └── dist/               ← build de production (généré, non versionné)
 ```
@@ -165,7 +165,7 @@ Tous les 9 domaines sont **implémentés et testés** (60/60 tests passent).
 
 > Note : ce tableau reflète l'implémentation initiale des 9 domaines. Depuis, la campagne de
 > correction de l'audit 2026-09 (lots A→J) a ajouté des domaines, migrations et tests
-> supplémentaires. **Total actuel backend : 225 tests (27 suites Jest)**, voir `npm test` dans
+> supplémentaires. **Total actuel backend : 278 tests (30 suites Jest)**, voir `npm test` dans
 > `backend/`.
 
 ### 📖 Documentation API
@@ -179,7 +179,7 @@ Tous les 9 domaines sont **implémentés et testés** (60/60 tests passent).
 - **Workflow** : `.github/workflows/ci.yml`
 - **Déclenché sur** : push `main`/`develop` + pull requests vers `main`
 - **Jobs** :
-  1. `backend-lint-test` — ESLint + Jest (225 tests, couverture, services Postgres/Redis réels)
+  1. `backend-lint-test` — ESLint + Jest (278 tests, couverture, services Postgres/Redis réels)
   2. `backend-docker` — Build image Docker (après tests)
   3. `mobile-typecheck` — TypeScript `tsc --noEmit`
 - **ESLint** : `backend/.eslintrc.js` — 0 erreurs, <60 warnings
@@ -190,7 +190,7 @@ Tous les 9 domaines sont **implémentés et testés** (60/60 tests passent).
   vanilla non compilé a été supprimé au lot K, hygiène dépôt — il n'était plus référencé par aucun HTML)
 - **Auth** : JWT stocké dans `sessionStorage` (migré depuis `localStorage` au lot H), redirect vers `login.html` si 401
 - **Routing** : Hash-based (`#eleves`, `#notes`, etc.)
-- **Tests** : 65 tests Vitest (`dashboard/tests/`)
+- **Tests** : 72 tests Vitest (`dashboard/src/__tests__/`)
 - **Serveur dev** : `npm run dev` dans `dashboard/` (Vite) ; build prod : `npm run build`
 
 ### 🔜 Travail restant
@@ -413,6 +413,8 @@ META_WA_TOKEN         → WhatsApp Business API
 3. **Rôles** : `directeur > censeur > enseignant > parent` — utiliser `requireRole()`
 4. **Rate limiting** : déjà configuré dans `middleware/rateLimiter.js` ; `POST /inscription` a son propre limiteur (`RATE_LIMIT_REGISTER_MAX`, défaut 5/heure)
 5. **Données sensibles** : ne jamais logger de mots de passe, tokens ou numéros de CB
+6. **Téléphones** : toujours stockés en E.164 (`+221771234567`) via `utils/telephone.js` (`telephoneOuErreur`, pays par défaut = celui de l'établissement). Les recherches (connexion, OTP, doublons) passent par `variantesTelephone` pour retrouver aussi les comptes antérieurs ; reprise des données existantes : `cd backend && npm run normaliser:telephones` (simulation) puis `-- --appliquer`
+7. **Mots de passe** : une seule politique pour tous les profils qui en ont un (directeur, enseignant, réinitialisation), définie dans `utils/mot-de-passe.js` : 8 caractères min., minuscule + majuscule + chiffre, 72 octets max, ne reprend pas téléphone/email/nom. `politique_securite` de l'établissement ne peut que durcir la longueur. Enseignant créé sans mot de passe → mot de passe provisoire aléatoire généré (jamais le téléphone). Parents/élèves : pas de mot de passe (OTP SMS). Ne jamais redéfinir une règle ailleurs : importer `schemaMotDePasse` / `exigerMotDePasseConforme`
 
 ---
 
@@ -442,9 +444,10 @@ META_WA_TOKEN         → WhatsApp Business API
 | 20 | Campagne de correction audit 2026-09 (lots A→K : migrations unifiées, sessions/refresh, IDOR bulletins, stockage S3, OTP prod, infra Render/Nginx, dépendances, sécurité dashboard, hygiène dépôt) | ✅ (voir `docs/CHANGELOG.md`) |
 | 21 | RLS PostgreSQL réel phase 1 (migration 019) + blocage écriture inter-établissements sur `POST /sync/operations` | ✅ |
 | 22 | Fusion des parcours de création d'établissement sur `POST /inscription` (mot de passe fort, rate-limit) ; `POST /etablissements/register` supprimée | ✅ |
+| 23 | Normalisation E.164 des téléphones (enseignants, parents, directeur, connexion, OTP) + politique de mot de passe unique pour tous les profils (corrige la politique d'établissement jamais appliquée à la réinitialisation) | ✅ |
 
 > Les compteurs de tests ci-dessus sont historiques (au moment de chaque étape). Compteurs
-> actuels (vérifiés le 2026-10-07) : backend 225 tests (27 suites Jest), dashboard 65 tests (Vitest).
+> actuels (vérifiés le 2026-10-07) : backend 278 tests (30 suites Jest), dashboard 72 tests (Vitest).
 
 ---
 

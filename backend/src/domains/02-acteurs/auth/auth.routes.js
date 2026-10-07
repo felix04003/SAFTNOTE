@@ -20,6 +20,7 @@ const { getOrSet } = require('../../../infrastructure/cache/redis');
 const {
   normaliserTelephone, variantesTelephone, ressembleATelephone,
 } = require('../../../utils/telephone');
+const { schemaMotDePasse, exigerMotDePasseConforme } = require('../../../utils/mot-de-passe');
 
 const router = express.Router();
 /**
@@ -39,24 +40,6 @@ function filtreIdentifiant(identifiant, pays) {
 }
 
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS) || 12;
-
-/**
- * Valide un mot de passe selon la politique de sécurité de l'établissement.
- * @param {string} mdp - Le mot de passe à valider
- * @param {object} politique - Objet avec mdp_longueur_min, mdp_necessite_majuscule, mdp_necessite_chiffre
- * @returns {string|null} Message d'erreur ou null si valide
- */
-function validerMotDePasse(mdp, politique) {
-  const min = politique?.mdp_longueur_min || 8;
-  if (mdp.length < min) return `Le mot de passe doit contenir au moins ${min} caractères`;
-  if (politique?.mdp_necessite_majuscule && !/[A-Z]/.test(mdp)) {
-    return 'Le mot de passe doit contenir au moins une lettre majuscule';
-  }
-  if (politique?.mdp_necessite_chiffre && !/[0-9]/.test(mdp)) {
-    return 'Le mot de passe doit contenir au moins un chiffre';
-  }
-  return null;
-}
 
 /**
  * Envoie un code OTP par SMS, ou le logue en développement/test si Africa's
@@ -132,7 +115,7 @@ const schemaReinitialiserMotDePasse = z.object({
   identifiant:        z.string().min(3),
   etablissement_code: z.string().min(2),
   code:               z.string().length(6).regex(/^\d{6}$/),
-  nouveau_mot_de_passe: z.string().min(8, 'Minimum 8 caractères'),
+  nouveau_mot_de_passe: schemaMotDePasse,
 });
 
 const schemaConnexion = z.object({
@@ -589,7 +572,7 @@ router.post('/auth/reinitialiser-mot-de-passe', limiterAuth, valider(schemaReini
     const utilisateurBrut = await db('utilisateurs')
       .where({ etablissement_id: etablissement.id, actif: true })
       .andWhere(filtreIdentifiant(identifiant, etablissement.pays))
-      .first('id', 'telephone');
+      .first('id', 'telephone', 'email', 'nom', 'prenom');
 
     if (!utilisateurBrut) throw ApiError.otpInvalide('Code invalide ou expiré');
 
@@ -619,15 +602,13 @@ router.post('/auth/reinitialiser-mot-de-passe', limiterAuth, valider(schemaReini
 
     if (!otp) throw ApiError.otpInvalide('Code invalide, expiré ou trop de tentatives');
 
-    // Vérifier la politique de mot de passe
-    try {
-      const politique = await db('politique_securite').first('mdp_longueur_min', 'mdp_necessite_majuscule', 'mdp_necessite_chiffre');
-      const errMdp = validerMotDePasse(nouveau_mot_de_passe, politique);
-      if (errMdp) throw ApiError.validation(errMdp);
-    } catch (e) {
-      if (e.isApiError) throw e;
-      // Si la table n'existe pas encore, continuer sans validation
-    }
+    // Politique de l'établissement (ne peut que durcir le socle commun, déjà
+    // vérifié par le schéma) + interdiction de reprendre l'identité du compte.
+    // Aucune exception avalée : une erreur ici doit refuser la requête.
+    const politique = await db('politique_securite')
+      .where({ etablissement_id: etablissement.id })
+      .first('mdp_longueur_min');
+    exigerMotDePasseConforme(nouveau_mot_de_passe, politique, utilisateur);
 
     const hash = await bcrypt.hash(nouveau_mot_de_passe, 12);
 

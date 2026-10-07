@@ -1,6 +1,7 @@
 import { Api } from '../api';
 import { escapeHtml, init2, toast, openModal, closeModal } from '../ui';
 import { PAGE_HOOKS } from '../router';
+import { verifierMotDePasse } from '../password';
 
 export const PageEnseignants: any = {
   data: [],
@@ -28,11 +29,15 @@ export const PageEnseignants: any = {
 
     if (!nom || !prenom) return toast('Nom et prénom obligatoires', 'w');
     if (!telephone)      return toast('Numéro de téléphone obligatoire', 'w');
+    if (mdp) {
+      const errMdp = verifierMotDePasse(mdp);
+      if (errMdp) return toast(errMdp, 'w');
+    }
 
     const payload: Record<string, any> = {
       nom,
       prenom,
-      telephone: telephone.replace(/\s/g, ''),
+      telephone,
       email: email || undefined,
       specialite: specialite || undefined,
       type_contrat: contrat || 'titulaire',
@@ -45,7 +50,7 @@ export const PageEnseignants: any = {
     try {
       const res = await Api.post('/enseignants', payload);
       closeModal('m-enseignant');
-      const mdpInfo = (res.data && res.data.message) || ('Mot de passe provisoire : ' + (mdp || telephone));
+      const mdpInfo = (res.data && res.data.message) || 'Compte créé';
       toast('Enseignant créé ✓ — ' + mdpInfo, 's');
       await this.charger();
     } catch (e: any) {

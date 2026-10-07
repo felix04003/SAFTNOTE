@@ -1,6 +1,7 @@
 import { CONFIG } from './config';
 import { Api } from './api';
 import { Auth } from './auth';
+import { verifierMotDePasse } from './password';
 
 if (Auth.isAuthenticated()) window.location.href = 'index.html';
 if (window.innerWidth <= 768) {
@@ -111,10 +112,8 @@ async function soumettre() {
   if (!dirEmail || !dirEmail.includes('@')) return showErr('Email invalide.');
   if (!dirTel)    return showErr('Le numéro de téléphone est obligatoire.');
   if (!/^\+?[0-9]{8,15}$/.test(dirTel.replace(/\s/g,''))) return showErr('Numéro de téléphone invalide (format : +221771234567).');
-  if (!mdp || mdp.length < 8) return showErr('Le mot de passe doit contenir au moins 8 caractères.');
-  if (!/[a-z]/.test(mdp) || !/[A-Z]/.test(mdp) || !/[0-9]/.test(mdp)) {
-    return showErr('Le mot de passe doit contenir au moins une majuscule, une minuscule et un chiffre.');
-  }
+  const errMdp = verifierMotDePasse(mdp);
+  if (errMdp) return showErr(errMdp);
   if (mdp !== mdp2) return showErr('Les mots de passe ne correspondent pas.');
 
   const btn = document.getElementById('btn-inscrire') as HTMLButtonElement | null;

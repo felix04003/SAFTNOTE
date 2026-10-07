@@ -14,6 +14,9 @@ const { ok, cree, liste }  = require('../../../utils/reponse');
 const ApiError       = require('../../../utils/ApiError');
 const logger         = require('../../../utils/logger');
 const { paysEtablissement, telephoneOuErreur, variantesTelephone } = require('../../../utils/telephone');
+const {
+  schemaMotDePasse, exigerMotDePasseConforme, genererMotDePasseTemporaire,
+} = require('../../../utils/mot-de-passe');
 
 const router = express.Router();
 const auth   = authentifier;
@@ -54,7 +57,7 @@ router.post('/enseignants', auth, isoler, perm('config.modifier'),
     genre:        z.enum(['M', 'F']).optional(),
     specialite:   z.string().optional(),
     type_contrat: z.enum(['titulaire', 'vacataire', 'contractuel', 'benevole']).default('titulaire'),
-    mot_de_passe: z.string().min(6).optional(),
+    mot_de_passe: schemaMotDePasse.optional(),
   })),
   async (req, res, next) => {
     const db = getDB();
@@ -70,7 +73,15 @@ router.post('/enseignants', auth, isoler, perm('config.modifier'),
         .first('id');
       if (doublon) throw ApiError.validationEchouee('Un utilisateur avec ce numéro existe déjà');
 
-      const mdpBrut = req.body.mot_de_passe || telephone;
+      // Même politique que tous les profils. Sans mot de passe fourni, un mot
+      // de passe provisoire aléatoire est généré (plus de « mot de passe =
+      // numéro de téléphone », qui était aussi l'identifiant de connexion).
+      const genere  = !req.body.mot_de_passe;
+      const mdpBrut = req.body.mot_de_passe || genererMotDePasseTemporaire();
+      const politique = await db('politique_securite')
+        .where({ etablissement_id: req.etablissement_id })
+        .first('mdp_longueur_min');
+      exigerMotDePasseConforme(mdpBrut, politique, { ...req.body, telephone });
       const mdpHash = await bcrypt.hash(mdpBrut, 10);
 
       const result = await db.transaction(async trx => {
@@ -118,6 +129,7 @@ router.post('/enseignants', auth, isoler, perm('config.modifier'),
 
       return cree(res, {
         ...result,
+        mot_de_passe_genere: genere,
         message: `Compte créé. Mot de passe provisoire : ${mdpBrut}`,
       });
     } catch (err) { next(err); }

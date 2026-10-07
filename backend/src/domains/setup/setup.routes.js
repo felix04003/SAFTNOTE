@@ -20,6 +20,7 @@ const { cree }     = require('../../utils/reponse');
 const ApiError     = require('../../utils/ApiError');
 const logger       = require('../../utils/logger');
 const { telephoneOuErreur } = require('../../utils/telephone');
+const { schemaMotDePasse, exigerMotDePasseConforme } = require('../../utils/mot-de-passe');
 
 const router = express.Router();
 
@@ -38,17 +39,8 @@ const schemaSetup = z.object({
     prenom:       z.string().min(2),
     email:        z.string().email(),
     telephone:    z.string().min(6, 'Numéro invalide').max(25, 'Numéro invalide'),
-    // Mot de passe fort obligatoire à la création (audit 2026-09) : la
-    // création de compte n'appliquait auparavant aucune règle de
-    // complexité (seulement une longueur minimale), contrairement à la
-    // réinitialisation de mot de passe qui utilise déjà validerMotDePasse()
-    // dans auth.routes.js. Même exigence ici : au moins une majuscule, une
-    // minuscule et un chiffre.
-    mot_de_passe: z.string()
-      .min(8, 'Minimum 8 caractères')
-      .regex(/[a-z]/, 'Le mot de passe doit contenir au moins une minuscule')
-      .regex(/[A-Z]/, 'Le mot de passe doit contenir au moins une majuscule')
-      .regex(/[0-9]/, 'Le mot de passe doit contenir au moins un chiffre'),
+    // Politique unique de mot de passe (utils/mot-de-passe.js)
+    mot_de_passe: schemaMotDePasse,
   }),
   annee_scolaire: z.object({
     libelle:      z.string().min(4),
@@ -86,11 +78,7 @@ const schemaInscription = z.object({
     prenom:       z.string().min(2),
     email:        z.string().email(),
     telephone:    z.string().min(6, 'Numéro invalide').max(25, 'Numéro invalide'),
-    mot_de_passe: z.string()
-      .min(8, 'Minimum 8 caractères')
-      .regex(/[a-z]/, 'Le mot de passe doit contenir au moins une minuscule')
-      .regex(/[A-Z]/, 'Le mot de passe doit contenir au moins une majuscule')
-      .regex(/[0-9]/, 'Le mot de passe doit contenir au moins un chiffre'),
+    mot_de_passe: schemaMotDePasse,
   }),
 });
 
@@ -174,6 +162,7 @@ router.post('/setup', valider(schemaSetup), async (req, res, next) => {
 
     const { etablissement: etabData, directeur: dirData, annee_scolaire: anneeData } = req.body;
     dirData.telephone = telephoneOuErreur(dirData.telephone, etabData.pays, 'Téléphone du directeur');
+    exigerMotDePasseConforme(dirData.mot_de_passe, null, dirData);
 
     // Vérifier unicité du code
     const codeExiste = await db('etablissements')
@@ -301,6 +290,7 @@ router.post('/inscription', limiterInscription, valider(schemaInscription), asyn
 
   try {
     dirData.telephone = telephoneOuErreur(dirData.telephone, etabData.pays, 'Téléphone du directeur');
+    exigerMotDePasseConforme(dirData.mot_de_passe, null, dirData);
 
     // Vérifier unicité de l'email directeur (global)
     const emailExiste = await db('utilisateurs').where({ email: dirData.email }).first('id');
