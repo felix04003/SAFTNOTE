@@ -21,7 +21,7 @@ d'Afrique de l'Ouest francophone (Sénégal, Côte d'Ivoire, Mali, Burkina Faso�
 - Mobile : React Native 0.76 + Expo SDK 52 + SQLite (offline-first)
 - Dashboard : Vite + TypeScript + Vitest (compilé en `dashboard/dist/`, plus « zéro dépendance NPM » depuis la migration vers l'outillage Vite)
 - Infra : Docker Compose (dev) ; déploiement cible **Render** (API + Postgres + Redis managés via `render.yaml`) ; Nginx/Docker Compose prod (`docker-compose.prod.yml`) documenté comme alternative auto-hébergée (VPS), voir `docs/DEPLOY_VPS.md`
-- Migrations : dossier unique `migrations/` à la racine (000→018), appliqué par `backend/src/utils/migrate.js` (table de suivi `_migrations`) ; seeds de test séparés dans `backend/tests/seeds/`, jamais appliqués en production (`TRUST_PROXY_HOPS` documenté dans `.env.example` pour le comptage IP réel derrière Nginx/Render)
+- Migrations : dossier unique `migrations/` à la racine (000→019), appliqué par `backend/src/utils/migrate.js` (table de suivi `_migrations`) ; seeds de test séparés dans `backend/tests/seeds/`, jamais appliqués en production (`TRUST_PROXY_HOPS` documenté dans `.env.example` pour le comptage IP réel derrière Nginx/Render)
 
 ---
 
@@ -71,7 +71,7 @@ ecolemanager/
 │   │   ├── middleware/             ✅ auth JWT, erreurs, rate-limit, validation
 │   │   ├── workers/                ✅ notification.worker.js
 │   │   └── utils/                  ✅ helpers divers
-│   ├── tests/                     ✅ 172 tests unitaires/intégration (22 suites Jest)
+│   ├── tests/                     ✅ 225 tests unitaires/intégration (27 suites Jest)
 │   │   ├── helpers/               ✅ mockKnex, testApp, fixtures
 │   │   ├── seeds/                 ✅ seeds de test SQL (jamais appliqués en prod)
 │   │   └── domains/               ✅ fichiers de test par domaine
@@ -122,6 +122,10 @@ ecolemanager/
 │   ├── 013_fix_presences_statut_non_saisi.sql      ✅ statuts appels/presences
 │   ├── 014_fix_notes_voir_eleve_permissions.sql    ✅ permission notes.voir_eleve (staff)
 │   ├── 015_fix_discipline_enseignant_permissions.sql ✅ permissions discipline (enseignant)
+│   ├── 016_parent_retirer_bulletins_voir.sql       ✅ retrait bulletins.voir du rôle parent (IDOR)
+│   ├── 017_eleve_retirer_bulletins_voir.sql        ✅ retrait bulletins.voir du rôle élève
+│   ├── 018_bulletin_key.sql                        ✅ clé de stockage S3/R2 des bulletins
+│   ├── 019_rls_reel_phase1.sql                     ✅ RLS PostgreSQL réel, phase 1 pilote (rôle dédié + 2 tables)
 │   └── run_all_migrations.sql      ⚠️  Legacy psql (\i + schema_migrations) —
 │                                       préférer `cd backend && npm run migrate`
 │
@@ -130,8 +134,8 @@ ecolemanager/
 │
 └── dashboard/              ← Dashboard admin (Vite + TypeScript + Vitest, compilé en dist/)
     ├── index.html          ✅ Structure HTML (scripts compilés par Vite, plus de js/ legacy)
-    ├── login.html          ✅ Page de connexion (identifiant, mdp, code établissement)
-    ├── inscription.html    ✅ Page de création d'un nouvel établissement (formulaire setup)
+    ├── login.html          ✅ Page de connexion uniquement (identifiant, mdp, code établissement) + lien vers inscription.html
+    ├── inscription.html    ✅ Wizard de création d'établissement + directeur (seul point d'entrée, POST /inscription)
     ├── css/
     │   └── style.css       ✅ Toute la feuille de style
     ├── src/                ✅ Sources TypeScript (remplace l'ancien dashboard/js/, supprimé — lot K)
@@ -161,7 +165,7 @@ Tous les 9 domaines sont **implémentés et testés** (60/60 tests passent).
 
 > Note : ce tableau reflète l'implémentation initiale des 9 domaines. Depuis, la campagne de
 > correction de l'audit 2026-09 (lots A→J) a ajouté des domaines, migrations et tests
-> supplémentaires. **Total actuel backend : 172 tests (22 suites Jest)**, voir `npm test` dans
+> supplémentaires. **Total actuel backend : 225 tests (27 suites Jest)**, voir `npm test` dans
 > `backend/`.
 
 ### 📖 Documentation API
@@ -175,7 +179,7 @@ Tous les 9 domaines sont **implémentés et testés** (60/60 tests passent).
 - **Workflow** : `.github/workflows/ci.yml`
 - **Déclenché sur** : push `main`/`develop` + pull requests vers `main`
 - **Jobs** :
-  1. `backend-lint-test` — ESLint + Jest (172 tests, couverture)
+  1. `backend-lint-test` — ESLint + Jest (225 tests, couverture, services Postgres/Redis réels)
   2. `backend-docker` — Build image Docker (après tests)
   3. `mobile-typecheck` — TypeScript `tsc --noEmit`
 - **ESLint** : `backend/.eslintrc.js` — 0 erreurs, <60 warnings
@@ -195,8 +199,10 @@ Tous les 9 domaines sont **implémentés et testés** (60/60 tests passent).
 - [x] Dashboard : extraction monolithe → fichiers modulaires
 - [x] Dashboard : authentification + login page
 - [x] Dashboard : connexion 10 pages aux endpoints API (avec fallback mock)
-- [x] Backend : domaine setup — création établissement + directeur (POST /setup, POST /inscription, GET /setup/status, GET /dashboard)
-- [x] Dashboard : page inscription.html — formulaire de création d'établissement
+- [x] Backend : domaine setup — création établissement + directeur (`POST /setup` = bootstrap interne, jamais appelé par l'UI ; `POST /inscription` = parcours public rate-limité, génère code établissement, année scolaire et niveaux ; `GET /setup/status`, `GET /dashboard`)
+- [x] Dashboard : page inscription.html — wizard de création d'établissement (point d'entrée unique, remplace l'onglet de login.html)
+- [x] RLS PostgreSQL réel — phase 1 pilote (migration 019, 2 tables, `GET /configs/matieres`)
+- [ ] RLS PostgreSQL — phases suivantes (autres tables, bascule de l'API sur le rôle dédié)
 - [x] Dashboard : retrait des données fictives (data-mock.js) — pages branchées sur API réelle
 - [x] Déploiement Render (API + Postgres + Redis managés, `render.yaml`) ; alternative VPS/Docker+Nginx documentée dans `docs/DEPLOY_VPS.md`
 - [ ] Build mobile EAS + publication stores
@@ -405,7 +411,7 @@ META_WA_TOKEN         → WhatsApp Business API
 1. **Multi-tenant strict** : chaque requête SQL doit filtrer par `etablissement_id = $1`
 2. **JWT** : vérification dans `middleware/auth.js` — ne pas dupliquer la logique
 3. **Rôles** : `directeur > censeur > enseignant > parent` — utiliser `requireRole()`
-4. **Rate limiting** : déjà configuré dans `middleware/rateLimiter.js`
+4. **Rate limiting** : déjà configuré dans `middleware/rateLimiter.js` ; `POST /inscription` a son propre limiteur (`RATE_LIMIT_REGISTER_MAX`, défaut 5/heure)
 5. **Données sensibles** : ne jamais logger de mots de passe, tokens ou numéros de CB
 
 ---
@@ -434,9 +440,11 @@ META_WA_TOKEN         → WhatsApp Business API
 | 18 | Monitoring `/health/deep` + `/metrics` + alertes SMS | ✅ |
 | 19 | Build mobile EAS + CI verte (108 tests, TypeScript, Docker) | ✅ |
 | 20 | Campagne de correction audit 2026-09 (lots A→K : migrations unifiées, sessions/refresh, IDOR bulletins, stockage S3, OTP prod, infra Render/Nginx, dépendances, sécurité dashboard, hygiène dépôt) | ✅ (voir `docs/CHANGELOG.md`) |
+| 21 | RLS PostgreSQL réel phase 1 (migration 019) + blocage écriture inter-établissements sur `POST /sync/operations` | ✅ |
+| 22 | Fusion des parcours de création d'établissement sur `POST /inscription` (mot de passe fort, rate-limit) ; `POST /etablissements/register` supprimée | ✅ |
 
 > Les compteurs de tests ci-dessus sont historiques (au moment de chaque étape). Compteurs
-> actuels : backend 172 tests (22 suites Jest), dashboard 65 tests (Vitest).
+> actuels (vérifiés le 2026-10-07) : backend 225 tests (27 suites Jest), dashboard 65 tests (Vitest).
 
 ---
 
