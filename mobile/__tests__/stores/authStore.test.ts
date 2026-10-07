@@ -282,3 +282,51 @@ describe('helpers de role', () => {
     expect(useAuthStore.getState().estParent()).toBe(false);
   });
 });
+
+describe('mot de passe provisoire (doit_changer_mdp)', () => {
+  const REPONSE_PROVISOIRE = {
+    ...API_RESPONSE,
+    utilisateur: { ...API_RESPONSE.utilisateur, doit_changer_mdp: true },
+  };
+
+  it('connexionMDP conserve le drapeau dans la session persistée', async () => {
+    mockConnexion.mockResolvedValueOnce(REPONSE_PROVISOIRE);
+    await useAuthStore.getState().connexionMDP({ identifiant: 'x', mot_de_passe: 'y', etablissement_code: 'Z' });
+
+    expect(useAuthStore.getState().session?.doit_changer_mdp).toBe(true);
+    const persiste = mockSetItemAsync.mock.calls.find(([k]: any[]) => k === 'session');
+    expect(JSON.parse(persiste[1]).doit_changer_mdp).toBe(true);
+  });
+
+  it('connexion normale : drapeau à false', async () => {
+    mockConnexion.mockResolvedValueOnce(API_RESPONSE);
+    await useAuthStore.getState().connexionMDP({ identifiant: 'x', mot_de_passe: 'y', etablissement_code: 'Z' });
+    expect(useAuthStore.getState().session?.doit_changer_mdp).toBe(false);
+  });
+
+  it('mdpChange() lève l\'obligation en mémoire et en SecureStore', async () => {
+    useAuthStore.setState({ session: { ...SESSION_FIXTURE, doit_changer_mdp: true }, estConnecte: true });
+    await useAuthStore.getState().mdpChange();
+
+    expect(useAuthStore.getState().session?.doit_changer_mdp).toBe(false);
+    const persiste = mockSetItemAsync.mock.calls.find(([k]: any[]) => k === 'session');
+    expect(JSON.parse(persiste[1]).doit_changer_mdp).toBe(false);
+  });
+
+  it('événement mdp_a_changer (403 du serveur) : marque la session', async () => {
+    useAuthStore.setState({ session: { ...SESSION_FIXTURE }, estConnecte: true });
+    mockAuthEventEmitter.emit('mdp_a_changer');
+    await Promise.resolve(); await Promise.resolve();
+
+    expect(useAuthStore.getState().session?.doit_changer_mdp).toBe(true);
+    const persiste = mockSetItemAsync.mock.calls.find(([k]: any[]) => k === 'session');
+    expect(JSON.parse(persiste[1]).doit_changer_mdp).toBe(true);
+  });
+
+  it('événement mdp_a_changer sans session : sans effet', async () => {
+    mockAuthEventEmitter.emit('mdp_a_changer');
+    await Promise.resolve();
+    expect(useAuthStore.getState().session).toBeNull();
+    expect(mockSetItemAsync).not.toHaveBeenCalled();
+  });
+});

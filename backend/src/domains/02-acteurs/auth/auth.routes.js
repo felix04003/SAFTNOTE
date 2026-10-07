@@ -174,7 +174,7 @@ router.post('/auth/connexion', limiterAuth, valider(schemaConnexion), async (req
     const utilisateur = await db('utilisateurs')
       .where({ etablissement_id: etablissement.id, actif: true })
       .andWhere(filtreIdentifiant(identifiant, etablissement.pays))
-      .first('id', 'nom', 'prenom', 'mot_de_passe_hash', 'email');
+      .first('id', 'nom', 'prenom', 'mot_de_passe_hash', 'email', 'mdp_a_changer');
 
     if (!utilisateur || !utilisateur.mot_de_passe_hash) {
       try {
@@ -226,6 +226,7 @@ router.post('/auth/connexion', limiterAuth, valider(schemaConnexion), async (req
         prenom:          utilisateur.prenom,
         email:           utilisateur.email,
         role:            roleRow?.code || 'utilisateur',
+        doit_changer_mdp: !!utilisateur.mdp_a_changer,
         etablissement_id: etablissement.id,
         etablissement_nom: etablissement.nom,
       },
@@ -352,7 +353,7 @@ router.post('/auth/otp/valider', limiterAuth, valider(schemaOtpValider), async (
 
     const utilisateur = await db('utilisateurs')
       .where({ id: otp.utilisateur_id, actif: true })
-      .first('id', 'nom', 'prenom', 'telephone');
+      .first('id', 'nom', 'prenom', 'telephone', 'mdp_a_changer');
 
     // Récupérer le rôle pour ce couple utilisateur/établissement
     const roleRow = await db('utilisateur_roles as ur')
@@ -371,6 +372,7 @@ router.post('/auth/otp/valider', limiterAuth, valider(schemaOtpValider), async (
         prenom:           utilisateur.prenom,
         telephone:        utilisateur.telephone,
         role:             roleRow ? roleRow.role : 'parent',
+        doit_changer_mdp: !!utilisateur.mdp_a_changer,
         etablissement_id: etablissement.id,
         etablissement_nom: etablissement.nom,
       },
@@ -395,6 +397,7 @@ async function fetchProfil(db, utilisateurId, etablissementId, session) {
     ...utilisateur,
     role:              session.role,
     roles:             session.roles,
+    doit_changer_mdp:  !!session.mdp_a_changer,
     etablissement_id:  etablissement.id,
     etablissement_nom: etablissement.nom,
   };
@@ -413,6 +416,83 @@ router.get('/auth/profil', authentifier, async (req, res, next) => {
     }
 
     return ok(res, profil);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── POST /auth/changer-mot-de-passe — Changer son mot de passe ───
+// Sert à la fois au changement volontaire et au changement OBLIGATOIRE d'un
+// mot de passe provisoire (utilisateurs.mdp_a_changer) : c'est la seule route
+// protégée accessible tant que le drapeau est levé (voir auth.middleware).
+const schemaChangerMotDePasse = z.object({
+  mot_de_passe_actuel:  z.string().min(1, 'Mot de passe actuel requis'),
+  nouveau_mot_de_passe: schemaMotDePasse,
+});
+
+router.post('/auth/changer-mot-de-passe', limiterAuth, authentifier, valider(schemaChangerMotDePasse), async (req, res, next) => {
+  const { mot_de_passe_actuel, nouveau_mot_de_passe } = req.body;
+  const db = getDB();
+
+  try {
+    const utilisateur = await db('utilisateurs')
+      .where({ id: req.session.utilisateur_id, actif: true })
+      .first('id', 'nom', 'prenom', 'email', 'telephone', 'mot_de_passe_hash');
+
+    // Parents/élèves : pas de mot de passe (connexion par code SMS)
+    if (!utilisateur || !utilisateur.mot_de_passe_hash) {
+      throw ApiError.interdit('Ce compte n\'utilise pas de mot de passe (connexion par code SMS)');
+    }
+
+    const actuelValide = await bcrypt.compare(mot_de_passe_actuel, utilisateur.mot_de_passe_hash);
+    if (!actuelValide) throw ApiError.nonAutorise('Mot de passe actuel incorrect');
+
+    if (nouveau_mot_de_passe === mot_de_passe_actuel) {
+      throw ApiError.validationEchouee('Le nouveau mot de passe doit être différent de l\'actuel');
+    }
+
+    const politique = await db('politique_securite')
+      .where({ etablissement_id: req.session.etablissement_id })
+      .first('mdp_longueur_min');
+    exigerMotDePasseConforme(nouveau_mot_de_passe, politique, utilisateur);
+
+    const hash = await bcrypt.hash(nouveau_mot_de_passe, 12);
+
+    // Sessions à fermer : toutes SAUF celle en cours (l'utilisateur reste connecté)
+    const autres = await db('sessions')
+      .where({ utilisateur_id: utilisateur.id, revoquee: false })
+      .where('id', '!=', req.session.id)
+      .select('id', 'token_hash');
+
+    await db.transaction(async trx => {
+      await trx('utilisateurs')
+        .where({ id: utilisateur.id })
+        .update({ mot_de_passe_hash: hash, mdp_a_changer: false, updated_at: trx.raw('NOW()') });
+
+      if (autres.length) {
+        await trx('sessions')
+          .whereIn('id', autres.map(a => a.id))
+          .update({ revoquee: true, motif_revocation: 'changement_mot_de_passe' });
+      }
+    });
+
+    // Purger les caches : sinon la session courante garderait le drapeau
+    // « mot de passe à changer » (et les autres sessions resteraient
+    // utilisables) jusqu'à 10 min.
+    try {
+      const { getRedis } = require('../../../infrastructure/cache/redis');
+      const redis = getRedis();
+      const courant = crypto.createHash('sha256').update(req.headers.authorization.slice(7)).digest('hex');
+      await redis.del(`sess:${courant}`);
+      await redis.del(`profil:${utilisateur.id}`);
+      for (const a of autres) await redis.del(`sess:${a.token_hash}`);
+    } catch { /* Redis down, pas critique */ }
+
+    logger.info('Mot de passe changé', { utilisateur_id: utilisateur.id, sessions_fermees: autres.length });
+    return ok(res, {
+      message: 'Mot de passe modifié.',
+      sessions_fermees: autres.length,
+    });
   } catch (err) {
     next(err);
   }
@@ -615,7 +695,7 @@ router.post('/auth/reinitialiser-mot-de-passe', limiterAuth, valider(schemaReini
     await db.transaction(async trx => {
       await trx('utilisateurs')
         .where({ id: utilisateur.id })
-        .update({ mot_de_passe_hash: hash, updated_at: trx.raw('NOW()') });
+        .update({ mot_de_passe_hash: hash, mdp_a_changer: false, updated_at: trx.raw('NOW()') });
 
       await trx('otp_verifications').where({ id: otp.id }).update({ utilise: true });
 
@@ -639,7 +719,9 @@ router.post('/auth/reinitialiser-mot-de-passe', limiterAuth, valider(schemaReini
 async function creerSession(db, utilisateurId, etablissementId, req) {
   // Vérifier et appliquer la limite de sessions simultanées
   try {
-    const politique = await db('politique_securite').first('session_max_simultanees');
+    const politique = await db('politique_securite')
+      .where({ etablissement_id: etablissementId })
+      .first('session_max_simultanees');
     const max = politique?.session_max_simultanees || 3;
     const sessionsActives = await db('sessions')
       .where({ utilisateur_id: utilisateurId, revoquee: false })

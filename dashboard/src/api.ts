@@ -93,9 +93,20 @@ export const Api = {
     }
 
     const data = await res.json();
+
+    // Mot de passe provisoire : le serveur refuse tout sauf le changement.
+    if (res.status === 403 && data.code === 'MDP_CHANGEMENT_REQUIS') {
+      if (!location.pathname.includes('changer-mot-de-passe')) {
+        location.href = 'changer-mot-de-passe.html';
+      }
+    }
+
     if (!res.ok) {
       throw new ApiError(
-        data.error || data.message || 'Erreur serveur',
+        // L'API renvoie le message dans `erreur` (français) ; `error`/`message`
+        // gardés en repli. Sans `erreur`, tous les messages précis du serveur
+        // (doublons, politique de mot de passe…) s'affichaient « Erreur serveur ».
+        data.erreur || data.error || data.message || 'Erreur serveur',
         data.code || 'SERVER_ERROR',
         res.status
       );

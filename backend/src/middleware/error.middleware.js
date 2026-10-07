@@ -2,6 +2,20 @@
 
 const logger = require('../utils/logger');
 
+// Contraintes d'unicité connues → message lisible + champ en cause.
+// utilisateurs.telephone est UNIQUE pour toute la base (pas par établissement) :
+// un numéro déjà pris peut donc l'être dans un AUTRE établissement.
+const MESSAGES_DOUBLON = {
+  utilisateurs_telephone_key:
+    'Ce numéro de téléphone est déjà utilisé par un autre compte (dans cet établissement ou dans un autre).',
+  utilisateurs_etablissement_id_email_key:
+    'Cette adresse email est déjà utilisée par un autre compte de cet établissement.',
+};
+const CHAMPS_DOUBLON = {
+  utilisateurs_telephone_key: 'telephone',
+  utilisateurs_etablissement_id_email_key: 'email',
+};
+
 /**
  * Middleware de gestion globale des erreurs.
  * Transforme toutes les erreurs en réponse JSON uniforme.
@@ -34,10 +48,15 @@ function errorHandler(err, req, res, next) {
   // Erreurs Knex / PostgreSQL
   if (err.code === '23505') {
     if (err.detail) logger.warn('Contrainte unicité BD', { detail: err.detail, url: req.originalUrl });
+    // Filet de sécurité (course entre deux requêtes) : même message précis
+    // que les contrôles préalables des routes, au lieu d'un « existe déjà »
+    // sans indication du champ en cause.
+    const precis = MESSAGES_DOUBLON[err.constraint];
     return res.status(409).json({
       succes:  false,
-      erreur:  'Cet enregistrement existe déjà',
+      erreur:  precis || 'Cet enregistrement existe déjà',
       code:    'DOUBLON',
+      ...(precis && { champ: CHAMPS_DOUBLON[err.constraint] }),
     });
   }
 

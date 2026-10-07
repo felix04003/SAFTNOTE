@@ -1,0 +1,152 @@
+'use strict';
+
+// POST /enseignants : téléphone normalisé, doublons explicites, mot de passe
+// provisoire généré et changement obligatoire.
+
+jest.mock('../../src/infrastructure/database/pool');
+jest.mock('../../src/infrastructure/cache/redis', () => ({
+  connectRedis: jest.fn(), getRedis: jest.fn(), getOrSet: jest.fn((k, fn) => fn()),
+  invalidatePattern: jest.fn(), healthCheck: jest.fn(),
+}));
+jest.mock('../../src/utils/logger', () => ({
+  info: jest.fn(), warn: jest.fn(), error: jest.fn(), http: jest.fn(), log: jest.fn(),
+}));
+jest.mock('../../src/middleware/auth.middleware', () => ({
+  authentifier: (req, res, next) => {
+    req.session = { ...require('../helpers/testApp').defaultSession };
+    req.etablissement_id = req.session.etablissement_id;
+    next();
+  },
+  autoriserRoles: () => (req, res, next) => next(),
+}));
+jest.mock('../../src/middleware/permission.middleware', () => ({
+  exigerPermission: () => (req, res, next) => next(),
+  isolerEtablissement: (req, res, next) => {
+    if (req.session) req.etablissement_id = req.session.etablissement_id;
+    next();
+  },
+}));
+
+const request = require('supertest');
+const bcrypt  = require('bcryptjs');
+const { getDB } = require('../../src/infrastructure/database/pool');
+const { mockQuery, createMockDB, IDS } = require('../helpers/mockKnex');
+const { createTestApp } = require('../helpers/testApp');
+const { validerMotDePasse } = require('../../src/utils/mot-de-passe');
+
+const router = require('../../src/domains/02-acteurs/enseignants/enseignants.routes');
+const app = createTestApp(router);
+
+const AUTRE_ETAB = '99999999-0000-0000-0000-000000000000';
+
+describe('POST /enseignants', () => {
+  let db;
+  beforeEach(() => { db = createMockDB(); getDB.mockReturnValue(db); });
+
+  // Ordre des accès base : pays, doublon téléphone, [doublon email], politique, puis la transaction
+  function prepare({ doublonTel = null, doublonEmail = null, avecEmail = false } = {}) {
+    db.mockReturnValueOnce(mockQuery({ pays: 'SN' }));
+    db.mockReturnValueOnce(mockQuery(doublonTel));
+    if (avecEmail) db.mockReturnValueOnce(mockQuery(doublonEmail));
+    db.mockReturnValueOnce(mockQuery({ mdp_longueur_min: 8 }));
+  }
+
+  test('crée le compte : téléphone en E.164, mot de passe généré conforme, changement obligatoire', async () => {
+    prepare();
+    const insUtilisateur = mockQuery(1);
+    db.mockReturnValueOnce(insUtilisateur);                                  // INSERT utilisateurs
+    db.mockReturnValueOnce(mockQuery([{ id: IDS.enseignant }]));             // INSERT enseignants
+    db.mockReturnValueOnce(mockQuery({ id: 'role-ens' }));                   // SELECT rôle
+    db.mockReturnValueOnce(mockQuery(1));                                    // INSERT utilisateur_roles
+
+    const res = await request(app).post('/enseignants')
+      .send({ nom: 'Cisse', prenom: 'Mame', telephone: '77 999 00 01' }).expect(201);
+
+    expect(res.body.data.mot_de_passe_genere).toBe(true);
+    const insere = insUtilisateur.insert.mock.calls[0][0];
+    expect(insere.telephone).toBe('+221779990001');
+    expect(insere.mdp_a_changer).toBe(true);
+
+    const provisoire = res.body.data.message.split('provisoire : ')[1];
+    expect(provisoire).not.toContain('779990001');
+    expect(validerMotDePasse(provisoire)).toBeNull();
+    expect(await bcrypt.compare(provisoire, insere.mot_de_passe_hash)).toBe(true);
+  });
+
+  test('mot de passe fourni par le directeur : accepté s\'il est conforme, changement obligatoire aussi', async () => {
+    prepare();
+    const insUtilisateur = mockQuery(1);
+    db.mockReturnValueOnce(insUtilisateur);
+    db.mockReturnValueOnce(mockQuery([{ id: IDS.enseignant }]));
+    db.mockReturnValueOnce(mockQuery({ id: 'role-ens' }));
+    db.mockReturnValueOnce(mockQuery(1));
+
+    const res = await request(app).post('/enseignants')
+      .send({ nom: 'Cisse', prenom: 'Mame', telephone: '+221779990001', mot_de_passe: 'Tr0ubadour9' }).expect(201);
+
+    expect(res.body.data.mot_de_passe_genere).toBe(false);
+    expect(insUtilisateur.insert.mock.calls[0][0].mdp_a_changer).toBe(true);
+  });
+
+  test('mot de passe fourni faible → 422', async () => {
+    await request(app).post('/enseignants')
+      .send({ nom: 'Cisse', prenom: 'Mame', telephone: '+221779990001', mot_de_passe: '123456' }).expect(422);
+  });
+
+  test('téléphone inexploitable → 422', async () => {
+    db.mockReturnValueOnce(mockQuery({ pays: 'SN' }));
+    const res = await request(app).post('/enseignants')
+      .send({ nom: 'Cisse', prenom: 'Mame', telephone: 'abcdefgh' }).expect(422);
+    expect(res.body.erreur).toMatch(/invalide/);
+  });
+
+  test('doublon dans le MÊME établissement → message précis', async () => {
+    prepare({ doublonTel: { id: 'x', etablissement_id: IDS.etablissement } });
+    // le test s'arrête avant la politique : un mock inutilisé est sans effet
+    const res = await request(app).post('/enseignants')
+      .send({ nom: 'Cisse', prenom: 'Mame', telephone: '+221779990001' }).expect(422);
+    expect(res.body.erreur).toMatch(/existe déjà dans votre établissement/);
+  });
+
+  test('doublon dans un AUTRE établissement → message qui le dit (et non « existe déjà »)', async () => {
+    prepare({ doublonTel: { id: 'x', etablissement_id: AUTRE_ETAB } });
+    const res = await request(app).post('/enseignants')
+      .send({ nom: 'Cisse', prenom: 'Mame', telephone: '+221779990001' }).expect(422);
+    expect(res.body.erreur).toMatch(/autre établissement/);
+    expect(res.body.erreur).toMatch(/un seul établissement/);
+  });
+
+  test('email déjà pris dans l\'établissement → 422 explicite', async () => {
+    prepare({ doublonEmail: { id: 'y' }, avecEmail: true });
+    const res = await request(app).post('/enseignants')
+      .send({ nom: 'Cisse', prenom: 'Mame', telephone: '+221779990001', email: 'e@x.sn' }).expect(422);
+    expect(res.body.erreur).toMatch(/cet email existe déjà/);
+  });
+});
+
+describe('error.middleware — contraintes d\'unicité (filet de sécurité)', () => {
+  const errorHandler = require('../../src/middleware/error.middleware');
+  function appeler(contrainte) {
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    errorHandler({ code: '23505', constraint: contrainte, detail: 'x' }, { method: 'POST', originalUrl: '/x' }, res, jest.fn());
+    return res;
+  }
+
+  test('utilisateurs_telephone_key → message téléphone + champ', () => {
+    const res = appeler('utilisateurs_telephone_key');
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      code: 'DOUBLON', champ: 'telephone', erreur: expect.stringMatching(/numéro de téléphone/),
+    }));
+  });
+
+  test('utilisateurs_etablissement_id_email_key → message email + champ', () => {
+    const res = appeler('utilisateurs_etablissement_id_email_key');
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ champ: 'email', erreur: expect.stringMatching(/email/) }));
+  });
+
+  test('contrainte inconnue → message générique inchangé', () => {
+    const res = appeler('autre_contrainte');
+    expect(res.json).toHaveBeenCalledWith({ succes: false, erreur: 'Cet enregistrement existe déjà', code: 'DOUBLON' });
+  });
+});

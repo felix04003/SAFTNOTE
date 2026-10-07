@@ -223,6 +223,26 @@ const options = {
           responses: { 200: { description: 'Deconnecte avec succes' } },
         },
       },
+      '/auth/changer-mot-de-passe': {
+        post: {
+          tags: ['Auth'],
+          summary: 'Changer son mot de passe (obligatoire si le mot de passe est provisoire)',
+          description: 'Tant que utilisateur.doit_changer_mdp est vrai (compte enseignant cree par le directeur), toutes les autres routes protegees repondent 403 MDP_CHANGEMENT_REQUIS. Politique : 8 caracteres min., minuscule + majuscule + chiffre, 72 octets max, sans reprendre telephone/email/nom. Les autres sessions de l\'utilisateur sont revoquees.',
+          requestBody: { required: true, content: { 'application/json': { schema: {
+            type: 'object', required: ['mot_de_passe_actuel', 'nouveau_mot_de_passe'],
+            properties: {
+              mot_de_passe_actuel:  { type: 'string' },
+              nouveau_mot_de_passe: { type: 'string', minLength: 8 },
+            },
+          } } } },
+          responses: {
+            200: { description: 'Mot de passe modifie (sessions_fermees = autres sessions revoquees)' },
+            401: { description: 'Mot de passe actuel incorrect' },
+            403: { description: 'Compte sans mot de passe (connexion par code SMS)' },
+            422: { description: 'Nouveau mot de passe non conforme a la politique' },
+          },
+        },
+      },
       '/auth/sessions': {
         get: {
           tags: ['Auth'], summary: 'Sessions actives de l\'utilisateur connecte',

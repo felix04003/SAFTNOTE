@@ -111,6 +111,12 @@ class ApiClient {
 
         const data = await response.json();
 
+        // Mot de passe provisoire : le serveur refuse tout sauf le changement
+        // de mot de passe. L'écran de changement est ouvert par authStore.
+        if (response.status === 403 && data.code === 'MDP_CHANGEMENT_REQUIS') {
+          authEventEmitter.emit('mdp_a_changer');
+        }
+
         if (!response.ok) {
           throw new ApiError(response.status, data.erreur || 'Erreur serveur', data.code || 'ERREUR');
         }
@@ -160,6 +166,9 @@ export const authApi = {
 
   deconnexion: () =>
     api.post('/auth/deconnexion', {}),
+
+  changerMotDePasse: (data: { mot_de_passe_actuel: string; nouveau_mot_de_passe: string }) =>
+    api.post('/auth/changer-mot-de-passe', data),
 };
 
 // ── Endpoints Enseignant ─────────────────────────────────────────

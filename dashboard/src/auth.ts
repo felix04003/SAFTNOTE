@@ -10,9 +10,29 @@ export const Auth = {
     });
     const data = res.data || res;
     sessionStorage.setItem(CONFIG.TOKEN_KEY, data.token || data.access_token);
-    localStorage.setItem(CONFIG.USER_KEY, JSON.stringify(data.user || data));
+    // USER_KEY (localStorage) ne doit contenir QUE le profil : l'API renvoie
+    // { token, refresh_token, utilisateur }, et stocker la réponse entière
+    // remettait le JWT en localStorage, annulant la migration vers
+    // sessionStorage (lot H).
+    const { token: _t, access_token: _a, refresh_token: _r, ...profil } = data;
+    localStorage.setItem(CONFIG.USER_KEY, JSON.stringify(data.utilisateur || data.user || profil));
     if (data.refresh_token) sessionStorage.setItem(CONFIG.REFRESH_TOKEN_KEY, data.refresh_token);
     return data;
+  },
+
+  /** Page à ouvrir après connexion : changement de mot de passe obligatoire d'abord, sinon selon le rôle. */
+  destination: function(user: any): string {
+    if (user && user.doit_changer_mdp) return 'changer-mot-de-passe.html';
+    const role = ((user && user.role) || '').toLowerCase();
+    if (role === 'enseignant') return 'enseignant.html';
+    if (role === 'parent') return 'parent.html';
+    return 'index.html';
+  },
+
+  /** Met à jour le profil stocké (ex. après le changement de mot de passe obligatoire). */
+  majUser: function(changes: Record<string, any>) {
+    const user = Auth.getUser() || {};
+    localStorage.setItem(CONFIG.USER_KEY, JSON.stringify({ ...user, ...changes }));
   },
 
   logout: function() {

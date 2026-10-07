@@ -21,6 +21,7 @@ export default defineConfig({
         parent:      resolve(__dirname, 'parent.html'),
         parentLogin: resolve(__dirname, 'parent-login.html'),
         motDePasse:  resolve(__dirname, 'mot-de-passe-oublie.html'),
+        changerMdp:  resolve(__dirname, 'changer-mot-de-passe.html'),
       },
     },
   },

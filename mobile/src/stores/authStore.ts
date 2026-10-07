@@ -12,6 +12,8 @@ export interface Session {
   nom_complet:       string;
   role:              Role;
   etablissement_nom: string;
+  // Mot de passe provisoire : changement obligatoire avant tout usage
+  doit_changer_mdp?: boolean;
 }
 
 interface AuthState {
@@ -26,6 +28,7 @@ interface AuthState {
   connexionMDP:   (data: { identifiant: string; mot_de_passe: string; etablissement_code: string }) => Promise<void>;
   connexionOTP:   (data: { telephone: string; code: string; etablissement_code: string }) => Promise<void>;
   deconnexion:    () => Promise<void>;
+  mdpChange:      () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -67,6 +70,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await persisterSession(res, set);
   },
 
+  // Le mot de passe provisoire vient d'être remplacé : lever l'obligation
+  mdpChange: async () => {
+    const session = get().session;
+    if (!session) return;
+    const maj = { ...session, doit_changer_mdp: false };
+    try { await SecureStore.setItemAsync('session', JSON.stringify(maj)); } catch { /* mémoire seulement */ }
+    set({ session: maj });
+  },
+
   // Déconnexion
   deconnexion: async () => {
     try {
@@ -105,6 +117,7 @@ async function persisterSession(res: any, set: any) {
     nom_complet:      `${utilisateur.prenom} ${utilisateur.nom}`,
     role:             utilisateur.role || 'enseignant',
     etablissement_nom: utilisateur.etablissement_nom,
+    doit_changer_mdp: !!utilisateur.doit_changer_mdp,
   };
 
   api.setToken(token);
@@ -114,6 +127,16 @@ async function persisterSession(res: any, set: any) {
   await SecureStore.setItemAsync('session', JSON.stringify(session));
   set({ token, session, estConnecte: true });
 }
+
+// Le serveur a refusé une requête (403 MDP_CHANGEMENT_REQUIS) : marquer la
+// session, l'écran du groupe (app) redirige vers le changement de mot de passe.
+authEventEmitter.on('mdp_a_changer', async () => {
+  const session = useAuthStore.getState().session;
+  if (!session || session.doit_changer_mdp) return;
+  const maj = { ...session, doit_changer_mdp: true };
+  try { await SecureStore.setItemAsync('session', JSON.stringify(maj)); } catch { /* mémoire seulement */ }
+  useAuthStore.setState({ session: maj });
+});
 
 // Persiste le nouveau couple token/refresh_token émis par ApiClient après
 // un rafraîchissement réussi (voir client.ts → tenterRafraichissement).

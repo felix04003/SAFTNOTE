@@ -154,3 +154,24 @@ describe('Api.del', () => {
     );
   });
 });
+
+describe('Api.request — erreurs du serveur', () => {
+  it('affiche le message français renvoyé dans `erreur`', async () => {
+    mockFetch(422, false, { succes: false, erreur: 'Ce numéro de téléphone est déjà utilisé', code: 'VALIDATION_ECHOUEE' });
+    await expect(Api.get('/x')).rejects.toMatchObject({ message: 'Ce numéro de téléphone est déjà utilisé', code: 'VALIDATION_ECHOUEE' });
+  });
+
+  it('403 MDP_CHANGEMENT_REQUIS : redirige vers la page de changement', async () => {
+    (window as any).location.pathname = '/index.html';
+    mockFetch(403, false, { succes: false, erreur: 'Vous devez changer votre mot de passe provisoire', code: 'MDP_CHANGEMENT_REQUIS' });
+    await expect(Api.get('/eleves')).rejects.toMatchObject({ code: 'MDP_CHANGEMENT_REQUIS' });
+    expect(window.location.href).toBe('changer-mot-de-passe.html');
+  });
+
+  it('403 MDP_CHANGEMENT_REQUIS sur la page de changement elle-même : pas de boucle de redirection', async () => {
+    (window as any).location.pathname = '/changer-mot-de-passe.html';
+    mockFetch(403, false, { succes: false, erreur: 'x', code: 'MDP_CHANGEMENT_REQUIS' });
+    await expect(Api.get('/eleves')).rejects.toBeInstanceOf(ApiError);
+    expect(window.location.href).toBe('');
+  });
+});

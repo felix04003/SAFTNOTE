@@ -66,12 +66,28 @@ router.post('/enseignants', auth, isoler, perm('config.modifier'),
       const pays      = await paysEtablissement(db, req.etablissement_id);
       const telephone = telephoneOuErreur(req.body.telephone, pays);
 
-      // Vérifier doublon téléphone dans cet établissement (formes historiques incluses)
+      // Doublon de téléphone — la contrainte est UNIQUE pour TOUTE la base
+      // (utilisateurs_telephone_key) : on cherche donc dans tous les
+      // établissements (formes historiques incluses) pour dire précisément
+      // où est le conflit, au lieu d'un 409 « existe déjà » générique.
       const doublon = await db('utilisateurs')
-        .where({ etablissement_id: req.etablissement_id })
         .whereIn('telephone', variantesTelephone(req.body.telephone, pays))
-        .first('id');
-      if (doublon) throw ApiError.validationEchouee('Un utilisateur avec ce numéro existe déjà');
+        .first('id', 'etablissement_id');
+      if (doublon) {
+        throw ApiError.validationEchouee(
+          doublon.etablissement_id === req.etablissement_id
+            ? 'Un utilisateur avec ce numéro existe déjà dans votre établissement'
+            : 'Ce numéro de téléphone est déjà utilisé par un compte dans un autre établissement — un numéro ne peut être rattaché qu\'à un seul établissement'
+        );
+      }
+
+      // Doublon d'email (unique par établissement)
+      if (req.body.email) {
+        const emailPris = await db('utilisateurs')
+          .where({ etablissement_id: req.etablissement_id, email: req.body.email })
+          .first('id');
+        if (emailPris) throw ApiError.validationEchouee('Un utilisateur avec cet email existe déjà dans votre établissement');
+      }
 
       // Même politique que tous les profils. Sans mot de passe fourni, un mot
       // de passe provisoire aléatoire est généré (plus de « mot de passe =
@@ -96,6 +112,9 @@ router.post('/enseignants', auth, isoler, perm('config.modifier'),
           email:            req.body.email || null,
           genre:            req.body.genre,
           mot_de_passe_hash: mdpHash,
+          // Mot de passe provisoire connu du directeur : changement obligatoire
+          // à la première connexion (middleware d'authentification)
+          mdp_a_changer:    true,
           actif:            true,
         });
 

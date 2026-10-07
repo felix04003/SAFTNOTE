@@ -2,7 +2,7 @@ import { Auth } from './auth';
 
 // Redirect if already logged in
 if (Auth.isAuthenticated()) {
-  window.location.href = 'index.html';
+  window.location.href = Auth.destination(Auth.getUser());
 }
 
 // Bouton afficher/masquer le mot de passe (audit sécurité 2026-09).
@@ -35,7 +35,8 @@ async function handleLogin(e: Event) {
   if (errEl) errEl.classList.remove('show');
 
   try {
-    await Auth.login(identifiant, mot_de_passe, etablissement_code);
+    const data = await Auth.login(identifiant, mot_de_passe, etablissement_code);
+    window.location.href = Auth.destination(data.utilisateur);
   } catch (err: any) {
     if (errEl) { errEl.textContent = err.message || 'Identifiants incorrects'; errEl.classList.add('show'); }
     if (btn) { btn.disabled = false; btn.textContent = 'Se connecter'; }

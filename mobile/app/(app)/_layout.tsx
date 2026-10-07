@@ -7,12 +7,14 @@ import { useAuthStore } from '../../src/stores/authStore';
 export default function AppLayout() {
   const router      = useRouter();
   const estConnecte = useAuthStore(s => s.estConnecte);
+  const doitChangerMdp = useAuthStore(s => !!s.session?.doit_changer_mdp);
 
   useEffect(() => {
     if (!estConnecte) router.replace('/auth/connexion');
-  }, [estConnecte]);
+    else if (doitChangerMdp) router.replace('/auth/changer-mot-de-passe');
+  }, [estConnecte, doitChangerMdp]);
 
-  if (!estConnecte) return null;
+  if (!estConnecte || doitChangerMdp) return null;
 
   return (
     <Stack screenOptions={{ headerShown: false }}>

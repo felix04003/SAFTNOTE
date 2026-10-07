@@ -176,3 +176,34 @@ describe('déballage data.data ?? data', () => {
     expect(result).toEqual({ id: '1', nom: 'Direct' });
   });
 });
+
+describe('403 MDP_CHANGEMENT_REQUIS (mot de passe provisoire)', () => {
+  it('émet mdp_a_changer et propage l\'erreur, sans retry ni déconnexion', async () => {
+    const surMdp = jest.fn();
+    const surDeconnexion = jest.fn();
+    const off1 = authEventEmitter.on('mdp_a_changer', surMdp);
+    const off2 = authEventEmitter.on('deconnexion', surDeconnexion);
+    mockFetch.mockResolvedValueOnce(
+      reponseErreur(403, { erreur: 'Vous devez changer votre mot de passe provisoire', code: 'MDP_CHANGEMENT_REQUIS' })
+    );
+
+    await expect(api.get('/enseignants/moi/classes')).rejects.toMatchObject({
+      statusCode: 403, code: 'MDP_CHANGEMENT_REQUIS',
+    });
+
+    expect(surMdp).toHaveBeenCalledTimes(1);
+    expect(surDeconnexion).not.toHaveBeenCalled();
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    off1(); off2();
+  });
+
+  it('un autre 403 n\'émet pas l\'événement', async () => {
+    const surMdp = jest.fn();
+    const off = authEventEmitter.on('mdp_a_changer', surMdp);
+    mockFetch.mockResolvedValueOnce(reponseErreur(403, { erreur: 'Permission insuffisante', code: 'INTERDIT' }));
+
+    await expect(api.get('/x')).rejects.toMatchObject({ statusCode: 403 });
+    expect(surMdp).not.toHaveBeenCalled();
+    off();
+  });
+});
