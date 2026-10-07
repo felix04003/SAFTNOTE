@@ -83,3 +83,6 @@ postgres-data/
 .gstack/
 dashboard/dist/
 graphify-out/
+
+# Dump Redis local (redis-server lancé depuis un dossier du dépôt)
+dump.rdb
