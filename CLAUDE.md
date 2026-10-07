@@ -71,7 +71,7 @@ ecolemanager/
 │   │   ├── middleware/             ✅ auth JWT, erreurs, rate-limit, validation
 │   │   ├── workers/                ✅ notification.worker.js
 │   │   └── utils/                  ✅ helpers divers
-│   ├── tests/                     ✅ 323 tests unitaires (35 suites Jest) + tests d'intégration
+│   ├── tests/                     ✅ 360 tests unitaires (38 suites Jest) + tests d'intégration
 │   │   ├── helpers/               ✅ mockKnex, testApp, fixtures
 │   │   ├── seeds/                 ✅ seeds de test SQL (jamais appliqués en prod)
 │   │   └── domains/               ✅ fichiers de test par domaine
@@ -169,7 +169,7 @@ Tous les 9 domaines sont **implémentés et testés** (60/60 tests passent).
 
 > Note : ce tableau reflète l'implémentation initiale des 9 domaines. Depuis, la campagne de
 > correction de l'audit 2026-09 (lots A→J) a ajouté des domaines, migrations et tests
-> supplémentaires. **Total actuel backend : 323 tests (35 suites Jest)**, voir `npm test` dans
+> supplémentaires. **Total actuel backend : 360 tests (38 suites Jest)**, voir `npm test` dans
 > `backend/`.
 
 ### 📖 Documentation API
@@ -183,7 +183,7 @@ Tous les 9 domaines sont **implémentés et testés** (60/60 tests passent).
 - **Workflow** : `.github/workflows/ci.yml`
 - **Déclenché sur** : push `main`/`develop` + pull requests vers `main`
 - **Jobs** :
-  1. `backend-lint-test` — ESLint + Jest (323 tests, couverture, services Postgres/Redis réels)
+  1. `backend-lint-test` — ESLint + Jest (360 tests, couverture, services Postgres/Redis réels)
   2. `backend-docker` — Build image Docker (après tests)
   3. `mobile-typecheck` — TypeScript `tsc --noEmit`
 - **ESLint** : `backend/.eslintrc.js` — 0 erreurs, <60 warnings
@@ -422,7 +422,7 @@ META_WA_TOKEN         → WhatsApp Business API
 8. **Mot de passe provisoire** : un enseignant créé par le directeur a `utilisateurs.mdp_a_changer = TRUE`. Tant que le drapeau est levé, `middleware/auth.middleware.js` refuse toute route protégée en `403 MDP_CHANGEMENT_REQUIS` sauf `POST /auth/changer-mot-de-passe`, `GET /auth/profil` et `POST /auth/deconnexion` (liste `ROUTES_AUTORISEES_MDP_A_CHANGER`). Les réponses de connexion et `/auth/profil` exposent `doit_changer_mdp` ; le dashboard (`changer-mot-de-passe.html`) et le mobile (`app/auth/changer-mot-de-passe.tsx`) ouvrent l'écran de changement. Tout nouveau client doit gérer ce code
 9. **Doublons** : `utilisateurs.telephone` est UNIQUE pour toute la base (pas par établissement). Les routes de création vérifient d'abord et disent précisément où est le conflit ; `error.middleware.js` traduit les violations `utilisateurs_telephone_key` / `utilisateurs_etablissement_id_email_key` (409 `DOUBLON` + `champ`)
 10. **Blocage de connexion** : `est_compte_bloque(identifiant, ip, etablissement_id)` lit la politique de CET établissement (défauts 5 tentatives / 15 min). `/auth/connexion` résout l'établissement avant le contrôle. Ne jamais reprendre `MAX()` sur toutes les écoles
-11. **SMS** : tout texte envoyé doit tenir dans l'alphabet SMS de base (pas de tiret long « — », pas de « ê » : l'UCS-2 coûte 2 à 3 segments au lieu d'1). Ne jamais journaliser le contenu d'un SMS ni un mot de passe. (Les gabarits du worker de notifications sont encore à corriger : `docs/PLAN-evolutions-comptes-2026-10.md`, tâche 2.5.)
+11. **SMS** : tout texte doit tenir dans l'alphabet SMS de base (pas de tiret long « — », pas de « ê », pas d'emoji : l'UCS-2 coûte 2 à 3 segments au lieu d'1). `envoyerSMS` convertit et borne à 3 segments via `utils/sms-texte.js`, mais écrire les gabarits directement conformes ; `tests/workers/sms-gabarits.test.js` garantit 1 segment pour chaque gabarit de `notification.worker.js`. Ne jamais journaliser le contenu d'un SMS ni un mot de passe
 12. **Sessions OTP** : `POST /auth/otp/valider` n'ouvre une session que dans l'établissement auquel le compte appartient (`utilisateur.etablissement_id`). Ne jamais créer de session (`creerSession`) pour un couple utilisateur/établissement sans avoir vérifié cette appartenance
 13. **Expiration côté dashboard** : quand `/auth/refresh` échoue, `Api.request` purge `em_token`, `em_refresh_token` et `em_user` AVANT de rediriger (sinon boucle `login.html` ↔ page). Les parents sont renvoyés vers `parent-login.html`
 14. **Tests manuels** : `npm run test:integration` crée puis SUPPRIME la base `ecole_manager_test` ; utiliser un autre nom de base pour des essais à la main, et lancer `redis-server --dir /tmp` (jamais depuis le dépôt : `dump.rdb`)
@@ -458,10 +458,10 @@ META_WA_TOKEN         → WhatsApp Business API
 | 23 | Normalisation E.164 des téléphones (enseignants, parents, directeur, connexion, OTP) + politique de mot de passe unique pour tous les profils (corrige la politique d'établissement jamais appliquée à la réinitialisation) | ✅ |
 | 24 | Changement de mot de passe obligatoire pour les comptes à mot de passe provisoire (migration 020, `POST /auth/changer-mot-de-passe`, écrans dashboard + mobile) ; messages de doublons précis ; messages d'erreur du serveur enfin affichés par le dashboard (`erreur`) ; redirection après connexion dashboard | ✅ |
 | 25 | Politique de sécurité créée automatiquement pour chaque établissement (migration 021) ; session OTP limitée à l'établissement du compte ; boucle d'expiration du dashboard corrigée ; plan d'évolution `docs/PLAN-evolutions-comptes-2026-10.md` (mots de passe, parent multi-établissements, web vs mobile) | ✅ (plan : phases 2-5 à exécuter) |
-| 26 | Phase 2 mots de passe : audit des comptes prévisibles, mot de passe provisoire par SMS (+ renvoi), blocage de connexion par établissement (migration 022) | ✅ (2.4 optionnelle, 2.5-2.6 coût SMS à faire) |
+| 26 | Phase 2 mots de passe : audit des comptes prévisibles, mot de passe provisoire par SMS (+ renvoi), blocage de connexion par établissement (migration 022) | ✅ (2.4 optionnelle ; 2.5 gabarits SMS en 1 segment ✅ ; 2.6 plafond de dépense à faire) |
 
 > Les compteurs de tests ci-dessus sont historiques (au moment de chaque étape). Compteurs
-> actuels (vérifiés le 2026-10-07) : backend 323 tests (35 suites Jest) + intégration sur base réelle (`npm run test:integration`), dashboard 84 tests (Vitest).
+> actuels (vérifiés le 2026-10-07) : backend 360 tests (38 suites Jest) + intégration sur base réelle (`npm run test:integration`), dashboard 84 tests (Vitest).
 
 ---
 

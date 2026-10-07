@@ -1,6 +1,7 @@
 'use strict';
 
 const logger = require('../../utils/logger');
+const { preparerTexteSms } = require('../../utils/sms-texte');
 
 /**
  * Service SMS via Africa's Talking API.
@@ -21,10 +22,9 @@ const AT_BASE_URL = process.env.AT_ENV === 'production'
 async function envoyerSMS(telephones, message) {
   const numeros = Array.isArray(telephones) ? telephones.join(',') : telephones;
 
-  // Tronquer le message à 459 chars (3 SMS max)
-  const messageTronque = message.length > 459
-    ? message.slice(0, 456) + '...'
-    : message;
+  // Tout message est ramené à l'alphabet SMS de base (sinon UCS-2 : 2 à 3 fois
+  // plus de segments facturés) puis borné à 3 segments.
+  const { texte: messageTronque, segments, encodage } = preparerTexteSms(message, 3);
 
   const body = new URLSearchParams({
     username: process.env.AT_USERNAME,
@@ -33,7 +33,7 @@ async function envoyerSMS(telephones, message) {
     ...(process.env.AT_SENDER_ID && { from: process.env.AT_SENDER_ID }),
   }).toString();
 
-  logger.debug('Envoi SMS AT', { to: numeros, chars: messageTronque.length });
+  logger.debug('Envoi SMS AT', { to: numeros, chars: messageTronque.length, segments, encodage });
 
   try {
     const response = await fetch(`${AT_BASE_URL}/messaging`, {
@@ -65,6 +65,7 @@ async function envoyerSMS(telephones, message) {
       to: numeros,
       succes: succes.length,
       echecs: echecs.length,
+      segments,
     });
 
     return {

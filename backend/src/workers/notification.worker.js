@@ -26,24 +26,28 @@ async function init() {
 }
 
 // ── Templates de message SMS ────────────────────────────────────
+// Règle de coût : rester dans l'alphabet SMS de base (pas de tiret long « — »,
+// pas de « ê î ô û » ni d'apostrophe typographique), sinon le message passe en
+// UCS-2 (70 car./segment) et coûte 2 à 3 SMS. Garanti par
+// tests/workers/sms-gabarits.test.js ; envoyerSMS convertit de toute façon.
 const TEMPLATES_SMS = {
   absence: (data) =>
-    `[${data.etablissement}] ABSENCE — ${data.prenom} ${data.nom} était absent(e) ce ${data.date} en ${data.matiere}. Contactez l'établissement si justifié.`,
+    `[${data.etablissement}] ABSENCE : ${data.prenom} ${data.nom} était absent(e) ce ${data.date} en ${data.matiere}. Contactez l'établissement si justifié.`,
 
   retard: (data) =>
-    `[${data.etablissement}] RETARD — ${data.prenom} ${data.nom} est arrivé(e) avec ${data.minutes} min de retard le ${data.date} en ${data.matiere}.`,
+    `[${data.etablissement}] RETARD : ${data.prenom} ${data.nom} est arrivé(e) avec ${data.minutes} min de retard le ${data.date} en ${data.matiere}.`,
 
   nouvelle_note: (data) =>
-    `[${data.etablissement}] NOUVELLE NOTE — ${data.prenom} a obtenu ${data.note}/20 en ${data.matiere} (${data.type}). Consultez l'application pour les détails.`,
+    `[${data.etablissement}] NOUVELLE NOTE : ${data.prenom} a obtenu ${data.note}/20 en ${data.matiere} (${data.type}). Consultez l'application pour les détails.`,
 
   bulletin_disponible: (data) =>
-    `[${data.etablissement}] BULLETIN — Le bulletin de ${data.prenom} pour le ${data.trimestre} est disponible. Moyenne: ${data.moyenne}/20, Rang: ${data.rang}/${data.rang_sur}.`,
+    `[${data.etablissement}] BULLETIN : le bulletin de ${data.prenom} pour le ${data.trimestre} est disponible. Moyenne: ${data.moyenne}/20, Rang: ${data.rang}/${data.rang_sur}.`,
 
   convocation: (data) =>
-    `[${data.etablissement}] CONVOCATION — Vous êtes convoqué(e) le ${data.date} à ${data.heure} pour ${data.motif}. Contacter l'établissement pour confirmer.`,
+    `[${data.etablissement}] CONVOCATION : présence demandée le ${data.date} à ${data.heure} pour ${data.motif}. Merci de confirmer auprès de l'établissement.`,
 
   sanction: (data) =>
-    `[${data.etablissement}] INFORMATION — Une sanction a été prononcée pour ${data.prenom}: ${data.type_sanction}. Contactez l'établissement pour plus d'informations.`,
+    `[${data.etablissement}] INFORMATION : une sanction a été prononcée pour ${data.prenom}: ${data.type_sanction}. Contactez l'établissement pour plus d'informations.`,
 };
 
 // ── Processeur principal ─────────────────────────────────────────

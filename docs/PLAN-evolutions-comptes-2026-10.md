@@ -37,7 +37,8 @@ Règles d'exécution (valables pour toutes les phases) :
 | 2.2 Mot de passe provisoire par SMS | ✅ fait (`POST /enseignants`, `POST /enseignants/:id/mot-de-passe-provisoire`, bouton « 🔑 MDP » du dashboard) |
 | 2.3 Blocage de connexion par établissement | ✅ fait (migration 022) |
 | 2.4 Réglage de la politique par le directeur | ⏳ optionnelle, non faite |
-| 2.5 / 2.6 Coût des SMS | ⏳ à faire (ci-dessous) |
+| 2.5 Gabarits SMS en un segment | ✅ fait (voir ci-dessous) |
+| 2.6 Fiabiliser et plafonner les notifications | ⏳ à faire |
 | Phase 3 | ⏳ 3.1 → 3.3 puis 3.6 à lancer ; 3.4 différée |
 
 ---
@@ -61,7 +62,7 @@ Règles d'exécution (valables pour toutes les phases) :
 | C3 | ~~`est_compte_bloque()` (SQL) lit `MAX(...)` sur toutes les écoles~~ **Corrigé** (2.3, migration 022) | — | 2 ✅ |
 | C4 | ~~Le mot de passe provisoire est renvoyé en clair au directeur~~ **Corrigé** (2.2) : envoyé par SMS, renvoyé au directeur seulement si le SMS échoue | — | 2 ✅ |
 | C5 | ~~Mots de passe faibles antérieurs~~ **Outil livré** (2.1) : à exécuter sur la base de production (simulation d'abord) | — | 2 ✅ / 5 |
-| C11 | Les gabarits SMS contiennent un tiret long « — » (et « ê ») : le message passe en UCS-2, **2 à 3 segments facturés au lieu de 1** | Coût ×2 à ×3 sur les notifications | 2.5 |
+| C11 | ~~Gabarits SMS en UCS-2 (tiret long, « ê »), 2 à 3 segments facturés~~ **Corrigé** (2.5) : les 6 gabarits tiennent en 1 segment GSM-7, et `envoyerSMS` convertit tout message | — | 2.5 ✅ |
 | C12 | `nouvelle_note` : `evaluations.routes.js` met en file `{ evaluation_id }` sans `inscription_id`, alors que le worker en a besoin pour retrouver le parent (`notification.worker.js`, requête sur `i.id`). **Probable** : ces SMS ne partent jamais ou font échouer le job — non exécuté ici | À vérifier | 2.6 |
 | C6 | Dashboard, page **enseignant** : `ens-app.ts` appelle `Auth.populateSidebar()`, qui cible `sb-nom`, `sb-role`, `sb-etab` alors que la page utilise `sb-user-nom`, `sb-user-role`, `sb-user-avatar`, `sb-etab-nom` → nom, rôle, avatar et établissement restent vides. (Les pages admin `app.ts` et parent `par-app.ts` les renseignent correctement.) | Faible (UX) | 4 |
 | C7 | `login.html` n'a pas de lien vers `parent-login.html` (l'inverse existe) : un parent qui arrive sur la page du personnel ne trouve pas sa connexion | Faible (UX) | 4 |
@@ -120,7 +121,11 @@ contre chaque hash (`bcrypt.compare`) : le téléphone du compte (toutes formes)
 - Tests d'intégration : deux écoles, politiques différentes ; le blocage de l'une n'affecte pas l'autre.
 - Critère d'acceptation : l'école A à 3 tentatives bloque après 3 échecs ; l'école B à 10 ne bloque pas après 3.
 
-### 2.5 — Ramener les SMS à un seul segment (C11)
+### 2.5 — Ramener les SMS à un seul segment (C11) — ✅ FAIT
+
+Réalisé : `utils/sms-texte.js` (`versGsm7`, `compterSegments`, `limiterSegments`, `preparerTexteSms`) appliqué dans `envoyerSMS` à **tout** message (notifications, OTP, alertes de monitoring, mot de passe provisoire) ; gabarits du worker réécrits (« : » à la place du tiret long, `convocation` reformulée sans « ê ») ; plafond à 3 segments quel que soit le texte ; nombre de segments journalisé (`logger`, jamais le contenu). Garde : `tests/workers/sms-gabarits.test.js` (échoue avec les anciens gabarits). Non fait : stocker les segments dans `journal_notifications` (la table n'a pas de colonne dédiée — à voir avec 2.6 pour le plafond de dépense).
+
+État initial mesuré avant correction :
 
 Mesure faite sur les gabarits de `workers/notification.worker.js` (données d'exemple réalistes) :
 
