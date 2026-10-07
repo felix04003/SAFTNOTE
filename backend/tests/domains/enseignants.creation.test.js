@@ -27,6 +27,11 @@ jest.mock('../../src/middleware/permission.middleware', () => ({
   },
 }));
 
+jest.mock('../../src/infrastructure/notifications/sms.service', () => ({
+  envoyerMotDePasseProvisoire: jest.fn(),
+  envoyerSMS: jest.fn(), envoyerOTP: jest.fn(),
+}));
+
 const request = require('supertest');
 const bcrypt  = require('bcryptjs');
 const { getDB } = require('../../src/infrastructure/database/pool');
@@ -36,6 +41,8 @@ const { validerMotDePasse } = require('../../src/utils/mot-de-passe');
 
 const router = require('../../src/domains/02-acteurs/enseignants/enseignants.routes');
 const app = createTestApp(router);
+
+const { envoyerMotDePasseProvisoire } = require('../../src/infrastructure/notifications/sms.service');
 
 const AUTRE_ETAB = '99999999-0000-0000-0000-000000000000';
 
@@ -121,6 +128,115 @@ describe('POST /enseignants', () => {
     const res = await request(app).post('/enseignants')
       .send({ nom: 'Cisse', prenom: 'Mame', telephone: '+221779990001', email: 'e@x.sn' }).expect(422);
     expect(res.body.erreur).toMatch(/cet email existe déjà/);
+  });
+});
+
+describe('POST /enseignants — mot de passe provisoire par SMS', () => {
+  let db;
+  const ancienneCle = process.env.AT_API_KEY;
+
+  beforeEach(() => {
+    db = createMockDB(); getDB.mockReturnValue(db);
+    envoyerMotDePasseProvisoire.mockReset();
+    process.env.AT_API_KEY = 'cle-de-test';
+  });
+  afterAll(() => { if (ancienneCle === undefined) delete process.env.AT_API_KEY; else process.env.AT_API_KEY = ancienneCle; });
+
+  function creationOk() {
+    db.mockReturnValueOnce(mockQuery({ nom: 'Lycée Lamine Gueye', pays: 'SN' }));
+    db.mockReturnValueOnce(mockQuery(null));                                 // doublon téléphone
+    db.mockReturnValueOnce(mockQuery({ mdp_longueur_min: 8 }));              // politique
+    db.mockReturnValueOnce(mockQuery(1));                                    // INSERT utilisateurs
+    db.mockReturnValueOnce(mockQuery([{ id: IDS.enseignant }]));             // INSERT enseignants
+    db.mockReturnValueOnce(mockQuery({ id: 'role-ens' }));                   // rôle
+    db.mockReturnValueOnce(mockQuery(1));                                    // INSERT utilisateur_roles
+  }
+  const creer = () => request(app).post('/enseignants').send({ nom: 'Cisse', prenom: 'Mame', telephone: '77 999 00 01' });
+
+  test('SMS envoyé : le mot de passe n\'est PAS dans la réponse', async () => {
+    creationOk();
+    envoyerMotDePasseProvisoire.mockResolvedValue({ succes: true });
+
+    const res = await creer().expect(201);
+
+    expect(res.body.data.sms_envoye).toBe(true);
+    const [tel, infos] = envoyerMotDePasseProvisoire.mock.calls[0];
+    expect(tel).toBe('+221779990001');
+    expect(infos.etablissementNom).toBe('Lycée Lamine Gueye');
+    expect(validerMotDePasse(infos.motDePasse)).toBeNull();
+    expect(JSON.stringify(res.body)).not.toContain(infos.motDePasse);
+  });
+
+  test('SMS en échec : repli explicite — le mot de passe est renvoyé au directeur', async () => {
+    creationOk();
+    envoyerMotDePasseProvisoire.mockRejectedValue(new Error('AT API error 500'));
+
+    const res = await creer().expect(201);
+
+    expect(res.body.data.sms_envoye).toBe(false);
+    const mdp = envoyerMotDePasseProvisoire.mock.calls[0][1].motDePasse;
+    expect(res.body.data.message).toContain(mdp);
+    expect(res.body.data.message).toMatch(/SMS n'a pas pu être envoyé/);
+  });
+
+  test('sans clé Africa\'s Talking (dev/test) : aucun envoi, repli explicite', async () => {
+    delete process.env.AT_API_KEY;
+    creationOk();
+
+    const res = await creer().expect(201);
+
+    expect(envoyerMotDePasseProvisoire).not.toHaveBeenCalled();
+    expect(res.body.data.sms_envoye).toBe(false);
+    expect(res.body.data.message).toMatch(/Mot de passe provisoire : \S{12}/);
+  });
+});
+
+describe('POST /enseignants/:id/mot-de-passe-provisoire', () => {
+  const { getRedis } = require('../../src/infrastructure/cache/redis');
+  let db, redisDel;
+  const ancienneCle = process.env.AT_API_KEY;
+
+  beforeEach(() => {
+    db = createMockDB(); getDB.mockReturnValue(db);
+    redisDel = jest.fn().mockResolvedValue(1);
+    getRedis.mockReturnValue({ del: redisDel });
+    envoyerMotDePasseProvisoire.mockReset().mockResolvedValue({ succes: true });
+    process.env.AT_API_KEY = 'cle-de-test';
+  });
+  afterAll(() => { if (ancienneCle === undefined) delete process.env.AT_API_KEY; else process.env.AT_API_KEY = ancienneCle; });
+
+  const appeler = () => request(app).post(`/enseignants/${IDS.enseignant}/mot-de-passe-provisoire`);
+
+  test('réémet un mot de passe provisoire : hash, drapeau, sessions fermées, caches purgés, SMS', async () => {
+    const majUtilisateur = mockQuery(1);
+    const majSessions = mockQuery(1);
+    db.mockReturnValueOnce(mockQuery({ utilisateur_id: IDS.autreUtilisateur, telephone: '+221771110001' })); // cible
+    db.mockReturnValueOnce(mockQuery({ nom: 'Lycée Alpha' }));                                               // établissement
+    db.mockReturnValueOnce(mockQuery([{ id: 's1', token_hash: 'hash_s1' }]));                                // sessions
+    db.mockReturnValueOnce(majUtilisateur);
+    db.mockReturnValueOnce(majSessions);
+
+    const res = await appeler().expect(200);
+
+    expect(res.body.data).toMatchObject({ sms_envoye: true, sessions_fermees: 1 });
+    const maj = majUtilisateur.update.mock.calls[0][0];
+    expect(maj.mdp_a_changer).toBe(true);
+    const mdp = envoyerMotDePasseProvisoire.mock.calls[0][1].motDePasse;
+    expect(await bcrypt.compare(mdp, maj.mot_de_passe_hash)).toBe(true);
+    expect(majSessions.update).toHaveBeenCalledWith(expect.objectContaining({ revoquee: true, motif_revocation: 'mot_de_passe_provisoire' }));
+    expect(redisDel).toHaveBeenCalledWith('sess:hash_s1');
+    expect(JSON.stringify(res.body)).not.toContain(mdp);
+  });
+
+  test('enseignant d\'un autre établissement ou inconnu → 404, aucun SMS', async () => {
+    db.mockReturnValueOnce(mockQuery(null));
+    await appeler().expect(404);
+    expect(envoyerMotDePasseProvisoire).not.toHaveBeenCalled();
+  });
+
+  test('enseignant sans téléphone → 422', async () => {
+    db.mockReturnValueOnce(mockQuery({ utilisateur_id: IDS.autreUtilisateur, telephone: null }));
+    await appeler().expect(422);
   });
 });
 

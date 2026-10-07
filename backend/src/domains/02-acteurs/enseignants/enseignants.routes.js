@@ -1,6 +1,7 @@
 'use strict';
 
 const express  = require('express');
+const rateLimit = require('express-rate-limit');
 const { z }    = require('zod');
 const bcrypt   = require('bcryptjs');
 const { v4: uuid } = require('uuid');
@@ -13,7 +14,8 @@ const { valider }    = require('../../../middleware/validate.middleware');
 const { ok, cree, liste }  = require('../../../utils/reponse');
 const ApiError       = require('../../../utils/ApiError');
 const logger         = require('../../../utils/logger');
-const { paysEtablissement, telephoneOuErreur, variantesTelephone } = require('../../../utils/telephone');
+const { envoyerMotDePasseProvisoire } = require('../../../infrastructure/notifications/sms.service');
+const { paysEtablissement, paysIso, telephoneOuErreur, variantesTelephone } = require('../../../utils/telephone');
 const {
   schemaMotDePasse, exigerMotDePasseConforme, genererMotDePasseTemporaire,
 } = require('../../../utils/mot-de-passe');
@@ -22,6 +24,31 @@ const router = express.Router();
 const auth   = authentifier;
 const perm   = exigerPermission;
 const isoler = isolerEtablissement;
+
+// ── Helper : envoyer le mot de passe provisoire par SMS ──────────
+// Retourne true si le SMS est parti. Sans clé Africa's Talking (dev/test) ou en
+// cas d'échec, retourne false : l'appelant renvoie alors le mot de passe au
+// directeur (seul chemin de secours, explicite via `sms_envoye: false`) pour
+// ne laisser personne sans moyen de se connecter.
+async function envoyerProvisoireParSms(telephone, etablissementNom, motDePasse) {
+  if (!process.env.AT_API_KEY) return false;
+  try {
+    await envoyerMotDePasseProvisoire(telephone, { etablissementNom, motDePasse });
+    return true;
+  } catch (err) {
+    logger.warn('SMS du mot de passe provisoire non envoyé', { telephone, error: String(err.message).slice(0, 120) });
+    return false;
+  }
+}
+
+// Chaque appel envoie un SMS facturé : borner les renvois
+const limiterMotDePasseProvisoire = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max:      parseInt(process.env.RATE_LIMIT_MDP_PROVISOIRE_MAX) || 20,
+  message:  { succes: false, erreur: 'Trop de mots de passe provisoires demandés — réessayez dans 1 heure', code: 'RATE_LIMIT' },
+  standardHeaders: true,
+  legacyHeaders:   false,
+});
 
 // ── Helper : récupérer le profil enseignant depuis la session ────
 async function getEnseignantConnecte(db, utilisateurId) {
@@ -63,7 +90,8 @@ router.post('/enseignants', auth, isoler, perm('config.modifier'),
     const db = getDB();
     try {
       // Numéro normalisé (E.164) — c'est aussi l'identifiant de connexion
-      const pays      = await paysEtablissement(db, req.etablissement_id);
+      const etab      = await db('etablissements').where({ id: req.etablissement_id }).first('nom', 'pays');
+      const pays      = paysIso(etab && etab.pays);
       const telephone = telephoneOuErreur(req.body.telephone, pays);
 
       // Doublon de téléphone — la contrainte est UNIQUE pour TOUTE la base
@@ -146,10 +174,81 @@ router.post('/enseignants', auth, isoler, perm('config.modifier'),
         etablissement_id: req.etablissement_id,
       });
 
+      const smsEnvoye = await envoyerProvisoireParSms(telephone, etab && etab.nom, mdpBrut);
+
       return cree(res, {
         ...result,
         mot_de_passe_genere: genere,
-        message: `Compte créé. Mot de passe provisoire : ${mdpBrut}`,
+        sms_envoye: smsEnvoye,
+        // Le mot de passe n'est renvoyé que si le SMS n'a pas pu partir
+        message: smsEnvoye
+          ? `Compte créé. Un SMS contenant le mot de passe provisoire a été envoyé au ${telephone}.`
+          : `Compte créé, mais le SMS n'a pas pu être envoyé. Mot de passe provisoire : ${mdpBrut}`,
+      });
+    } catch (err) { next(err); }
+  }
+);
+
+// ═════════════════════════════════════════════════════════════════
+// POST /enseignants/:id/mot-de-passe-provisoire
+// Dépannage : nouveau mot de passe provisoire envoyé PAR SMS à l'enseignant
+// (le directeur n'a pas besoin de le connaître). Lève mdp_a_changer et ferme
+// les sessions ouvertes de l'enseignant.
+// ═════════════════════════════════════════════════════════════════
+router.post('/enseignants/:id/mot-de-passe-provisoire', auth, isoler, perm('config.modifier'),
+  limiterMotDePasseProvisoire,
+  async (req, res, next) => {
+    const db = getDB();
+    try {
+      const cible = await db('enseignants as ens')
+        .join('utilisateurs as u', 'u.id', 'ens.utilisateur_id')
+        .where({ 'ens.id': req.params.id, 'u.etablissement_id': req.etablissement_id, 'u.actif': true })
+        .first('u.id as utilisateur_id', 'u.telephone');
+      if (!cible) throw ApiError.nonTrouve('Enseignant introuvable');
+      if (!cible.telephone) throw ApiError.validationEchouee('Cet enseignant n\'a pas de numéro de téléphone');
+
+      const etab = await db('etablissements').where({ id: req.etablissement_id }).first('nom');
+      const mdpBrut = genererMotDePasseTemporaire();
+      const mdpHash = await bcrypt.hash(mdpBrut, 12);
+
+      const sessions = await db('sessions')
+        .where({ utilisateur_id: cible.utilisateur_id, revoquee: false })
+        .select('id', 'token_hash');
+
+      await db.transaction(async trx => {
+        await trx('utilisateurs')
+          .where({ id: cible.utilisateur_id })
+          .update({ mot_de_passe_hash: mdpHash, mdp_a_changer: true, updated_at: trx.raw('NOW()') });
+
+        if (sessions.length) {
+          await trx('sessions')
+            .whereIn('id', sessions.map(x => x.id))
+            .update({ revoquee: true, motif_revocation: 'mot_de_passe_provisoire' });
+        }
+      });
+
+      // Les sessions fermées restent utilisables jusqu'à 10 min via le cache Redis
+      try {
+        const { getRedis } = require('../../../infrastructure/cache/redis');
+        const redis = getRedis();
+        for (const x of sessions) await redis.del(`sess:${x.token_hash}`);
+        await redis.del(`profil:${cible.utilisateur_id}`);
+      } catch { /* Redis indisponible — pas critique */ }
+
+      const smsEnvoye = await envoyerProvisoireParSms(cible.telephone, etab && etab.nom, mdpBrut);
+
+      // Jamais le mot de passe dans les logs
+      logger.info('Mot de passe provisoire réémis', {
+        enseignant_id: req.params.id, par: req.session.utilisateur_id,
+        sms_envoye: smsEnvoye, sessions_fermees: sessions.length,
+      });
+
+      return ok(res, {
+        sms_envoye: smsEnvoye,
+        sessions_fermees: sessions.length,
+        message: smsEnvoye
+          ? `Un SMS contenant le nouveau mot de passe provisoire a été envoyé au ${cible.telephone}.`
+          : `Le SMS n'a pas pu être envoyé. Mot de passe provisoire : ${mdpBrut}`,
       });
     } catch (err) { next(err); }
   }

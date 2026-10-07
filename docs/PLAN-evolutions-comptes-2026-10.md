@@ -19,6 +19,29 @@ Règles d'exécution (valables pour toutes les phases) :
 
 ---
 
+## Décisions du 2026-10-07 (réponses du responsable produit)
+
+| # | Question | Décision | Conséquence |
+|---|----------|----------|-------------|
+| 1 | Le cas « parent dans plusieurs écoles » est-il réel ? | **Pas encore, mais il faut s'y préparer** | Exécuter 3.1 → 3.3 (rendre la situation possible et sûre) ; différer 3.4 (sélecteur) tant qu'aucun cas réel n'existe |
+| 2 | Vue agrégée « tous mes enfants, toutes écoles » | Définition demandée → voir « Vue agrégée » en phase 3 | À décider après l'explication ; ne bloque pas 3.1-3.3 |
+| 3 | Coût des SMS | Chiffrage demandé → voir « Coût des SMS » ci-dessous (phase 2bis) | Tâches 2.5 et 2.6 |
+| 4 | Sessions simultanées : 3 ou 5 ? | Éclaircissement demandé → voir 4.4 | Décision en attente |
+| 5 | Même email pour deux écoles ? | **Oui pour un parent. Non pour un directeur et un enseignant** | Voir 3.6 |
+
+## Avancement
+
+| Tâche | Statut |
+|-------|--------|
+| 2.1 Audit des mots de passe faibles | ✅ fait (`npm run auditer:mots-de-passe`) |
+| 2.2 Mot de passe provisoire par SMS | ✅ fait (`POST /enseignants`, `POST /enseignants/:id/mot-de-passe-provisoire`, bouton « 🔑 MDP » du dashboard) |
+| 2.3 Blocage de connexion par établissement | ✅ fait (migration 022) |
+| 2.4 Réglage de la politique par le directeur | ⏳ optionnelle, non faite |
+| 2.5 / 2.6 Coût des SMS | ⏳ à faire (ci-dessous) |
+| Phase 3 | ⏳ 3.1 → 3.3 puis 3.6 à lancer ; 3.4 différée |
+
+---
+
 ## Diagnostic vérifié
 
 ### Déjà fait (à ne pas refaire)
@@ -35,9 +58,11 @@ Règles d'exécution (valables pour toutes les phases) :
 |---|---------|---------|-------|
 | C1 | `utilisateurs.telephone` est `UNIQUE` pour toute la base : un parent (ou un enseignant vacataire) ne peut avoir de compte que dans **un** établissement | Fonctionnelle (bloquante pour le cas multi-écoles) | 3 |
 | C2 | `otp_verifications` est indexé par téléphone seul ; `otp/demander` invalide **tous** les codes du numéro | À corriger avant C1 (sinon un code demandé pour l'école B annule celui de l'école A) | 3 |
-| C3 | `est_compte_bloque()` (SQL) lit `MAX(blocage_nb_tentatives)` sur **toutes** les écoles : si une école assouplit sa politique, elle assouplit celle de toutes | Moyenne (aucune route n'écrit `politique_securite` aujourd'hui, donc latent) | 2 |
-| C4 | Le mot de passe provisoire d'un enseignant est renvoyé en clair au directeur | Moyenne | 2 |
-| C5 | Des mots de passe faibles antérieurs aux nouvelles règles existent encore (téléphone, `123456`…) | Moyenne | 2 |
+| C3 | ~~`est_compte_bloque()` (SQL) lit `MAX(...)` sur toutes les écoles~~ **Corrigé** (2.3, migration 022) | — | 2 ✅ |
+| C4 | ~~Le mot de passe provisoire est renvoyé en clair au directeur~~ **Corrigé** (2.2) : envoyé par SMS, renvoyé au directeur seulement si le SMS échoue | — | 2 ✅ |
+| C5 | ~~Mots de passe faibles antérieurs~~ **Outil livré** (2.1) : à exécuter sur la base de production (simulation d'abord) | — | 2 ✅ / 5 |
+| C11 | Les gabarits SMS contiennent un tiret long « — » (et « ê ») : le message passe en UCS-2, **2 à 3 segments facturés au lieu de 1** | Coût ×2 à ×3 sur les notifications | 2.5 |
+| C12 | `nouvelle_note` : `evaluations.routes.js` met en file `{ evaluation_id }` sans `inscription_id`, alors que le worker en a besoin pour retrouver le parent (`notification.worker.js`, requête sur `i.id`). **Probable** : ces SMS ne partent jamais ou font échouer le job — non exécuté ici | À vérifier | 2.6 |
 | C6 | Dashboard, page **enseignant** : `ens-app.ts` appelle `Auth.populateSidebar()`, qui cible `sb-nom`, `sb-role`, `sb-etab` alors que la page utilise `sb-user-nom`, `sb-user-role`, `sb-user-avatar`, `sb-etab-nom` → nom, rôle, avatar et établissement restent vides. (Les pages admin `app.ts` et parent `par-app.ts` les renseignent correctement.) | Faible (UX) | 4 |
 | C7 | `login.html` n'a pas de lien vers `parent-login.html` (l'inverse existe) : un parent qui arrive sur la page du personnel ne trouve pas sa connexion | Faible (UX) | 4 |
 | C8 | Le dashboard est **en ligne uniquement** : l'appel et les notes d'un enseignant ne fonctionnent pas hors connexion (contrainte terrain n°1 du projet) | Structurelle, à documenter et à signaler dans l'interface | 4 |
@@ -95,6 +120,68 @@ contre chaque hash (`bcrypt.compare`) : le téléphone du compte (toutes formes)
 - Tests d'intégration : deux écoles, politiques différentes ; le blocage de l'une n'affecte pas l'autre.
 - Critère d'acceptation : l'école A à 3 tentatives bloque après 3 échecs ; l'école B à 10 ne bloque pas après 3.
 
+### 2.5 — Ramener les SMS à un seul segment (C11)
+
+Mesure faite sur les gabarits de `workers/notification.worker.js` (données d'exemple réalistes) :
+
+| Gabarit | Aujourd'hui | Avec « - » à la place de « — » |
+|---------|-------------|--------------------------------|
+| absence, retard, nouvelle_note, bulletin_disponible | UCS-2 · 2 segments | GSM-7 · **1 segment** |
+| sanction | UCS-2 · 3 segments | GSM-7 · **1 segment** |
+| convocation | UCS-2 · 3 segments | encore UCS-2 (« êtes ») → à reformuler sans accent circonflexe |
+| code de connexion (OTP) | GSM-7 · 1 segment | inchangé |
+
+- Ajouter `versGsm7(message)` dans `sms.service.js` (étendre le `versAscii` existant : conserver é, è, à, ù, ç… qui sont dans l'alphabet SMS de base, remplacer « — », « – », « ’ », « « » », « ê », « î », « ô », « û »…) et l'appliquer dans `envoyerSMS` à **tout** message. Retirer le tiret long des gabarits.
+- Remplacer la troncature à 459 caractères (valable pour du GSM-7 uniquement) par un calcul de segments :
+  plafond de 3 segments quel que soit l'encodage.
+- Journaliser le nombre de segments par envoi (jamais le contenu) pour pouvoir suivre le coût réel dans `journal_notifications`.
+- Test unitaire : pour chaque gabarit et ses données d'exemple, `segments === 1` (sauf cas explicitement listés).
+- Critère d'acceptation : le test de mesure ci-dessus passe à 1 segment pour les 6 gabarits.
+
+### 2.6 — Fiabiliser et plafonner l'envoi des notifications (C12)
+
+- Vérifier par un test d'intégration que publier les notes d'une évaluation crée bien une notification par parent
+  concerné ; si le job est mal formé (C12), faire éclater `{ evaluation_id }` en un job par inscription côté route ou
+  côté worker.
+- Plafond de dépense par établissement : compteur mensuel de SMS (Redis ou table), seuil d'alerte au directeur à 80 %,
+  blocage des SMS non essentiels (jamais l'OTP) à 100 %. Valeur par défaut dans `politique_securite` (nouvelle colonne
+  `sms_plafond_mensuel`, migration dédiée).
+- Préférence de canal WhatsApp déjà prévue dans le worker : mesurer son coût réel avant de la recommander (non chiffré ici).
+
+## Coût des SMS
+
+**Prix : à confirmer.** Le site d'Africa's Talking (`africastalking.com`, `developers.africastalking.com`) est bloqué depuis
+l'environnement d'exécution ; aucun tarif officiel n'a pu être lu. Les chiffres ci-dessous viennent de comparateurs tiers et
+**ne sont pas les tarifs d'Africa's Talking** : à remplacer par ceux de votre compte (tableau de bord Africa's Talking, ou page
+« Pricing »).
+
+Repères trouvés (estimations tierces, par SMS) : comparateur régional — Sénégal 0,0111 € (≈ 7 XOF), Côte d'Ivoire 0,0240 €
+(≈ 16 XOF), Mali 0,0197 € (≈ 13 XOF), Burkina Faso 0,0215 € (≈ 14 XOF) ; opérateurs locaux, tarifs « Pro » : 8 à 15 XOF au
+Sénégal, 5 à 50 XOF en Côte d'Ivoire ; passerelles internationales (Twilio, Infobip…) : 0,14 à 0,44 USD, soit 10 à 30 fois plus.
+Conversion à parité fixe : 1 € = 655,957 XOF.
+
+**Formule** : coût mensuel = nombre de SMS × segments par SMS × prix du segment. Les gabarits actuels font **2 à 3 segments**
+(C11) : c'est le premier levier, avant toute négociation de tarif.
+
+Exemple chiffré — école de 500 élèves, ~450 parents, prix de 13 XOF le segment (**hypothèse**, milieu de fourchette) :
+
+| Poste (hypothèses entre parenthèses) | SMS / mois |
+|--------------------------------------|-----------:|
+| Absences et retards (5 % d'absents × 22 jours) | 550 |
+| Notes, bulletins, sanctions, convocations (2 par élève) | 1 000 |
+| Codes de connexion des parents (2 par parent) | 900 |
+| Mots de passe provisoires (30 enseignants, une fois) | 30 |
+| **Total** | **≈ 2 480** |
+
+| Scénario | Coût mensuel |
+|----------|-------------:|
+| Gabarits actuels (≈ 2 segments pour les notifications) | ≈ 52 400 XOF (≈ 80 €) |
+| Après 2.5 (1 segment partout) | ≈ 32 200 XOF (≈ 49 €) — **−38 %** |
+
+Les volumes sont des hypothèses : le vrai chiffre se lit dans `journal_notifications` après un mois de pilote.
+À confirmer avec Africa's Talking : facturation au segment (probable), coût d'un identifiant d'expéditeur, recharge minimale,
+couverture et prix par opérateur dans les 4 pays.
+
 ### 2.4 — (Optionnel) Permettre au directeur de régler sa politique
 
 Aucune route n'écrit `politique_securite`. Ajouter `GET/PUT /securite/politique` (permission `config.modifier`),
@@ -120,6 +207,16 @@ Trois options ont été étudiées.
 **Recommandation : A puis C.** B n'est justifiée que si un besoin de vue agrégée « tous mes enfants, toutes écoles »
 apparaît (groupe scolaire) — décision produit à prendre, voir « Questions ouvertes ».
 La clé d'identité entre écoles est le **numéro E.164** : c'est précisément ce que la normalisation du téléphone permet.
+
+### Vue agrégée — définition
+
+C'est **un seul écran qui rassemble les enfants d'un même parent venant de plusieurs écoles** (par exemple Moussa à l'école A et
+Aida à l'école B, avec leurs notes et absences côte à côte, et une seule liste de notifications). Sans elle (options A et C),
+le parent voit **une école à la fois** et change d'école avec un sélecteur. La vue agrégée demande de lire les données de
+plusieurs écoles dans une même requête, alors que le système est cloisonné par école (jeton lié à une école, isolation
+stricte). Deux façons de la faire : une identité globale (option B, lourde) ou une application qui ouvre une session par école
+et assemble l'affichage côté client (plus simple, mais seulement dans l'application/le navigateur). **Décision : pas
+maintenant** ; elle peut s'ajouter plus tard sans défaire l'option A.
 
 Cas de l'enseignant vacataire (plusieurs écoles) : même mécanisme, mais **sans** bascule automatique de session —
 un compte à mot de passe se reconnecte avec son mot de passe dans chaque école.
@@ -178,6 +275,20 @@ Pour les **parents** (comptes sans mot de passe) uniquement :
   synchronisation, **pas** de fusion de bases (isolation conservée).
 - Pas de vue agrégée inter-écoles dans cette phase (voir Questions ouvertes).
 
+### 3.6 — Règle d'unicité de l'email selon le rôle (décision 5)
+
+Un même email peut servir dans plusieurs écoles **pour un parent** ; **jamais pour un directeur ni un enseignant**.
+Aujourd'hui la base n'impose que `UNIQUE(etablissement_id, email)` (un même email dans deux écoles est donc possible), et seul
+`/inscription` refuse un email déjà pris, globalement.
+- `POST /enseignants` : refuser un email déjà utilisé par un compte **non parent** d'une autre école (contrôle applicatif :
+  la contrainte ne peut pas dépendre du rôle) ; message précis.
+- `/inscription`, `/setup` : conserver la vérification globale existante, en l'étendant aux comptes non parents seulement.
+- Création de parent (`POST /eleves` avec parent) : aucun contrôle d'email (les parents n'en ont pas besoin).
+- Cas limite à trancher : une personne à la fois enseignante et parente d'élève dans la même école (même téléphone,
+  deux rôles) reste un seul compte.
+- Tests d'intégration : directeur A puis directeur B avec le même email → refusé ; deux parents de deux écoles avec le même
+  email → acceptés ; enseignant avec l'email d'un directeur d'une autre école → refusé.
+
 ### 3.5 — Tests de bout en bout
 
 - Intégration (base réelle) : parent avec un enfant dans l'école A et un dans l'école B ; connexion par SMS, choix de
@@ -227,7 +338,15 @@ Pour les **parents** (comptes sans mot de passe) uniquement :
 - Documenter la différence dans `docs/README.md` : web = en ligne, mobile = hors ligne + synchronisation.
 - Hors périmètre : transformer le dashboard en PWA hors ligne (chantier à part, à chiffrer).
 
-### 4.4 — Message clair quand une session est fermée par un autre appareil (C9)
+### 4.4 — Sessions simultanées : message clair et limite (C9)
+
+**En clair :** chaque appareil connecté (téléphone, ordinateur de l'école, ordinateur personnel…) ouvre une « session ». La
+politique de l'école limite leur nombre par compte (3 aujourd'hui). Quand un 4ᵉ appareil se connecte, **la plus ancienne session
+est fermée sans avertissement** : l'utilisateur de l'ancien appareil est déconnecté sans comprendre pourquoi. Exemple : un
+enseignant a l'appli sur son téléphone, le dashboard sur l'ordinateur de la salle des professeurs et sur son portable ; s'il
+se connecte depuis un ordinateur partagé, l'un des trois est éjecté. Compromis : une limite plus haute évite ces
+déconnexions, mais laisse plus de jetons valides en même temps si un mot de passe fuit. **À décider** : 3 ou 5 pour le
+personnel (les parents resteraient à 3) ; dans les deux cas, ajouter le message ci-dessous.
 
 - Le serveur marque `sessions.motif_revocation = 'session_max_atteint'` ; `/auth/refresh` doit renvoyer un code
   distinct (`SESSION_REVOQUEE`) et le client afficher « Vous avez été déconnecté : trop d'appareils connectés ».

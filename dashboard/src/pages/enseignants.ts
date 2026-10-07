@@ -50,13 +50,38 @@ export const PageEnseignants: any = {
     try {
       const res = await Api.post('/enseignants', payload);
       closeModal('m-enseignant');
-      const mdpInfo = (res.data && res.data.message) || 'Compte créé';
-      toast('Enseignant créé ✓ — ' + mdpInfo, 's');
+      PageEnseignants.annoncerMotDePasse(res.data, 'Enseignant créé ✓');
       await this.charger();
     } catch (e: any) {
       toast('Erreur : ' + (e.message || 'Création échouée'), 'd');
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = 'Créer le compte'; }
+    }
+  },
+
+  /**
+   * Résultat d'une création ou d'un renvoi de mot de passe provisoire.
+   * SMS parti : simple confirmation (le directeur ne voit jamais le mot de
+   * passe). SMS non parti : le mot de passe est montré dans une boîte copiable
+   * — un toast disparaîtrait avant d'avoir pu être recopié.
+   */
+  annoncerMotDePasse: function(data: any, titre: string) {
+    if (data && data.sms_envoye) {
+      toast(titre + ' — ' + data.message, 's');
+      return;
+    }
+    toast(titre + ' — le SMS n\u2019a pas pu être envoyé', 'w');
+    const mdp = ((data && data.message) || '').split('provisoire : ')[1] || '';
+    if (mdp) window.prompt('Le SMS n\u2019a pas pu être envoyé.\nMot de passe provisoire à communiquer à l\u2019enseignant (Ctrl+C pour copier) :', mdp);
+  },
+
+  async renvoyerMdp(id: string, nom: string) {
+    if (!window.confirm('Envoyer un nouveau mot de passe provisoire par SMS à ' + nom + ' ?\nSes sessions ouvertes seront fermées.')) return;
+    try {
+      const res = await Api.post('/enseignants/' + id + '/mot-de-passe-provisoire', {});
+      PageEnseignants.annoncerMotDePasse(res.data, 'Mot de passe réémis');
+    } catch (e: any) {
+      toast('Erreur : ' + (e.message || 'Envoi impossible'), 'd');
     }
   },
 
@@ -82,6 +107,7 @@ export const PageEnseignants: any = {
         '<td style="display:flex;gap:6px">' +
           '<button class="btn btn-l btn-sm" onclick="toast(\'Fiche à venir\')">Voir</button>' +
           '<button class="btn btn-p btn-sm" onclick="PageAffectations.ouvrir(\'' + escapeHtml(e.id) + '\',\'' + nomForAttr + '\')">📋 Affecter</button>' +
+          '<button class="btn btn-l btn-sm" title="Envoyer un nouveau mot de passe provisoire par SMS" onclick="PageEnseignants.renvoyerMdp(\'' + escapeHtml(e.id) + '\',\'' + nomForAttr + '\')">🔑 MDP</button>' +
         '</td>' +
       '</tr>';
     }).join('');

@@ -146,19 +146,22 @@ router.post('/auth/connexion', limiterAuth, valider(schemaConnexion), async (req
   const ip = req.ip;
 
   try {
-    // 1. Vérifier blocage force brute
-    const bloque = await db.raw(
-      'SELECT est_compte_bloque(?, ?) AS bloque',
-      [identifiant, ip]
-    );
-    if (bloque.rows[0]?.bloque) {
-      throw ApiError.compteBloque('Trop de tentatives — réessayez dans 15 minutes');
-    }
-
-    // 2. Trouver l'établissement
+    // 1. Trouver l'établissement (avant le contrôle de blocage : la politique
+    //    de blocage est celle de CET établissement)
     const etablissement = await db('etablissements')
       .where({ code_officiel: etablissement_code, actif: true })
       .first('id', 'nom', 'pays');
+
+    // 2. Vérifier blocage force brute — politique de l'établissement, ou
+    //    valeurs par défaut strictes si le code est inconnu (un code inconnu
+    //    ne doit pas permettre de tester des mots de passe sans limite)
+    const bloque = await db.raw(
+      'SELECT est_compte_bloque(?, ?, ?) AS bloque',
+      [identifiant, ip, etablissement ? etablissement.id : null]
+    );
+    if (bloque.rows[0]?.bloque) {
+      throw ApiError.compteBloque('Trop de tentatives — réessayez dans quelques minutes');
+    }
 
     if (!etablissement) {
       try {

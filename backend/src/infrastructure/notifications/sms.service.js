@@ -90,4 +90,32 @@ async function envoyerOTP(telephone, code, etablissementNom = 'EcoleManager') {
   return envoyerSMS(telephone, message);
 }
 
-module.exports = { envoyerSMS, envoyerOTP };
+/** Retire les accents et les caractères hors alphabet SMS de base (GSM-7). */
+function versAscii(texte) {
+  return String(texte)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[—–]/g, '-').replace(/[’‘]/g, "'").replace(/[«»“”]/g, '"')
+    .replace(/[^\x20-\x7E]/g, '');
+}
+
+/**
+ * Envoie à un nouvel enseignant son identifiant et son mot de passe provisoire.
+ *
+ * Le texte est volontairement en ASCII : un seul caractère hors de l'alphabet
+ * SMS de base (un tiret long, un accent comme « ê ») fait passer le message en
+ * UCS-2, soit 70 caractères par segment au lieu de 160 — donc 2 à 3 SMS
+ * facturés. Le mot de passe n'est jamais journalisé (envoyerSMS ne journalise
+ * que le numéro et la longueur).
+ *
+ * @param {string} telephone       - Numéro E.164 du destinataire (aussi son identifiant)
+ * @param {object} p
+ * @param {string} p.etablissementNom
+ * @param {string} p.motDePasse
+ */
+async function envoyerMotDePasseProvisoire(telephone, { etablissementNom = 'EcoleManager', motDePasse }) {
+  const ecole = versAscii(etablissementNom).slice(0, 30);
+  const message = `[${ecole}] Compte cree. Identifiant: ${telephone} Mot de passe provisoire: ${motDePasse} A changer a la 1ere connexion.`;
+  return envoyerSMS(telephone, message);
+}
+
+module.exports = { envoyerSMS, envoyerOTP, envoyerMotDePasseProvisoire, versAscii };
