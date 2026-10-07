@@ -17,7 +17,27 @@ const { ok }            = require('../../../utils/reponse');
 const logger            = require('../../../utils/logger');
 const { getOrSet } = require('../../../infrastructure/cache/redis');
 
+const {
+  normaliserTelephone, variantesTelephone, ressembleATelephone,
+} = require('../../../utils/telephone');
+
 const router = express.Router();
+/**
+ * Filtre knex « identifiant » = email, ou téléphone. Un numéro est comparé sous
+ * toutes ses formes connues (E.164, sans « + », national, tel que saisi) pour
+ * retrouver aussi les comptes créés avant la normalisation.
+ */
+function filtreIdentifiant(identifiant, pays) {
+  return function () {
+    this.where('email', identifiant);
+    if (ressembleATelephone(identifiant)) {
+      this.orWhere(function () { this.whereIn('telephone', variantesTelephone(identifiant, pays)); });
+    } else {
+      this.orWhere('telephone', identifiant);
+    }
+  };
+}
+
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS) || 12;
 
 /**
@@ -122,12 +142,12 @@ const schemaConnexion = z.object({
 });
 
 const schemaOtpDemander = z.object({
-  telephone:          z.string().regex(/^\+?[0-9]{8,15}$/, 'Numéro invalide'),
+  telephone:          z.string().min(6, 'Numéro invalide').max(25, 'Numéro invalide'),
   etablissement_code: z.string().min(2),
 });
 
 const schemaOtpValider = z.object({
-  telephone:          z.string().regex(/^\+?[0-9]{8,15}$/),
+  telephone:          z.string().min(6).max(25),
   code:               z.string().length(6).regex(/^\d{6}$/),
   etablissement_code: z.string().min(2),
 });
@@ -155,7 +175,7 @@ router.post('/auth/connexion', limiterAuth, valider(schemaConnexion), async (req
     // 2. Trouver l'établissement
     const etablissement = await db('etablissements')
       .where({ code_officiel: etablissement_code, actif: true })
-      .first('id', 'nom');
+      .first('id', 'nom', 'pays');
 
     if (!etablissement) {
       try {
@@ -170,9 +190,7 @@ router.post('/auth/connexion', limiterAuth, valider(schemaConnexion), async (req
     // 3. Trouver l'utilisateur
     const utilisateur = await db('utilisateurs')
       .where({ etablissement_id: etablissement.id, actif: true })
-      .andWhere(function () {
-        this.where('email', identifiant).orWhere('telephone', identifiant);
-      })
+      .andWhere(filtreIdentifiant(identifiant, etablissement.pays))
       .first('id', 'nom', 'prenom', 'mot_de_passe_hash', 'email');
 
     if (!utilisateur || !utilisateur.mot_de_passe_hash) {
@@ -237,20 +255,27 @@ router.post('/auth/connexion', limiterAuth, valider(schemaConnexion), async (req
 
 // ── POST /auth/otp/demander — Demander un OTP SMS (parents) ─────
 router.post('/auth/otp/demander', limiterAuth, valider(schemaOtpDemander), async (req, res, next) => {
-  const { telephone, etablissement_code } = req.body;
+  const { etablissement_code } = req.body;
   const db = getDB();
 
   try {
     // Trouver l'établissement
     const etablissement = await db('etablissements')
       .where({ code_officiel: etablissement_code, actif: true })
-      .first('id', 'nom');
+      .first('id', 'nom', 'pays');
 
     if (!etablissement) throw ApiError.nonAutorise('Établissement inconnu');
 
-    // Vérifier que l'utilisateur existe (parent)
+    // Numéro normalisé (E.164) : c'est celui qui reçoit le SMS et qui sert
+    // de clé à l'OTP, quelle que soit la façon dont il a été saisi.
+    const telephone = normaliserTelephone(req.body.telephone, etablissement.pays);
+    if (!telephone) throw ApiError.validationEchouee('Numéro invalide — format attendu : +221 77 123 45 67');
+
+    // Vérifier que l'utilisateur existe (parent), y compris sous une forme
+    // historique non normalisée
     const utilisateur = await db('utilisateurs')
-      .where({ telephone, etablissement_id: etablissement.id, actif: true })
+      .whereIn('telephone', variantesTelephone(req.body.telephone, etablissement.pays))
+      .where({ etablissement_id: etablissement.id, actif: true })
       .first('id');
 
     // On ne révèle pas si le compte existe (anti-enumération)
@@ -305,7 +330,7 @@ router.post('/auth/otp/demander', limiterAuth, valider(schemaOtpDemander), async
 
 // ── POST /auth/otp/valider — Valider un OTP et créer session ────
 router.post('/auth/otp/valider', limiterAuth, valider(schemaOtpValider), async (req, res, next) => {
-  const { telephone, code, etablissement_code } = req.body;
+  const { code, etablissement_code } = req.body;
   const db = getDB();
 
   try {
@@ -313,9 +338,12 @@ router.post('/auth/otp/valider', limiterAuth, valider(schemaOtpValider), async (
 
     const etablissement = await db('etablissements')
       .where({ code_officiel: etablissement_code, actif: true })
-      .first('id', 'nom');
+      .first('id', 'nom', 'pays');
 
     if (!etablissement) throw ApiError.otpInvalide();
+
+    const telephone = normaliserTelephone(req.body.telephone, etablissement.pays);
+    if (!telephone) throw ApiError.otpInvalide('Code invalide, expiré ou trop de tentatives');
 
     // Incrémenter les tentatives d'abord
     await db('otp_verifications')
@@ -486,7 +514,7 @@ router.post('/auth/mot-de-passe-oublie', limiterAuth, valider(schemaMotDePasseOu
   try {
     const etablissement = await db('etablissements')
       .where({ code_officiel: etablissement_code, actif: true })
-      .first('id', 'nom');
+      .first('id', 'nom', 'pays');
 
     if (!etablissement) {
       await new Promise(r => setTimeout(r, 800));
@@ -495,9 +523,7 @@ router.post('/auth/mot-de-passe-oublie', limiterAuth, valider(schemaMotDePasseOu
 
     const utilisateur = await db('utilisateurs')
       .where({ etablissement_id: etablissement.id, actif: true })
-      .andWhere(function () {
-        this.where('email', identifiant).orWhere('telephone', identifiant);
-      })
+      .andWhere(filtreIdentifiant(identifiant, etablissement.pays))
       .first('id', 'telephone', 'email');
 
     if (!utilisateur) {
@@ -507,7 +533,9 @@ router.post('/auth/mot-de-passe-oublie', limiterAuth, valider(schemaMotDePasseOu
 
     const code = String(crypto.randomInt(100000, 1000000));
     const codeHash = crypto.createHash('sha256').update(code).digest('hex');
-    const telephone = utilisateur.telephone;
+    // Clé OTP et destinataire SMS : forme normalisée (repli sur la valeur
+    // stockée si elle est inexploitable), identique à l'étape de validation
+    const telephone = normaliserTelephone(utilisateur.telephone, etablissement.pays) || utilisateur.telephone;
 
     await db('otp_verifications')
       .where({ telephone, objectif: 'reset_mdp', utilise: false })
@@ -554,18 +582,22 @@ router.post('/auth/reinitialiser-mot-de-passe', limiterAuth, valider(schemaReini
   try {
     const etablissement = await db('etablissements')
       .where({ code_officiel: etablissement_code, actif: true })
-      .first('id');
+      .first('id', 'pays');
 
     if (!etablissement) throw ApiError.nonAutorise('Établissement inconnu');
 
-    const utilisateur = await db('utilisateurs')
+    const utilisateurBrut = await db('utilisateurs')
       .where({ etablissement_id: etablissement.id, actif: true })
-      .andWhere(function () {
-        this.where('email', identifiant).orWhere('telephone', identifiant);
-      })
+      .andWhere(filtreIdentifiant(identifiant, etablissement.pays))
       .first('id', 'telephone');
 
-    if (!utilisateur) throw ApiError.otpInvalide('Code invalide ou expiré');
+    if (!utilisateurBrut) throw ApiError.otpInvalide('Code invalide ou expiré');
+
+    // Même clé OTP qu'à la demande (forme normalisée)
+    const utilisateur = {
+      ...utilisateurBrut,
+      telephone: normaliserTelephone(utilisateurBrut.telephone, etablissement.pays) || utilisateurBrut.telephone,
+    };
 
     const codeHash = crypto.createHash('sha256').update(code).digest('hex');
 

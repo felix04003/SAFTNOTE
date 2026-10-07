@@ -13,6 +13,7 @@ const ApiError       = require('../../../utils/ApiError');
 const { invalidatePattern } = require('../../../infrastructure/cache/redis');
 const { preparerDonneesMediacles, selecteursMedicaux } = require('../../../utils/medical-crypto');
 const { autoriserAccesEleve } = require('../../../middleware/acces-eleve.middleware');
+const { paysEtablissement, telephoneOuErreur, variantesTelephone } = require('../../../utils/telephone');
 
 const router = express.Router();
 const auth   = authentifier;
@@ -117,6 +118,14 @@ router.post('/eleves', auth, isoler, perm('eleves.creer'),
   async (req, res, next) => {
     const db = getDB();
     try {
+      // Numéros normalisés (E.164) : indispensables pour que le parent puisse
+      // se connecter par OTP SMS et recevoir les notifications.
+      const pays = await paysEtablissement(db, req.etablissement_id);
+      const telEleve  = req.body.telephone
+        ? telephoneOuErreur(req.body.telephone, pays, 'Téléphone de l\'élève') : undefined;
+      const telParent = req.body.parent
+        ? telephoneOuErreur(req.body.parent.telephone, pays, 'Téléphone du parent') : undefined;
+
       const result = await db.transaction(async trx => {
         // Récupérer l'année courante
         const annee = await trx('annees_scolaires')
@@ -133,7 +142,7 @@ router.post('/eleves', auth, isoler, perm('eleves.creer'),
           prenom:           req.body.prenom,
           date_naissance:   req.body.date_naissance,
           genre:            req.body.genre,
-          telephone:        req.body.telephone,
+          telephone:        telEleve,
           adresse:          req.body.adresse,
           actif:            true,
         });
@@ -181,7 +190,7 @@ router.post('/eleves', auth, isoler, perm('eleves.creer'),
         // le même parent.telephone → 201 puis 409 sur le 2e).
         if (req.body.parent) {
           const parentExistant = await trx('utilisateurs')
-            .where({ telephone: req.body.parent.telephone })
+            .whereIn('telephone', variantesTelephone(req.body.parent.telephone, pays))
             .first('id', 'etablissement_id');
 
           let parentId;
@@ -215,7 +224,7 @@ router.post('/eleves', auth, isoler, perm('eleves.creer'),
               etablissement_id: req.etablissement_id,
               nom:              req.body.parent.nom,
               prenom:           req.body.parent.prenom,
-              telephone:        req.body.parent.telephone,
+              telephone:        telParent,
               actif:            true,
             });
 

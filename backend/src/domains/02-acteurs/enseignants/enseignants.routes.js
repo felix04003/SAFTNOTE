@@ -13,6 +13,7 @@ const { valider }    = require('../../../middleware/validate.middleware');
 const { ok, cree, liste }  = require('../../../utils/reponse');
 const ApiError       = require('../../../utils/ApiError');
 const logger         = require('../../../utils/logger');
+const { paysEtablissement, telephoneOuErreur, variantesTelephone } = require('../../../utils/telephone');
 
 const router = express.Router();
 const auth   = authentifier;
@@ -48,7 +49,7 @@ router.post('/enseignants', auth, isoler, perm('config.modifier'),
   valider(z.object({
     nom:          z.string().min(2),
     prenom:       z.string().min(2),
-    telephone:    z.string().regex(/^\+?[0-9]{8,15}$/, 'Numéro invalide'),
+    telephone:    z.string().min(6, 'Numéro invalide').max(25, 'Numéro invalide'),
     email:        z.string().email().optional().or(z.literal('')),
     genre:        z.enum(['M', 'F']).optional(),
     specialite:   z.string().optional(),
@@ -58,13 +59,18 @@ router.post('/enseignants', auth, isoler, perm('config.modifier'),
   async (req, res, next) => {
     const db = getDB();
     try {
-      // Vérifier doublon téléphone dans cet établissement
+      // Numéro normalisé (E.164) — c'est aussi l'identifiant de connexion
+      const pays      = await paysEtablissement(db, req.etablissement_id);
+      const telephone = telephoneOuErreur(req.body.telephone, pays);
+
+      // Vérifier doublon téléphone dans cet établissement (formes historiques incluses)
       const doublon = await db('utilisateurs')
-        .where({ etablissement_id: req.etablissement_id, telephone: req.body.telephone })
+        .where({ etablissement_id: req.etablissement_id })
+        .whereIn('telephone', variantesTelephone(req.body.telephone, pays))
         .first('id');
       if (doublon) throw ApiError.validationEchouee('Un utilisateur avec ce numéro existe déjà');
 
-      const mdpBrut = req.body.mot_de_passe || req.body.telephone;
+      const mdpBrut = req.body.mot_de_passe || telephone;
       const mdpHash = await bcrypt.hash(mdpBrut, 10);
 
       const result = await db.transaction(async trx => {
@@ -75,7 +81,7 @@ router.post('/enseignants', auth, isoler, perm('config.modifier'),
           etablissement_id: req.etablissement_id,
           nom:              req.body.nom,
           prenom:           req.body.prenom,
-          telephone:        req.body.telephone,
+          telephone,
           email:            req.body.email || null,
           genre:            req.body.genre,
           mot_de_passe_hash: mdpHash,
@@ -476,6 +482,17 @@ router.put('/enseignants/:id', auth, isoler,
       for (const champ of champsMappingUtilisateur) {
         if (req.body[champ] !== undefined) {
           champsUtilisateur[champ] = req.body[champ];
+        }
+      }
+
+      // Téléphones : toujours stockés en E.164 (le principal sert d'identifiant)
+      if (champsUtilisateur.telephone !== undefined || champsUtilisateur.telephone_2 !== undefined) {
+        const pays = await paysEtablissement(db, req.session.etablissement_id);
+        if (champsUtilisateur.telephone !== undefined) {
+          champsUtilisateur.telephone = telephoneOuErreur(champsUtilisateur.telephone, pays);
+        }
+        if (champsUtilisateur.telephone_2 !== undefined) {
+          champsUtilisateur.telephone_2 = telephoneOuErreur(champsUtilisateur.telephone_2, pays, 'Second numéro');
         }
       }
 

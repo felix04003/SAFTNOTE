@@ -19,6 +19,7 @@ const { valider }  = require('../../middleware/validate.middleware');
 const { cree }     = require('../../utils/reponse');
 const ApiError     = require('../../utils/ApiError');
 const logger       = require('../../utils/logger');
+const { telephoneOuErreur } = require('../../utils/telephone');
 
 const router = express.Router();
 
@@ -36,7 +37,7 @@ const schemaSetup = z.object({
     nom:          z.string().min(2),
     prenom:       z.string().min(2),
     email:        z.string().email(),
-    telephone:    z.string().regex(/^\+?[0-9]{8,15}$/, 'Numéro invalide'),
+    telephone:    z.string().min(6, 'Numéro invalide').max(25, 'Numéro invalide'),
     // Mot de passe fort obligatoire à la création (audit 2026-09) : la
     // création de compte n'appliquait auparavant aucune règle de
     // complexité (seulement une longueur minimale), contrairement à la
@@ -84,7 +85,7 @@ const schemaInscription = z.object({
     nom:          z.string().min(2),
     prenom:       z.string().min(2),
     email:        z.string().email(),
-    telephone:    z.string().regex(/^\+?[0-9]{8,15}$/, 'Numéro invalide'),
+    telephone:    z.string().min(6, 'Numéro invalide').max(25, 'Numéro invalide'),
     mot_de_passe: z.string()
       .min(8, 'Minimum 8 caractères')
       .regex(/[a-z]/, 'Le mot de passe doit contenir au moins une minuscule')
@@ -172,6 +173,7 @@ router.post('/setup', valider(schemaSetup), async (req, res, next) => {
     }
 
     const { etablissement: etabData, directeur: dirData, annee_scolaire: anneeData } = req.body;
+    dirData.telephone = telephoneOuErreur(dirData.telephone, etabData.pays, 'Téléphone du directeur');
 
     // Vérifier unicité du code
     const codeExiste = await db('etablissements')
@@ -298,6 +300,8 @@ router.post('/inscription', limiterInscription, valider(schemaInscription), asyn
   const { etablissement: etabData, directeur: dirData } = req.body;
 
   try {
+    dirData.telephone = telephoneOuErreur(dirData.telephone, etabData.pays, 'Téléphone du directeur');
+
     // Vérifier unicité de l'email directeur (global)
     const emailExiste = await db('utilisateurs').where({ email: dirData.email }).first('id');
     if (emailExiste) {
