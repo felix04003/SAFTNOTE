@@ -64,11 +64,14 @@ export const Auth = {
   populateSidebar: function() {
     const user = Auth.getUser();
     if (!user) return;
-    const nameEl = document.getElementById('sb-nom');
-    const roleEl = document.getElementById('sb-role');
-    const etabEl = document.getElementById('sb-etab');
-    if (nameEl) nameEl.textContent = (user.prenom || '') + ' ' + (user.nom || '');
+    // Mêmes identifiants et même rendu que app.ts et par-app.ts
+    const nameEl = document.getElementById('sb-user-nom');
+    const roleEl = document.getElementById('sb-user-role');
+    const avatEl = document.getElementById('sb-user-avatar');
+    const etabEl = document.getElementById('sb-etab-nom');
+    if (nameEl) nameEl.textContent = (user.prenom || '') + ' ' + (user.nom || user.nom_complet || '');
     if (roleEl) roleEl.textContent = user.role || '';
+    if (avatEl) avatEl.textContent = ((user.prenom || user.nom_complet || '?')[0]).toUpperCase();
     if (etabEl) etabEl.textContent = user.etablissement_nom || '';
   },
 };

@@ -1,5 +1,6 @@
 import { CONFIG } from './config';
 import { Api } from './api';
+import { afficherMessageFlash } from './flash';
 
 let _telephone = '';
 let _etabCode = '';
@@ -113,6 +114,7 @@ function afficherErreur(id: string, msg: string) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  afficherMessageFlash(document.getElementById('err1'));
   document.getElementById('btn-demander')?.addEventListener('click', demanderOTP);
   document.getElementById('btn-valider')?.addEventListener('click', validerOTP);
 

@@ -71,7 +71,7 @@ ecolemanager/
 │   │   ├── middleware/             ✅ auth JWT, erreurs, rate-limit, validation
 │   │   ├── workers/                ✅ notification.worker.js (câblage BullMQ) + notification.processor.js (traitement, testé sur base réelle)
 │   │   └── utils/                  ✅ helpers divers
-│   ├── tests/                     ✅ 378 tests unitaires (40 suites Jest) + tests d'intégration
+│   ├── tests/                     ✅ 379 tests unitaires (40 suites Jest) + tests d'intégration
 │   │   ├── helpers/               ✅ mockKnex, testApp, fixtures
 │   │   ├── seeds/                 ✅ seeds de test SQL (jamais appliqués en prod)
 │   │   └── domains/               ✅ fichiers de test par domaine
@@ -145,7 +145,7 @@ ecolemanager/
     ├── css/
     │   └── style.css       ✅ Toute la feuille de style
     ├── src/                ✅ Sources TypeScript (remplace l'ancien dashboard/js/, supprimé — lot K)
-    ├── tests/              ✅ 84 tests Vitest
+    ├── tests/              ✅ 90 tests Vitest
     ├── vite.config.ts / vitest.config.ts / tsconfig.json
     └── dist/               ← build de production (généré, non versionné)
 ```
@@ -171,7 +171,7 @@ Tous les 9 domaines sont **implémentés et testés** (60/60 tests passent).
 
 > Note : ce tableau reflète l'implémentation initiale des 9 domaines. Depuis, la campagne de
 > correction de l'audit 2026-09 (lots A→J) a ajouté des domaines, migrations et tests
-> supplémentaires. **Total actuel backend : 378 tests (40 suites Jest)**, voir `npm test` dans
+> supplémentaires. **Total actuel backend : 379 tests (40 suites Jest)**, voir `npm test` dans
 > `backend/`.
 
 ### 📖 Documentation API
@@ -185,7 +185,7 @@ Tous les 9 domaines sont **implémentés et testés** (60/60 tests passent).
 - **Workflow** : `.github/workflows/ci.yml`
 - **Déclenché sur** : push `main`/`develop` + pull requests vers `main`
 - **Jobs** :
-  1. `backend-lint-test` — ESLint + Jest (378 tests, couverture, services Postgres/Redis réels)
+  1. `backend-lint-test` — ESLint + Jest (379 tests, couverture, services Postgres/Redis réels)
   2. `backend-docker` — Build image Docker (après tests)
   3. `mobile-typecheck` — TypeScript `tsc --noEmit`
 - **ESLint** : `backend/.eslintrc.js` — 0 erreurs, <60 warnings
@@ -468,7 +468,7 @@ META_WA_TOKEN         → WhatsApp Business API
 | 27 | Notifications SMS réparées sur base réelle (le worker ne trouvait jamais le parent : aucun SMS n'avait pu partir), publication des notes → un SMS par parent, contrôle d'établissement sur la publication, report horaire BullMQ 5, plafond mensuel de SMS par établissement avec alertes (migration 023) | ✅ |
 
 > Les compteurs de tests ci-dessus sont historiques (au moment de chaque étape). Compteurs
-> actuels (vérifiés le 2026-10-07) : backend 378 tests (40 suites Jest) + 156 tests d'intégration sur base réelle (19 suites, `npm run test:integration`), dashboard 84 tests (Vitest).
+> actuels (vérifiés le 2026-10-07) : backend 379 tests (40 suites Jest) + 156 tests d'intégration sur base réelle (19 suites, `npm run test:integration`), dashboard 90 tests (Vitest), mobile 108 tests (Jest).
 
 ---
 

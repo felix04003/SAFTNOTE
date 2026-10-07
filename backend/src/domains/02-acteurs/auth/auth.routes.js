@@ -817,7 +817,17 @@ router.post('/auth/refresh', limiterRefresh, valider(schemaRefresh), async (req,
       .where('refresh_expire_at', '>', db.raw('NOW()'))
       .first('id', 'utilisateur_id', 'etablissement_id', 'token_hash');
 
-    if (!session) return next(ApiError.nonAutorise('Refresh token invalide ou expiré'));
+    if (!session) {
+      // Session fermée parce que l'utilisateur a ouvert trop d'appareils :
+      // un code distinct permet au client d'expliquer la déconnexion.
+      const fermee = await db('sessions')
+        .where({ refresh_token_hash: refreshHash, revoquee: true, motif_revocation: 'session_max_atteint' })
+        .first('id');
+      if (fermee) {
+        return next(new ApiError(401, 'Vous avez été déconnecté : trop d\'appareils connectés avec ce compte', 'SESSION_REVOQUEE'));
+      }
+      return next(ApiError.nonAutorise('Refresh token invalide ou expiré'));
+    }
 
     // Le sid du JWT reste l'id de session existant — ne JAMAIS le changer :
     // il est référencé par DELETE /auth/sessions/:id et par req.session.id

@@ -10,4 +10,5 @@ import './pages/ens-classes';
 import './pages/ens-discipline';
 import './pages/ens-edt';
 import './pages/ens-dashboard';
+import './reseau';
 import './ens-app';

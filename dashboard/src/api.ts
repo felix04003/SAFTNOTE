@@ -17,6 +17,8 @@ export class ApiError extends Error {
 // déclencher qu'un seul appel POST /auth/refresh — sinon chacune consomme
 // une unité du rate limiter dédié à /auth/refresh pour rien, et une requête
 // peut échouer à cause de la rotation déclenchée par une autre.
+export const MESSAGE_SESSION_REVOQUEE = 'Vous avez été déconnecté : trop d\'appareils connectés avec ce compte.';
+
 let rafraichissementEnCours: Promise<boolean> | null = null;
 
 export const Api = {
@@ -37,7 +39,17 @@ export const Api = {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ refresh_token: refreshToken }),
           });
-          if (!res.ok) return false;
+          if (!res.ok) {
+            // Fermée parce que trop d'appareils se sont connectés : on garde
+            // le message pour l'expliquer sur la page de connexion.
+            try {
+              const echec = await res.json();
+              if (echec?.code === 'SESSION_REVOQUEE') {
+                sessionStorage.setItem(CONFIG.FLASH_KEY, echec.erreur || MESSAGE_SESSION_REVOQUEE);
+              }
+            } catch { /* corps illisible : échec classique */ }
+            return false;
+          }
 
           const data = await res.json();
           const payload = data.data || data;

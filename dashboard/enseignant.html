@@ -178,7 +178,7 @@
             </table>
           </div>
           <div style="padding:14px 18px;border-top:1px solid var(--g100);display:flex;justify-content:flex-end;gap:10px">
-            <button class="btn btn-p" id="btn-appel-soumettre" onclick="PageEnsAppel.soumettre()">Soumettre l'appel</button>
+            <button class="btn btn-p" id="btn-appel-soumettre" data-requiert-reseau onclick="PageEnsAppel.soumettre()">Soumettre l'appel</button>
           </div>
         </div>
       </div>
@@ -293,7 +293,7 @@
     </div>
     <div class="mf">
       <button class="btn btn-l" onclick="closeModal('m-ens-evaluation')">Annuler</button>
-      <button id="btn-ens-creer-eval" class="btn btn-p" onclick="PageEnsNotes.creerEvaluation()">Créer l'évaluation</button>
+      <button id="btn-ens-creer-eval" data-requiert-reseau class="btn btn-p" onclick="PageEnsNotes.creerEvaluation()">Créer l'évaluation</button>
     </div>
   </div>
 </div>
@@ -317,8 +317,8 @@
     </div>
     <div class="mf">
       <button class="btn btn-l" onclick="closeModal('m-ens-notes')">Fermer</button>
-      <button id="btn-ens-sauver-notes" class="btn btn-l" onclick="PageEnsNotes.sauvegarderNotes()">Enregistrer</button>
-      <button id="btn-ens-publier-notes" class="btn btn-p" onclick="PageEnsNotes.publierNotes()">📱 Publier (notif parents)</button>
+      <button id="btn-ens-sauver-notes" data-requiert-reseau class="btn btn-l" onclick="PageEnsNotes.sauvegarderNotes()">Enregistrer</button>
+      <button id="btn-ens-publier-notes" data-requiert-reseau class="btn btn-p" onclick="PageEnsNotes.publierNotes()">📱 Publier (notif parents)</button>
     </div>
   </div>
 </div>
@@ -362,7 +362,7 @@
     </div>
     <div class="mf">
       <button class="btn btn-l" onclick="closeModal('m-ens-discipline')">Annuler</button>
-      <button id="btn-disc-creer" class="btn btn-p" onclick="PageEnsDiscipline.creerSanction()">Enregistrer la sanction</button>
+      <button id="btn-disc-creer" data-requiert-reseau class="btn btn-p" onclick="PageEnsDiscipline.creerSanction()">Enregistrer la sanction</button>
     </div>
   </div>
 </div>

@@ -1,4 +1,5 @@
 import { Auth } from './auth';
+import { afficherMessageFlash } from './flash';
 
 // Redirect if already logged in
 if (Auth.isAuthenticated()) {
@@ -44,6 +45,7 @@ async function handleLogin(e: Event) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  afficherMessageFlash(document.getElementById('login-err'));
   initTogglesMotDePasse();
   document.getElementById('login-form')?.addEventListener('submit', handleLogin);
 });

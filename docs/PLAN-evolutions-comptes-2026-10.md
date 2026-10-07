@@ -40,6 +40,7 @@ Règles d'exécution (valables pour toutes les phases) :
 | 2.5 Gabarits SMS en un segment | ✅ fait (voir ci-dessous) |
 | 2.6 Fiabiliser et plafonner les notifications | ✅ fait (voir ci-dessous) |
 | Phase 3 | ✅ 3.1, 3.2, 3.3, 3.6 faites (migration 024) ; 3.5 couverte par 2 suites d'intégration ; 3.4 (sélecteur) différée |
+| Phase 4 | ✅ 4.1, 4.2, 4.3, 4.4 faites (limite de sessions inchangée : décision produit en attente) ; ⏳ 4.5 (E2E Playwright, 375 px) non faite |
 
 ---
 
@@ -336,7 +337,7 @@ Aujourd'hui la base n'impose que `UNIQUE(etablissement_id, email)` (un même ema
 | Écran mobile (≤ 768 px) | ⚠️ non vérifié | Les parents ouvriront le web depuis leur téléphone |
 | Hors connexion | ❌ | Le web ne fonctionne pas hors ligne (C8) |
 
-### 4.1 — Corriger la barre latérale (C6)
+### 4.1 — Corriger la barre latérale (C6) — ✅ FAIT
 
 - `dashboard/src/auth.ts`, `populateSidebar` : viser `sb-user-nom`, `sb-user-role`, `sb-user-avatar` (initiales),
   `sb-etab-nom` — les mêmes identifiants et le même rendu que `app.ts` (lignes 10-13) et `par-app.ts` (37-40).
@@ -344,12 +345,12 @@ Aujourd'hui la base n'impose que `UNIQUE(etablissement_id, email)` (un même ema
 - Test Vitest (jsdom) : un DOM minimal avec ces quatre identifiants reçoit le nom, le rôle, les initiales et
   l'établissement du profil stocké.
 
-### 4.2 — Lier les deux connexions (C7)
+### 4.2 — Lier les deux connexions (C7) — ✅ FAIT
 
 - `login.html` : lien « Parent ? Connexion par code SMS → » vers `parent-login.html`.
 - Test Playwright ou Vitest sur la présence et la cible du lien.
 
-### 4.3 — Signaler l'absence de réseau (C8)
+### 4.3 — Signaler l'absence de réseau (C8) — ✅ FAIT
 
 - Bandeau global « Pas de connexion — l'appel et les notes ne peuvent pas être enregistrés depuis le web.
   Utilisez l'application mobile (mode hors ligne). » basé sur `navigator.onLine` + événements `online`/`offline`,
@@ -357,7 +358,7 @@ Aujourd'hui la base n'impose que `UNIQUE(etablissement_id, email)` (un même ema
 - Documenter la différence dans `docs/README.md` : web = en ligne, mobile = hors ligne + synchronisation.
 - Hors périmètre : transformer le dashboard en PWA hors ligne (chantier à part, à chiffrer).
 
-### 4.4 — Sessions simultanées : message clair et limite (C9)
+### 4.4 — Sessions simultanées : message clair et limite (C9) — ✅ FAIT
 
 **En clair :** chaque appareil connecté (téléphone, ordinateur de l'école, ordinateur personnel…) ouvre une « session ». La
 politique de l'école limite leur nombre par compte (3 aujourd'hui). Quand un 4ᵉ appareil se connecte, **la plus ancienne session
