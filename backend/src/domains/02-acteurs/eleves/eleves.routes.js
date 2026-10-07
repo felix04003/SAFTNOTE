@@ -181,27 +181,29 @@ router.post('/eleves', auth, isoler, perm('eleves.creer'),
         });
 
         // Créer le parent si fourni — ou réutiliser un parent existant.
-        // utilisateurs.telephone est UNIQUE au niveau BASE (pas juste par
-        // établissement) : un même numéro sert à un parent pour TOUS ses
-        // enfants, y compris plusieurs enfants dans le MÊME établissement
-        // (cas très courant — fratrie). Sans ce contrôle, l'inscription
-        // du 2e enfant plantait sur la contrainte unique avec une erreur
-        // générique "DOUBLON" (reproduit en direct : 2 POST /eleves avec
-        // le même parent.telephone → 201 puis 409 sur le 2e).
+        // utilisateurs.telephone est unique PAR ÉTABLISSEMENT (migration 024) :
+        // un même numéro sert à un parent pour tous ses enfants d'un même
+        // établissement (fratrie — sans ce contrôle, l'inscription du 2e enfant
+        // plantait sur la contrainte unique avec un « DOUBLON »). La recherche
+        // se limite à CET établissement : le même numéro dans une autre école
+        // est un autre compte (parent d'enfants dans plusieurs écoles), jamais
+        // un compte à rattacher ou à refuser.
         if (req.body.parent) {
           const parentExistant = await trx('utilisateurs')
+            .where({ etablissement_id: req.etablissement_id })
             .whereIn('telephone', variantesTelephone(req.body.parent.telephone, pays))
-            .first('id', 'etablissement_id');
+            .first('id');
 
           let parentId;
 
           if (parentExistant) {
-            if (parentExistant.etablissement_id !== req.etablissement_id) {
-              throw ApiError.validationEchouee(
-                'Ce numéro de téléphone est déjà utilisé par un compte dans un autre établissement'
-              );
-            }
             parentId = parentExistant.id;
+
+            // Un compte réutilisé (ex. un enseignant qui est aussi parent)
+            // peut ne pas avoir de préférences de notification
+            await trx('notifications_preferences')
+              .insert({ id: uuid(), utilisateur_id: parentId, canal_prefere: 'sms' })
+              .onConflict('utilisateur_id').ignore();
 
             const aDejaRoleParent = await trx('utilisateur_roles as ur')
               .join('roles as r', 'r.id', 'ur.role_id')
@@ -236,9 +238,9 @@ router.post('/eleves', auth, isoler, perm('eleves.creer'),
               etablissement_id: req.etablissement_id,
             });
 
-            // Initialiser les préférences de notification (une seule fois
-            // par utilisateur — notifications_preferences.utilisateur_id
-            // est UNIQUE, donc jamais réinsérée pour un parent existant)
+            // Initialiser les préférences de notification d'un NOUVEAU parent
+            // (notifications_preferences.utilisateur_id est UNIQUE ; pour un
+            // compte réutilisé, voir l'insertion « onConflict ignore » ci-dessus)
             await trx('notifications_preferences').insert({
               id:             uuid(),
               utilisateur_id: parentId,

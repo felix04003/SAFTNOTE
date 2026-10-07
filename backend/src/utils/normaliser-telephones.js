@@ -30,14 +30,17 @@ const { normaliserTelephone } = require('./telephone');
  */
 async function normaliserTelephones(pool, { appliquer = false, log = console.log } = {}) {
   const { rows } = await pool.query(
-    `SELECT u.id, u.telephone, u.telephone_2, e.pays
+    `SELECT u.id, u.etablissement_id, u.telephone, u.telephone_2, e.pays
        FROM utilisateurs u
        JOIN etablissements e ON e.id = u.etablissement_id
       WHERE u.telephone IS NOT NULL OR u.telephone_2 IS NOT NULL
       ORDER BY u.created_at`
   );
 
-  const pris = new Set(rows.map(r => r.telephone).filter(Boolean));
+  // Unicité par établissement (migration 024) : le même numéro dans deux écoles
+  // n'est pas un conflit
+  const cle = (r, tel) => `${r.etablissement_id}|${tel}`;
+  const pris = new Set(rows.filter(r => r.telephone).map(r => cle(r, r.telephone)));
   const resultat = { modifies: 0, inchanges: 0, invalides: [], conflits: [] };
 
   for (const r of rows) {
@@ -48,8 +51,8 @@ async function normaliserTelephones(pool, { appliquer = false, log = console.log
       const norme = normaliserTelephone(brut, r.pays);
       if (!norme) { resultat.invalides.push({ id: r.id, colonne: col, valeur: brut }); continue; }
       if (norme === brut) continue;
-      // telephone est UNIQUE en base : ne pas écraser un autre compte
-      if (col === 'telephone' && pris.has(norme)) {
+      // (etablissement_id, telephone) est UNIQUE : ne pas écraser un autre compte de l'école
+      if (col === 'telephone' && pris.has(cle(r, norme))) {
         resultat.conflits.push({ id: r.id, valeur: brut, normalise: norme });
         continue;
       }
@@ -58,7 +61,7 @@ async function normaliserTelephones(pool, { appliquer = false, log = console.log
 
     if (!Object.keys(maj).length) { resultat.inchanges++; continue; }
 
-    if (maj.telephone) { pris.delete(r.telephone); pris.add(maj.telephone); }
+    if (maj.telephone) { pris.delete(cle(r, r.telephone)); pris.add(cle(r, maj.telephone)); }
     resultat.modifies++;
     log(`${appliquer ? 'MAJ ' : 'SIM '} ${r.id}  ${JSON.stringify(maj)}`);
     if (appliquer) {

@@ -21,7 +21,7 @@ d'Afrique de l'Ouest francophone (Sénégal, Côte d'Ivoire, Mali, Burkina Faso�
 - Mobile : React Native 0.76 + Expo SDK 52 + SQLite (offline-first)
 - Dashboard : Vite + TypeScript + Vitest (compilé en `dashboard/dist/`, plus « zéro dépendance NPM » depuis la migration vers l'outillage Vite)
 - Infra : Docker Compose (dev) ; déploiement cible **Render** (API + Postgres + Redis managés via `render.yaml`) ; Nginx/Docker Compose prod (`docker-compose.prod.yml`) documenté comme alternative auto-hébergée (VPS), voir `docs/DEPLOY_VPS.md`
-- Migrations : dossier unique `migrations/` à la racine (000→023), appliqué par `backend/src/utils/migrate.js` (table de suivi `_migrations`) ; seeds de test séparés dans `backend/tests/seeds/`, jamais appliqués en production (`TRUST_PROXY_HOPS` documenté dans `.env.example` pour le comptage IP réel derrière Nginx/Render)
+- Migrations : dossier unique `migrations/` à la racine (000→024), appliqué par `backend/src/utils/migrate.js` (table de suivi `_migrations`) ; seeds de test séparés dans `backend/tests/seeds/`, jamais appliqués en production (`TRUST_PROXY_HOPS` documenté dans `.env.example` pour le comptage IP réel derrière Nginx/Render)
 
 ---
 
@@ -71,7 +71,7 @@ ecolemanager/
 │   │   ├── middleware/             ✅ auth JWT, erreurs, rate-limit, validation
 │   │   ├── workers/                ✅ notification.worker.js (câblage BullMQ) + notification.processor.js (traitement, testé sur base réelle)
 │   │   └── utils/                  ✅ helpers divers
-│   ├── tests/                     ✅ 370 tests unitaires (39 suites Jest) + tests d'intégration
+│   ├── tests/                     ✅ 378 tests unitaires (40 suites Jest) + tests d'intégration
 │   │   ├── helpers/               ✅ mockKnex, testApp, fixtures
 │   │   ├── seeds/                 ✅ seeds de test SQL (jamais appliqués en prod)
 │   │   └── domains/               ✅ fichiers de test par domaine
@@ -130,6 +130,7 @@ ecolemanager/
 │   ├── 021_politique_securite_defaut.sql           ✅ trigger : chaque établissement reçoit sa politique_securite + rattrapage
 │   ├── 022_est_compte_bloque_par_etablissement.sql ✅ blocage force brute selon la politique de l'établissement (défauts stricts 5/15 sinon)
 │   ├── 023_plafond_sms.sql                         ✅ plafond mensuel de SMS par établissement + segments dans journal_notifications
+│   ├── 024_telephone_unique_par_etablissement.sql  ✅ UNIQUE (etablissement_id, telephone) au lieu de UNIQUE (telephone) : parent multi-écoles
 │   └── run_all_migrations.sql      ⚠️  Legacy psql (\i + schema_migrations) —
 │                                       préférer `cd backend && npm run migrate`
 │
@@ -170,7 +171,7 @@ Tous les 9 domaines sont **implémentés et testés** (60/60 tests passent).
 
 > Note : ce tableau reflète l'implémentation initiale des 9 domaines. Depuis, la campagne de
 > correction de l'audit 2026-09 (lots A→J) a ajouté des domaines, migrations et tests
-> supplémentaires. **Total actuel backend : 370 tests (39 suites Jest)**, voir `npm test` dans
+> supplémentaires. **Total actuel backend : 378 tests (40 suites Jest)**, voir `npm test` dans
 > `backend/`.
 
 ### 📖 Documentation API
@@ -184,7 +185,7 @@ Tous les 9 domaines sont **implémentés et testés** (60/60 tests passent).
 - **Workflow** : `.github/workflows/ci.yml`
 - **Déclenché sur** : push `main`/`develop` + pull requests vers `main`
 - **Jobs** :
-  1. `backend-lint-test` — ESLint + Jest (370 tests, couverture, services Postgres/Redis réels)
+  1. `backend-lint-test` — ESLint + Jest (378 tests, couverture, services Postgres/Redis réels)
   2. `backend-docker` — Build image Docker (après tests)
   3. `mobile-typecheck` — TypeScript `tsc --noEmit`
 - **ESLint** : `backend/.eslintrc.js` — 0 erreurs, <60 warnings
@@ -421,7 +422,9 @@ META_WA_TOKEN         → WhatsApp Business API
 6. **Téléphones** : toujours stockés en E.164 (`+221771234567`) via `utils/telephone.js` (`telephoneOuErreur`, pays par défaut = celui de l'établissement). Les recherches (connexion, OTP, doublons) passent par `variantesTelephone` pour retrouver aussi les comptes antérieurs ; reprise des données existantes : `cd backend && npm run normaliser:telephones` (simulation) puis `-- --appliquer`
 7. **Mots de passe** : une seule politique pour tous les profils qui en ont un (directeur, enseignant, réinitialisation), définie dans `utils/mot-de-passe.js` : 8 caractères min., minuscule + majuscule + chiffre, 72 octets max, ne reprend pas téléphone/email/nom. `politique_securite` de l'établissement (créée automatiquement par le trigger de la migration 021 à chaque nouvel établissement) ne peut que durcir la longueur. Enseignant créé sans mot de passe → mot de passe provisoire aléatoire généré (jamais le téléphone), **envoyé par SMS** à l'enseignant (`envoyerMotDePasseProvisoire`) : la réponse de l'API ne le contient que si le SMS n'a pas pu partir (`sms_envoye: false`). Renvoi : `POST /enseignants/:id/mot-de-passe-provisoire`. Audit des comptes à mot de passe prévisible : `cd backend && npm run auditer:mots-de-passe` (simulation) puis `-- --appliquer` Parents/élèves : pas de mot de passe (OTP SMS). Ne jamais redéfinir une règle ailleurs : importer `schemaMotDePasse` / `exigerMotDePasseConforme`
 8. **Mot de passe provisoire** : un enseignant créé par le directeur a `utilisateurs.mdp_a_changer = TRUE`. Tant que le drapeau est levé, `middleware/auth.middleware.js` refuse toute route protégée en `403 MDP_CHANGEMENT_REQUIS` sauf `POST /auth/changer-mot-de-passe`, `GET /auth/profil` et `POST /auth/deconnexion` (liste `ROUTES_AUTORISEES_MDP_A_CHANGER`). Les réponses de connexion et `/auth/profil` exposent `doit_changer_mdp` ; le dashboard (`changer-mot-de-passe.html`) et le mobile (`app/auth/changer-mot-de-passe.tsx`) ouvrent l'écran de changement. Tout nouveau client doit gérer ce code
-9. **Doublons** : `utilisateurs.telephone` est UNIQUE pour toute la base (pas par établissement). Les routes de création vérifient d'abord et disent précisément où est le conflit ; `error.middleware.js` traduit les violations `utilisateurs_telephone_key` / `utilisateurs_etablissement_id_email_key` (409 `DOUBLON` + `champ`)
+9. **Doublons** : le téléphone est unique **par établissement** (`UNIQUE (etablissement_id, telephone)`, migration 024) : le même numéro peut avoir un compte dans chaque école (parent d'enfants dans plusieurs écoles, enseignant vacataire), jamais deux dans la même. Toute recherche d'un compte par téléphone se limite à l'établissement courant (`where({ etablissement_id })` + `variantesTelephone`). Les routes de création vérifient d'abord et disent précisément où est le conflit ; `error.middleware.js` traduit les violations `utilisateurs_etab_telephone_key` / `utilisateurs_etablissement_id_email_key` (409 `DOUBLON` + `champ`)
+9bis. **Email du personnel** : un parent peut partager son email entre écoles ; un directeur, un enseignant (tout membre du personnel : `super_admin`, `directeur`, `censeur`, `admin`, `enseignant`) **jamais**. La base ne sait imposer que `UNIQUE (etablissement_id, email)` : la règle « selon le rôle » est contrôlée par `utils/email-personnel.js` (`emailPrisParPersonnel`) avant toute création ou changement d'email de personnel (`POST` et `PUT /enseignants`) ; `POST /inscription` garde sa vérification globale, plus stricte. Un nouveau parcours qui crée ou modifie l'email d'un membre du personnel DOIT appeler ce helper
+9ter. **Codes SMS** : un code de connexion ou de réinitialisation appartient à un COMPTE (`otp_verifications.utilisateur_id`), pas à un numéro : émission, invalidation, compteur d'essais et validation filtrent sur `(telephone, utilisateur_id)`. Ne jamais interroger `otp_verifications` par téléphone seul
 10. **Blocage de connexion** : `est_compte_bloque(identifiant, ip, etablissement_id)` lit la politique de CET établissement (défauts 5 tentatives / 15 min). `/auth/connexion` résout l'établissement avant le contrôle. Ne jamais reprendre `MAX()` sur toutes les écoles
 11. **SMS** : tout texte doit tenir dans l'alphabet SMS de base (pas de tiret long « — », pas de « ê », pas d'emoji : l'UCS-2 coûte 2 à 3 segments au lieu d'1). `envoyerSMS` convertit et borne à 3 segments via `utils/sms-texte.js`, mais écrire les gabarits directement conformes ; `tests/workers/sms-gabarits.test.js` garantit 1 segment pour chaque gabarit de `notification.worker.js`. Ne jamais journaliser le contenu d'un SMS ni un mot de passe
 12. **Sessions OTP** : `POST /auth/otp/valider` n'ouvre une session que dans l'établissement auquel le compte appartient (`utilisateur.etablissement_id`). Ne jamais créer de session (`creerSession`) pour un couple utilisateur/établissement sans avoir vérifié cette appartenance
@@ -465,7 +468,7 @@ META_WA_TOKEN         → WhatsApp Business API
 | 27 | Notifications SMS réparées sur base réelle (le worker ne trouvait jamais le parent : aucun SMS n'avait pu partir), publication des notes → un SMS par parent, contrôle d'établissement sur la publication, report horaire BullMQ 5, plafond mensuel de SMS par établissement avec alertes (migration 023) | ✅ |
 
 > Les compteurs de tests ci-dessus sont historiques (au moment de chaque étape). Compteurs
-> actuels (vérifiés le 2026-10-07) : backend 370 tests (39 suites Jest) + 143 tests d'intégration sur base réelle (17 suites, `npm run test:integration`), dashboard 84 tests (Vitest).
+> actuels (vérifiés le 2026-10-07) : backend 378 tests (40 suites Jest) + 156 tests d'intégration sur base réelle (19 suites, `npm run test:integration`), dashboard 84 tests (Vitest).
 
 ---
 

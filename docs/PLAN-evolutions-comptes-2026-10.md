@@ -39,7 +39,7 @@ Règles d'exécution (valables pour toutes les phases) :
 | 2.4 Réglage de la politique par le directeur | ⏳ optionnelle, non faite |
 | 2.5 Gabarits SMS en un segment | ✅ fait (voir ci-dessous) |
 | 2.6 Fiabiliser et plafonner les notifications | ✅ fait (voir ci-dessous) |
-| Phase 3 | ⏳ 3.1 → 3.3 puis 3.6 à lancer ; 3.4 différée |
+| Phase 3 | ✅ 3.1, 3.2, 3.3, 3.6 faites (migration 024) ; 3.5 couverte par 2 suites d'intégration ; 3.4 (sélecteur) différée |
 
 ---
 
@@ -57,8 +57,8 @@ Règles d'exécution (valables pour toutes les phases) :
 
 | # | Constat | Gravité | Phase |
 |---|---------|---------|-------|
-| C1 | `utilisateurs.telephone` est `UNIQUE` pour toute la base : un parent (ou un enseignant vacataire) ne peut avoir de compte que dans **un** établissement | Fonctionnelle (bloquante pour le cas multi-écoles) | 3 |
-| C2 | `otp_verifications` est indexé par téléphone seul ; `otp/demander` invalide **tous** les codes du numéro | À corriger avant C1 (sinon un code demandé pour l'école B annule celui de l'école A) | 3 |
+| C1 | `utilisateurs.telephone` est `UNIQUE` pour toute la base : un parent (ou un enseignant vacataire) ne peut avoir de compte que dans **un** établissement | Fonctionnelle (bloquante pour le cas multi-écoles) — **Corrigé** (3.2, migration 024) | 3 ✅ |
+| C2 | `otp_verifications` est indexé par téléphone seul ; `otp/demander` invalide **tous** les codes du numéro | À corriger avant C1 (sinon un code demandé pour l'école B annule celui de l'école A) — **Corrigé** (3.1) | 3 ✅ |
 | C3 | ~~`est_compte_bloque()` (SQL) lit `MAX(...)` sur toutes les écoles~~ **Corrigé** (2.3, migration 022) | — | 2 ✅ |
 | C4 | ~~Le mot de passe provisoire est renvoyé en clair au directeur~~ **Corrigé** (2.2) : envoyé par SMS, renvoyé au directeur seulement si le SMS échoue | — | 2 ✅ |
 | C5 | ~~Mots de passe faibles antérieurs~~ **Outil livré** (2.1) : à exécuter sur la base de production (simulation d'abord) | — | 2 ✅ / 5 |
@@ -240,7 +240,7 @@ maintenant** ; elle peut s'ajouter plus tard sans défaire l'option A.
 Cas de l'enseignant vacataire (plusieurs écoles) : même mécanisme, mais **sans** bascule automatique de session —
 un compte à mot de passe se reconnecte avec son mot de passe dans chaque école.
 
-### 3.1 — Corriger les OTP avant d'ouvrir le multi-comptes (C2)
+### 3.1 — Corriger les OTP avant d'ouvrir le multi-comptes (C2) — ✅ FAIT
 
 - `auth.routes.js`, `POST /auth/otp/demander` : n'invalider que les codes du même couple
   `(telephone, utilisateur_id)` ; `POST /auth/otp/valider` : incrémenter `nb_tentatives` et chercher le code sur ce
@@ -248,7 +248,7 @@ un compte à mot de passe se reconnecte avec son mot de passe dans chaque école
 - Test d'intégration : le même numéro a un compte dans A et dans B ; un code demandé pour A reste valable après une
   demande pour B ; chaque code n'ouvre que sa propre école (le contrôle de la phase 1 reste vert).
 
-### 3.2 — Migration : unicité du téléphone par établissement (C1)
+### 3.2 — Migration : unicité du téléphone par établissement (C1) — ✅ FAIT
 
 - `migrations/023_telephone_unique_par_etablissement.sql` : supprimer `utilisateurs_telephone_key`, créer
   `UNIQUE (etablissement_id, telephone)` ; conserver l'index de recherche par téléphone seul.
@@ -258,7 +258,7 @@ un compte à mot de passe se reconnecte avec son mot de passe dans chaque école
 - Critère d'acceptation : deux comptes de même numéro dans deux écoles s'insèrent ; deux comptes de même numéro dans
   la même école sont refusés.
 
-### 3.3 — Revoir toutes les recherches par téléphone
+### 3.3 — Revoir toutes les recherches par téléphone — ✅ FAIT
 
 À modifier (déjà repérées, vérifier par `grep -rn "telephone" backend/src`) :
 - `eleves/eleves.routes.js` : `parentExistant` cherche aujourd'hui dans **toute** la base puis refuse si l'école
@@ -294,7 +294,7 @@ Pour les **parents** (comptes sans mot de passe) uniquement :
   synchronisation, **pas** de fusion de bases (isolation conservée).
 - Pas de vue agrégée inter-écoles dans cette phase (voir Questions ouvertes).
 
-### 3.6 — Règle d'unicité de l'email selon le rôle (décision 5)
+### 3.6 — Règle d'unicité de l'email selon le rôle (décision 5) — ✅ FAIT
 
 Un même email peut servir dans plusieurs écoles **pour un parent** ; **jamais pour un directeur ni un enseignant**.
 Aujourd'hui la base n'impose que `UNIQUE(etablissement_id, email)` (un même email dans deux écoles est donc possible), et seul

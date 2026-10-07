@@ -276,9 +276,11 @@ router.post('/auth/otp/demander', limiterAuth, valider(schemaOtpDemander), async
     const code = String(crypto.randomInt(100000, 1000000));
     const codeHash = crypto.createHash('sha256').update(code).digest('hex');
 
-    // Invalider les anciens OTP du même numéro
+    // Invalider les anciens OTP de CE COMPTE (et non de tout le numéro : le même
+    // numéro peut avoir un compte dans plusieurs établissements, et demander un
+    // code pour l'école B ne doit pas annuler celui de l'école A)
     await db('otp_verifications')
-      .where({ telephone, utilise: false })
+      .where({ telephone, utilisateur_id: utilisateur.id, utilise: false })
       .update({ utilise: true });
 
     // Insérer le nouveau OTP
@@ -332,9 +334,19 @@ router.post('/auth/otp/valider', limiterAuth, valider(schemaOtpValider), async (
     const telephone = normaliserTelephone(req.body.telephone, etablissement.pays);
     if (!telephone) throw ApiError.otpInvalide('Code invalide, expiré ou trop de tentatives');
 
+    // Le compte de CET établissement porteur de ce numéro : les codes, leurs
+    // tentatives et leur validation sont propres à ce compte (le même numéro
+    // peut exister dans plusieurs établissements). Même réponse que pour un
+    // code faux : ne pas révéler si le numéro existe ici.
+    const compte = await db('utilisateurs')
+      .whereIn('telephone', variantesTelephone(req.body.telephone, etablissement.pays))
+      .where({ etablissement_id: etablissement.id, actif: true })
+      .first('id');
+    if (!compte) throw ApiError.otpInvalide('Code invalide, expiré ou trop de tentatives');
+
     // Incrémenter les tentatives d'abord
     await db('otp_verifications')
-      .where({ telephone, utilise: false })
+      .where({ telephone, utilisateur_id: compte.id, utilise: false })
       .where('expire_at', '>', db.raw('NOW()'))
       .increment('nb_tentatives', 1);
 
@@ -342,6 +354,7 @@ router.post('/auth/otp/valider', limiterAuth, valider(schemaOtpValider), async (
     const otp = await db('otp_verifications')
       .where({
         telephone,
+        utilisateur_id: compte.id,
         code_hash: codeHash,
         utilise:   false,
       })
@@ -613,7 +626,7 @@ router.post('/auth/mot-de-passe-oublie', limiterAuth, valider(schemaMotDePasseOu
     const telephone = normaliserTelephone(utilisateur.telephone, etablissement.pays) || utilisateur.telephone;
 
     await db('otp_verifications')
-      .where({ telephone, objectif: 'reset_mdp', utilise: false })
+      .where({ telephone, utilisateur_id: utilisateur.id, objectif: 'reset_mdp', utilise: false })
       .update({ utilise: true });
 
     await db('otp_verifications').insert({
@@ -677,13 +690,14 @@ router.post('/auth/reinitialiser-mot-de-passe', limiterAuth, valider(schemaReini
     const codeHash = crypto.createHash('sha256').update(code).digest('hex');
 
     await db('otp_verifications')
-      .where({ telephone: utilisateur.telephone, objectif: 'reset_mdp', utilise: false })
+      .where({ telephone: utilisateur.telephone, utilisateur_id: utilisateur.id, objectif: 'reset_mdp', utilise: false })
       .where('expire_at', '>', db.raw('NOW()'))
       .increment('nb_tentatives', 1);
 
     const otp = await db('otp_verifications')
       .where({
         telephone:       utilisateur.telephone,
+        utilisateur_id:  utilisateur.id,
         code_hash:       codeHash,
         objectif:        'reset_mdp',
         utilise:         false,

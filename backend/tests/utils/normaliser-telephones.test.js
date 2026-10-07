@@ -45,4 +45,26 @@ describe('normaliserTelephones', () => {
     expect(res.conflits).toEqual([{ id: 'u2', valeur: '772220003', normalise: '+221772220003' }]);
     expect(pool.query).toHaveBeenCalledTimes(1);
   });
+
+  test('le même numéro dans DEUX établissements n\'est pas un conflit (unicité par école, migration 024)', async () => {
+    const pool = fakePool([
+      { id: 'u1', etablissement_id: 'ecole-A', telephone: '+221772220003', telephone_2: null, pays: 'SN' },
+      { id: 'u2', etablissement_id: 'ecole-B', telephone: '772220003', telephone_2: null, pays: 'SN' },
+    ]);
+    const res = await normaliserTelephones(pool, { appliquer: true, log });
+    expect(res.conflits).toEqual([]);
+    expect(res.modifies).toBe(1);
+    const [sql, params] = pool.query.mock.calls[1];
+    expect(sql).toMatch(/UPDATE utilisateurs SET telephone = \$2 WHERE id = \$1/);
+    expect(params).toEqual(['u2', '+221772220003']);
+  });
+
+  test('dans le MÊME établissement, le conflit est toujours détecté', async () => {
+    const pool = fakePool([
+      { id: 'u1', etablissement_id: 'ecole-A', telephone: '+221772220003', telephone_2: null, pays: 'SN' },
+      { id: 'u2', etablissement_id: 'ecole-A', telephone: '772220003', telephone_2: null, pays: 'SN' },
+    ]);
+    const res = await normaliserTelephones(pool, { appliquer: false, log });
+    expect(res.conflits).toHaveLength(1);
+  });
 });

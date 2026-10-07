@@ -50,11 +50,15 @@ describe('POST /enseignants', () => {
   let db;
   beforeEach(() => { db = createMockDB(); getDB.mockReturnValue(db); });
 
-  // Ordre des accès base : pays, doublon téléphone, [doublon email], politique, puis la transaction
-  function prepare({ doublonTel = null, doublonEmail = null, avecEmail = false } = {}) {
+  // Ordre des accès base : pays, doublon téléphone (de l'établissement), [email déjà pris
+  // dans l'établissement, email d'un autre membre du personnel], politique, puis la transaction
+  function prepare({ doublonTel = null, doublonEmail = null, emailPersonnel = null, avecEmail = false } = {}) {
     db.mockReturnValueOnce(mockQuery({ pays: 'SN' }));
     db.mockReturnValueOnce(mockQuery(doublonTel));
-    if (avecEmail) db.mockReturnValueOnce(mockQuery(doublonEmail));
+    if (avecEmail) {
+      db.mockReturnValueOnce(mockQuery(doublonEmail));
+      db.mockReturnValueOnce(mockQuery(emailPersonnel));
+    }
     db.mockReturnValueOnce(mockQuery({ mdp_longueur_min: 8 }));
   }
 
@@ -115,12 +119,21 @@ describe('POST /enseignants', () => {
     expect(res.body.erreur).toMatch(/existe déjà dans votre établissement/);
   });
 
-  test('doublon dans un AUTRE établissement → message qui le dit (et non « existe déjà »)', async () => {
-    prepare({ doublonTel: { id: 'x', etablissement_id: AUTRE_ETAB } });
-    const res = await request(app).post('/enseignants')
-      .send({ nom: 'Cisse', prenom: 'Mame', telephone: '+221779990001' }).expect(422);
-    expect(res.body.erreur).toMatch(/autre établissement/);
-    expect(res.body.erreur).toMatch(/un seul établissement/);
+  test('le doublon de téléphone est cherché dans CET établissement seulement (le même numéro peut exister dans une autre école)', async () => {
+    const chaineDoublon = mockQuery(null);
+    db.mockReturnValueOnce(mockQuery({ pays: 'SN' }));
+    db.mockReturnValueOnce(chaineDoublon);
+    db.mockReturnValueOnce(mockQuery({ mdp_longueur_min: 8 }));
+    db.mockReturnValueOnce(mockQuery(1));
+    db.mockReturnValueOnce(mockQuery([{ id: IDS.enseignant }]));
+    db.mockReturnValueOnce(mockQuery({ id: 'role-ens' }));
+    db.mockReturnValueOnce(mockQuery(1));
+
+    await request(app).post('/enseignants')
+      .send({ nom: 'Cisse', prenom: 'Mame', telephone: '+221779990001' }).expect(201);
+
+    expect(chaineDoublon.where).toHaveBeenCalledWith({ etablissement_id: IDS.etablissement });
+    expect(chaineDoublon.whereIn).toHaveBeenCalledWith('telephone', expect.arrayContaining(['+221779990001']));
   });
 
   test('email déjà pris dans l\'établissement → 422 explicite', async () => {
@@ -128,6 +141,13 @@ describe('POST /enseignants', () => {
     const res = await request(app).post('/enseignants')
       .send({ nom: 'Cisse', prenom: 'Mame', telephone: '+221779990001', email: 'e@x.sn' }).expect(422);
     expect(res.body.erreur).toMatch(/cet email existe déjà/);
+  });
+
+  test('email d\'un membre du personnel d\'un AUTRE établissement → 422 (règle du 2026-10-07)', async () => {
+    prepare({ emailPersonnel: { id: 'z', etablissement_id: AUTRE_ETAB }, avecEmail: true });
+    const res = await request(app).post('/enseignants')
+      .send({ nom: 'Cisse', prenom: 'Mame', telephone: '+221779990001', email: 'dir@autre.sn' }).expect(422);
+    expect(res.body.erreur).toMatch(/membre du personnel d'un autre établissement/);
   });
 });
 
@@ -248,12 +268,17 @@ describe('error.middleware — contraintes d\'unicité (filet de sécurité)', (
     return res;
   }
 
-  test('utilisateurs_telephone_key → message téléphone + champ', () => {
-    const res = appeler('utilisateurs_telephone_key');
+  test('utilisateurs_etab_telephone_key (migration 024) → message téléphone « de cet établissement » + champ', () => {
+    const res = appeler('utilisateurs_etab_telephone_key');
     expect(res.status).toHaveBeenCalledWith(409);
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-      code: 'DOUBLON', champ: 'telephone', erreur: expect.stringMatching(/numéro de téléphone/),
+      code: 'DOUBLON', champ: 'telephone', erreur: expect.stringMatching(/numéro de téléphone.*de cet établissement/),
     }));
+  });
+
+  test('ancien nom de contrainte (avant migration 024) → message téléphone + champ', () => {
+    const res = appeler('utilisateurs_telephone_key');
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'DOUBLON', champ: 'telephone' }));
   });
 
   test('utilisateurs_etablissement_id_email_key → message email + champ', () => {

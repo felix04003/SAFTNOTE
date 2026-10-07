@@ -16,6 +16,7 @@ const ApiError       = require('../../../utils/ApiError');
 const logger         = require('../../../utils/logger');
 const { envoyerMotDePasseProvisoire } = require('../../../infrastructure/notifications/sms.service');
 const { paysEtablissement, paysIso, telephoneOuErreur, variantesTelephone } = require('../../../utils/telephone');
+const { emailPrisParPersonnel } = require('../../../utils/email-personnel');
 const {
   schemaMotDePasse, exigerMotDePasseConforme, genererMotDePasseTemporaire,
 } = require('../../../utils/mot-de-passe');
@@ -94,27 +95,32 @@ router.post('/enseignants', auth, isoler, perm('config.modifier'),
       const pays      = paysIso(etab && etab.pays);
       const telephone = telephoneOuErreur(req.body.telephone, pays);
 
-      // Doublon de téléphone — la contrainte est UNIQUE pour TOUTE la base
-      // (utilisateurs_telephone_key) : on cherche donc dans tous les
-      // établissements (formes historiques incluses) pour dire précisément
-      // où est le conflit, au lieu d'un 409 « existe déjà » générique.
+      // Doublon de téléphone — unique PAR ÉTABLISSEMENT (migration 024) : le même
+      // numéro peut avoir un compte dans une autre école (enseignant vacataire,
+      // parent) sans conflit. On cherche donc seulement dans celle-ci, formes
+      // historiques incluses.
       const doublon = await db('utilisateurs')
+        .where({ etablissement_id: req.etablissement_id })
         .whereIn('telephone', variantesTelephone(req.body.telephone, pays))
-        .first('id', 'etablissement_id');
+        .first('id');
       if (doublon) {
-        throw ApiError.validationEchouee(
-          doublon.etablissement_id === req.etablissement_id
-            ? 'Un utilisateur avec ce numéro existe déjà dans votre établissement'
-            : 'Ce numéro de téléphone est déjà utilisé par un compte dans un autre établissement — un numéro ne peut être rattaché qu\'à un seul établissement'
-        );
+        throw ApiError.validationEchouee('Un utilisateur avec ce numéro existe déjà dans votre établissement');
       }
 
-      // Doublon d'email (unique par établissement)
+      // Email : unique dans l'établissement (tous rôles) ET jamais partagé avec un
+      // autre membre du personnel d'un autre établissement (règle du 2026-10-07)
       if (req.body.email) {
         const emailPris = await db('utilisateurs')
           .where({ etablissement_id: req.etablissement_id, email: req.body.email })
           .first('id');
         if (emailPris) throw ApiError.validationEchouee('Un utilisateur avec cet email existe déjà dans votre établissement');
+
+        const emailPersonnel = await emailPrisParPersonnel(db, req.body.email);
+        if (emailPersonnel) {
+          throw ApiError.validationEchouee(
+            'Cet email est déjà utilisé par un membre du personnel d\'un autre établissement — l\'email d\'un directeur ou d\'un enseignant ne peut pas être partagé'
+          );
+        }
       }
 
       // Même politique que tous les profils. Sans mot de passe fourni, un mot
@@ -623,6 +629,18 @@ router.put('/enseignants/:id', auth, isoler,
         }
         if (champsUtilisateur.telephone_2 !== undefined) {
           champsUtilisateur.telephone_2 = telephoneOuErreur(champsUtilisateur.telephone_2, pays, 'Second numéro');
+        }
+      }
+
+      // Email du personnel : jamais partagé avec un autre membre du personnel
+      // (règle du 2026-10-07) ; l'unicité dans l'établissement reste garantie
+      // par la base (409 DOUBLON avec le champ « email »).
+      if (champsUtilisateur.email) {
+        const emailPersonnel = await emailPrisParPersonnel(db, champsUtilisateur.email, { sauf: enseignant.utilisateur_id });
+        if (emailPersonnel) {
+          throw ApiError.validationEchouee(
+            'Cet email est déjà utilisé par un autre membre du personnel — l\'email d\'un directeur ou d\'un enseignant ne peut pas être partagé'
+          );
         }
       }
 

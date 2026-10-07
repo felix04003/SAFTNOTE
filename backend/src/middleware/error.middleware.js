@@ -3,15 +3,19 @@
 const logger = require('../utils/logger');
 
 // Contraintes d'unicité connues → message lisible + champ en cause.
-// utilisateurs.telephone est UNIQUE pour toute la base (pas par établissement) :
-// un numéro déjà pris peut donc l'être dans un AUTRE établissement.
+// Depuis la migration 024, le téléphone est unique PAR ÉTABLISSEMENT (le même
+// numéro peut avoir un compte dans plusieurs écoles). L'ancien nom de
+// contrainte est gardé pour un déploiement où la migration n'est pas encore passée.
 const MESSAGES_DOUBLON = {
+  utilisateurs_etab_telephone_key:
+    'Ce numéro de téléphone est déjà utilisé par un autre compte de cet établissement.',
   utilisateurs_telephone_key:
-    'Ce numéro de téléphone est déjà utilisé par un autre compte (dans cet établissement ou dans un autre).',
+    'Ce numéro de téléphone est déjà utilisé par un autre compte.',
   utilisateurs_etablissement_id_email_key:
     'Cette adresse email est déjà utilisée par un autre compte de cet établissement.',
 };
 const CHAMPS_DOUBLON = {
+  utilisateurs_etab_telephone_key: 'telephone',
   utilisateurs_telephone_key: 'telephone',
   utilisateurs_etablissement_id_email_key: 'email',
 };
