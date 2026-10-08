@@ -13,13 +13,12 @@ async function demanderOTP() {
   if (errEl) errEl.style.display = 'none';
 
   if (!tel)  { afficherErreur('err1', 'Numéro de téléphone requis'); return; }
-  if (!etab) { afficherErreur('err1', 'Code établissement requis'); return; }
 
   const btn = document.getElementById('btn-demander') as HTMLButtonElement | null;
   if (btn) { btn.disabled = true; btn.textContent = 'Envoi en cours\u2026'; }
 
   try {
-    await Api.post('/auth/otp/demander', { telephone: tel, etablissement_code: etab });
+    await Api.post('/auth/otp/demander', corpsAvecEcole({ telephone: tel }, etab));
     _telephone = tel;
     _etabCode  = etab;
 
@@ -44,15 +43,9 @@ async function validerOTP() {
   if (btn) { btn.disabled = true; btn.textContent = 'Connexion\u2026'; }
 
   try {
-    const res = await Api.post('/auth/otp/valider', {
-      telephone: _telephone, code, etablissement_code: _etabCode,
-    });
-    sessionStorage.setItem(CONFIG.TOKEN_KEY, res.data.token);
-    // Sans refresh_token, la session du parent s'arrêtait au bout de 30 min
-    // (un nouveau SMS à chaque fois) au lieu d'être prolongée silencieusement.
-    if (res.data.refresh_token) sessionStorage.setItem(CONFIG.REFRESH_TOKEN_KEY, res.data.refresh_token);
-    localStorage.setItem(CONFIG.USER_KEY, JSON.stringify(res.data.utilisateur));
-    window.location.href = 'parent.html';
+    const res = await Api.post('/auth/otp/valider', corpsAvecEcole({ telephone: _telephone, code }, _etabCode));
+    if (res.data.choix_requis) { afficherChoixEcole(res.data.ticket, res.data.etablissements); return; }
+    ouvrirSession(res.data);
   } catch (e: any) {
     afficherErreur('err2', e.message || 'Code incorrect ou expiré');
     Array.from(inputs).forEach(function(i: any) { i.value = ''; });
@@ -60,6 +53,43 @@ async function validerOTP() {
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Connexion \u2192'; }
   }
+}
+
+// Le code établissement est facultatif : absent, le serveur retrouve les écoles du numéro
+function corpsAvecEcole<T extends object>(corps: T, etab: string) {
+  return etab ? { ...corps, etablissement_code: etab } : corps;
+}
+
+function ouvrirSession(data: any) {
+  sessionStorage.setItem(CONFIG.TOKEN_KEY, data.token);
+  // Sans refresh_token, la session du parent s'arrêtait au bout de 30 min
+  // (un nouveau SMS à chaque fois) au lieu d'être prolongée silencieusement.
+  if (data.refresh_token) sessionStorage.setItem(CONFIG.REFRESH_TOKEN_KEY, data.refresh_token);
+  localStorage.setItem(CONFIG.USER_KEY, JSON.stringify(data.utilisateur));
+  window.location.href = 'parent.html';
+}
+
+// Étape 3 : le numéro est vérifié mais présent dans plusieurs écoles
+function afficherChoixEcole(ticket: string, etablissements: Array<{ code: string; nom: string }>) {
+  (document.getElementById('etape2') as HTMLElement).style.display = 'none';
+  (document.getElementById('etape3') as HTMLElement).style.display = '';
+  const liste = document.getElementById('liste-etablissements') as HTMLElement;
+  liste.textContent = '';
+  etablissements.forEach((e) => {
+    const bouton = document.createElement('button');
+    bouton.className = 'btn-otp';
+    bouton.style.marginBottom = '8px';
+    bouton.textContent = e.nom;          // textContent : le nom vient du serveur
+    bouton.addEventListener('click', async () => {
+      try {
+        const res = await Api.post('/auth/otp/choisir', { ticket, etablissement_code: e.code });
+        ouvrirSession(res.data);
+      } catch (err: any) {
+        afficherErreur('err3', err.message || 'Choix impossible, recommencez la connexion');
+      }
+    });
+    liste.appendChild(bouton);
+  });
 }
 
 function avancerOTP(input: HTMLInputElement, idx: number) {
@@ -80,7 +110,7 @@ async function renvoyerOTP() {
   const err2 = document.getElementById('err2') as HTMLElement | null;
   if (err2) err2.style.display = 'none';
   try {
-    await Api.post('/auth/otp/demander', { telephone: _telephone, etablissement_code: _etabCode });
+    await Api.post('/auth/otp/demander', corpsAvecEcole({ telephone: _telephone }, _etabCode));
     demarrerCooldown();
     document.getElementById('otp-inputs')?.querySelectorAll('input').forEach(function(i: any) { i.value = ''; });
     (document.getElementById('otp-inputs')?.querySelectorAll('input')[0] as HTMLElement | null)?.focus();

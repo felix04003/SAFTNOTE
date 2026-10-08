@@ -177,4 +177,57 @@ router.post('/securite/blocage/:userId', auth, isoler, perm('admin.utilisateurs'
   }
 );
 
+// ═════════════════════════════════════════════════════════════════
+// GET/PUT /securite/politique — Politique de sécurité de l'établissement
+// Bornes volontairement serrées : un directeur ne peut pas désarmer le
+// blocage de connexion ni imposer des mots de passe triviaux.
+// ═════════════════════════════════════════════════════════════════
+const CHAMPS_POLITIQUE = ['mdp_longueur_min', 'blocage_nb_tentatives', 'blocage_duree_minutes', 'session_max_simultanees'];
+
+const schemaPolitique = z.object({
+  mdp_longueur_min:       z.number().int().min(8).max(32),
+  blocage_nb_tentatives:  z.number().int().min(3).max(10),
+  blocage_duree_minutes:  z.number().int().min(5).max(120),
+  session_max_simultanees: z.number().int().min(1).max(5),
+}).partial().refine(o => Object.keys(o).length > 0, { message: 'Aucun champ à modifier' });
+
+router.get('/securite/politique', auth, isoler, perm('config.voir'), async (req, res, next) => {
+  try {
+    const politique = await getDB()('politique_securite')
+      .where({ etablissement_id: req.etablissement_id })
+      .first(...CHAMPS_POLITIQUE);
+    return ok(res, politique || {});
+  } catch (err) { next(err); }
+});
+
+router.put('/securite/politique', auth, isoler, perm('config.modifier'), valider(schemaPolitique),
+  async (req, res, next) => {
+    try {
+      const db = getDB();
+      const changements = {};
+      for (const c of CHAMPS_POLITIQUE) if (req.body[c] !== undefined) changements[c] = req.body[c];
+
+      let apres;
+      await db.transaction(async (trx) => {
+        const avant = await trx('politique_securite')
+          .where({ etablissement_id: req.etablissement_id }).first(...CHAMPS_POLITIQUE);
+        [apres] = await trx('politique_securite')
+          .insert({ etablissement_id: req.etablissement_id, ...changements })
+          .onConflict('etablissement_id').merge(changements)
+          .returning(CHAMPS_POLITIQUE);
+        await trx('journal_audit').insert({
+          etablissement_id: req.etablissement_id,
+          utilisateur_id:   req.session.utilisateur_id,
+          action:           'securite.politique_modifier',
+          resultat:         'succes',
+          table_cible:      'politique_securite',
+          details:          JSON.stringify({ avant: avant || null, apres: changements }),
+        });
+      });
+      logger.info('Politique de sécurité modifiée', { etablissement_id: req.etablissement_id, par: req.session.utilisateur_id });
+      return ok(res, apres);
+    } catch (err) { next(err); }
+  }
+);
+
 module.exports = router;

@@ -122,3 +122,40 @@ test.describe('(d) écran de téléphone 375×667', () => {
     });
   }
 });
+
+test('(e) parent présent dans deux écoles : code SMS sans code établissement, puis choix de l\'école', async ({ page }) => {
+  const corps = [];
+  await page.route('**/api/v1/**', (route) => {
+    const url = route.request().url();
+    if (url.endsWith('/auth/otp/demander')) { corps.push(route.request().postDataJSON()); return json(route, 200, { succes: true, data: {} }); }
+    if (url.endsWith('/auth/otp/valider')) {
+      corps.push(route.request().postDataJSON());
+      return json(route, 200, { succes: true, data: {
+        choix_requis: true, ticket: 'ticket-signe-0123456789',
+        etablissements: [{ code: 'A', nom: 'Lycée A' }, { code: 'B', nom: 'Collège B' }],
+      } });
+    }
+    if (url.endsWith('/auth/otp/choisir')) {
+      corps.push(route.request().postDataJSON());
+      return json(route, 200, { succes: true, data: {
+        token: 't', refresh_token: 'r',
+        utilisateur: { id: 'p2', prenom: 'Papa', nom: 'Ndiaye', role: 'parent', etablissement_nom: 'Collège B' },
+      } });
+    }
+    return json(route, 200, OK_VIDE);
+  });
+
+  await page.goto('/parent-login.html');
+  await page.fill('#inp-telephone', '77 222 05 01');            // pas de code établissement
+  await page.click('#btn-demander');
+  const cases = page.locator('#otp-inputs input');
+  for (let i = 0; i < 6; i++) await cases.nth(i).fill(String(i + 1));
+  await page.click('#btn-valider');
+
+  await expect(page.locator('#liste-etablissements button')).toHaveCount(2);
+  await page.click('text=Collège B');
+  await page.waitForURL(/parent\.html/);
+
+  expect(corps[0]).toEqual({ telephone: '77 222 05 01' });       // aucune clé etablissement_code envoyée
+  expect(corps[2]).toEqual({ ticket: 'ticket-signe-0123456789', etablissement_code: 'B' });
+});

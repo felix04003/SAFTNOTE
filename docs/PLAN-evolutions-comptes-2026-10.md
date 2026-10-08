@@ -36,10 +36,10 @@ Règles d'exécution (valables pour toutes les phases) :
 | 2.1 Audit des mots de passe faibles | ✅ fait (`npm run auditer:mots-de-passe`) |
 | 2.2 Mot de passe provisoire par SMS | ✅ fait (`POST /enseignants`, `POST /enseignants/:id/mot-de-passe-provisoire`, bouton « 🔑 MDP » du dashboard) |
 | 2.3 Blocage de connexion par établissement | ✅ fait (migration 022) |
-| 2.4 Réglage de la politique par le directeur | ⏳ optionnelle, non faite |
+| 2.4 Réglage de la politique par le directeur | ✅ API faite (`GET/PUT /securite/politique`, journal d'audit) ; écran du dashboard non fait |
 | 2.5 Gabarits SMS en un segment | ✅ fait (voir ci-dessous) |
 | 2.6 Fiabiliser et plafonner les notifications | ✅ fait (voir ci-dessous) |
-| Phase 3 | ✅ 3.1, 3.2, 3.3, 3.6 faites (migration 024) ; 3.5 couverte par 2 suites d'intégration ; 3.4 (sélecteur) différée |
+| Phase 3 | ✅ 3.1, 3.2, 3.3, 3.6 faites (migration 024) ; 3.5 couverte par 2 suites d'intégration ; 3.4 : API + `parent-login.html` faits ; sélecteur dans `parent.html` et écrans mobiles non faits |
 | Phase 4 | ✅ 4.1 à 4.5 faites (E2E `dashboard/tests/specs/comptes-web.spec.js`, API simulée) ; limite de sessions inchangée : décision produit en attente |
 
 ---
@@ -202,7 +202,7 @@ Les volumes sont des hypothèses : le vrai chiffre se lit dans `journal_notifica
 À confirmer avec Africa's Talking : facturation au segment (probable), coût d'un identifiant d'expéditeur, recharge minimale,
 couverture et prix par opérateur dans les 4 pays.
 
-### 2.4 — (Optionnel) Permettre au directeur de régler sa politique
+### 2.4 — (Optionnel) Permettre au directeur de régler sa politique — ✅ API faite (durée de blocage bornée 5-120 min en plus)
 
 Aucune route n'écrit `politique_securite`. Ajouter `GET/PUT /securite/politique` (permission `config.modifier`),
 validation Zod bornée (longueur mot de passe 8-32, tentatives 3-10, sessions 1-5), journalisée dans `journal_audit`.
@@ -274,7 +274,7 @@ un compte à mot de passe se reconnecte avec son mot de passe dans chaque école
 - `utils/normaliser-telephones.js` : le test de conflit global devient un test par établissement
   (`pris` indexé par `etablissement_id`).
 
-### 3.4 — Sélecteur d'établissement (option C)
+### 3.4 — Sélecteur d'établissement (option C) — ✅ API et connexion web faites (reste : sélecteur dans `parent.html`, mobile)
 
 Pour les **parents** (comptes sans mot de passe) uniquement :
 - `POST /auth/otp/valider` : si le numéro vérifié possède des comptes dans plusieurs écoles et qu'aucun

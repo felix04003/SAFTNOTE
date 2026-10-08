@@ -126,12 +126,21 @@ const schemaConnexion = z.object({
 
 const schemaOtpDemander = z.object({
   telephone:          z.string().min(6, 'Numéro invalide').max(25, 'Numéro invalide'),
-  etablissement_code: z.string().min(2),
+  etablissement_code: z.string().min(2).optional(),   // absent : parent multi-écoles (3.4)
 });
 
 const schemaOtpValider = z.object({
   telephone:          z.string().min(6).max(25),
   code:               z.string().length(6).regex(/^\d{6}$/),
+  etablissement_code: z.string().min(2).optional(),   // absent : parent multi-écoles (3.4)
+});
+
+const schemaOtpChoisir = z.object({
+  ticket:             z.string().min(10),
+  etablissement_code: z.string().min(2),
+});
+
+const schemaChangerEtablissement = z.object({
   etablissement_code: z.string().min(2),
 });
 
@@ -240,8 +249,173 @@ router.post('/auth/connexion', limiterAuth, valider(schemaConnexion), async (req
   }
 });
 
+// ── Parents multi-écoles (3.4) ───────────────────────────────────
+// Sans code établissement, le numéro est lu comme sénégalais s'il n'a pas
+// d'indicatif (un numéro en +XXX est interprété correctement partout).
+const PAYS_PAR_DEFAUT = 'SN';
+const MAX_CODES_PAR_HEURE = 5;            // par numéro, en plus du limiteur par IP
+const VALIDITE_TICKET = '5m';
+
+/** Comptes PARENT actifs porteurs de ce numéro, une ligne par établissement. */
+function comptesParentsParTelephone(db, brut) {
+  return db('utilisateurs as u')
+    .join('utilisateur_roles as ur', 'ur.utilisateur_id', 'u.id')
+    .join('roles as r', 'r.id', 'ur.role_id')
+    .join('etablissements as e', 'e.id', 'u.etablissement_id')
+    .whereIn('u.telephone', variantesTelephone(brut, PAYS_PAR_DEFAUT))
+    .where({ 'u.actif': true, 'ur.actif': true, 'r.code': 'parent', 'e.actif': true })
+    .whereRaw('ur.etablissement_id = u.etablissement_id')
+    .select('u.id', 'u.etablissement_id', 'e.nom as etablissement_nom', 'e.code_officiel')
+    .orderBy('e.nom');
+}
+
+/** Ouvre la session d'un compte parent dans son école (appartenance déjà vérifiée par l'appelant). */
+async function ouvrirSessionParent(db, compte, req) {
+  const utilisateur = await db('utilisateurs').where({ id: compte.id, actif: true })
+    .first('id', 'nom', 'prenom', 'telephone', 'mdp_a_changer');
+  const { token, refreshToken } = await creerSession(db, utilisateur.id, compte.etablissement_id, req);
+  return {
+    token,
+    refresh_token: refreshToken,
+    utilisateur: {
+      id: utilisateur.id, nom: utilisateur.nom, prenom: utilisateur.prenom, telephone: utilisateur.telephone,
+      role: 'parent', doit_changer_mdp: !!utilisateur.mdp_a_changer,
+      etablissement_id: compte.etablissement_id, etablissement_nom: compte.etablissement_nom,
+    },
+  };
+}
+
+async function demanderOtpSansEcole(req, res, next) {
+  const db = getDB();
+  try {
+    const telephone = normaliserTelephone(req.body.telephone, PAYS_PAR_DEFAUT);
+    if (!telephone) throw ApiError.validationEchouee('Numéro invalide — format attendu : +221 77 123 45 67');
+
+    const comptes = await comptesParentsParTelephone(db, req.body.telephone);
+    const [{ n }] = await db('otp_verifications')
+      .where({ telephone, objectif: 'connexion' })
+      .where('created_at', '>', db.raw("NOW() - INTERVAL '1 hour'"))
+      .count('id as n');
+
+    // Réponse identique que le numéro existe ou non, ou que la limite soit atteinte (anti-énumération)
+    if (comptes.length === 0 || Number(n) >= MAX_CODES_PAR_HEURE * Math.max(comptes.length, 1)) {
+      await new Promise(r => setTimeout(r, 800));
+      return ok(res, { message: 'Si ce numéro est connu, vous allez recevoir un code' });
+    }
+
+    // Un seul SMS, un code valable pour chacun des comptes du numéro
+    const code = String(crypto.randomInt(100000, 1000000));
+    const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+    await db('otp_verifications')
+      .whereIn('utilisateur_id', comptes.map(c => c.id)).where({ telephone, utilise: false })
+      .update({ utilise: true });
+    await db('otp_verifications').insert(comptes.map(c => ({
+      id: uuid(), telephone, code_hash: codeHash, objectif: 'connexion', utilisateur_id: c.id,
+      expire_at: db.raw("NOW() + INTERVAL '10 minutes'"),
+    })));
+
+    try {
+      await envoyerOuLoggerOTP(telephone, code, comptes.length === 1 ? comptes[0].etablissement_nom : 'EcoleManager');
+    } catch (smsErr) {
+      if (smsErr.isApiError) throw smsErr;
+      logger.error('Échec envoi SMS OTP', { telephone, error: smsErr.message });
+      throw ApiError.erreurServeur('Échec de l\'envoi du SMS — réessayez dans quelques instants.');
+    }
+    logger.info('OTP envoyé (sans code établissement)', { telephone, comptes: comptes.length });
+    return ok(res, { message: 'Code envoyé par SMS. Valable 10 minutes.' });
+  } catch (err) { next(err); }
+}
+
+async function validerOtpSansEcole(req, res, next) {
+  const db = getDB();
+  try {
+    const refus = () => ApiError.otpInvalide('Code invalide, expiré ou trop de tentatives');
+    const telephone = normaliserTelephone(req.body.telephone, PAYS_PAR_DEFAUT);
+    if (!telephone) throw refus();
+    const comptes = await comptesParentsParTelephone(db, req.body.telephone);
+    if (comptes.length === 0) throw refus();
+    const ids = comptes.map(c => c.id);
+
+    await db('otp_verifications')
+      .where({ telephone, utilise: false }).whereIn('utilisateur_id', ids)
+      .where('expire_at', '>', db.raw('NOW()')).where('nb_tentatives', '<', 3)
+      .increment('nb_tentatives', 1);
+
+    const codeHash = crypto.createHash('sha256').update(req.body.code).digest('hex');
+    const valides = await db('otp_verifications')
+      .where({ telephone, code_hash: codeHash, utilise: false }).whereIn('utilisateur_id', ids)
+      .where('expire_at', '>', db.raw('NOW()')).where('nb_tentatives', '<=', 3)
+      .select('id', 'utilisateur_id');
+    if (valides.length === 0) throw refus();
+
+    // Le numéro est vérifié : tous les codes de ce numéro sont consommés
+    await db('otp_verifications').whereIn('id', valides.map(v => v.id)).update({ utilise: true });
+    const comptesVerifies = comptes.filter(c => valides.some(v => v.utilisateur_id === c.id));
+
+    if (comptesVerifies.length === 1) {
+      return ok(res, await ouvrirSessionParent(db, comptesVerifies[0], req));
+    }
+
+    // Plusieurs écoles : le client choisit, avec un ticket qui atteste la vérification (5 min, un usage visé)
+    const ticket = jwt.sign(
+      { objet: 'choix_etablissement', comptes: comptesVerifies.map(c => c.id) },
+      process.env.JWT_SECRET, { expiresIn: VALIDITE_TICKET }
+    );
+    return ok(res, {
+      choix_requis: true,
+      ticket,
+      etablissements: comptesVerifies.map(c => ({ code: c.code_officiel, nom: c.etablissement_nom })),
+    });
+  } catch (err) { next(err); }
+}
+
+// ── POST /auth/otp/choisir — Choisir l'école après vérification du numéro ──
+router.post('/auth/otp/choisir', limiterAuth, valider(schemaOtpChoisir), async (req, res, next) => {
+  const db = getDB();
+  try {
+    let charge;
+    try { charge = jwt.verify(req.body.ticket, process.env.JWT_SECRET); }
+    catch { throw ApiError.nonAutorise('Ticket invalide ou expiré — redemandez un code'); }
+    if (charge.objet !== 'choix_etablissement' || !Array.isArray(charge.comptes)) {
+      throw ApiError.nonAutorise('Ticket invalide ou expiré — redemandez un code');
+    }
+
+    const choisi = await db('utilisateurs as u')
+      .join('etablissements as e', 'e.id', 'u.etablissement_id')
+      .whereIn('u.id', charge.comptes)
+      .where({ 'e.code_officiel': req.body.etablissement_code, 'u.actif': true, 'e.actif': true })
+      .first('u.id', 'u.etablissement_id', 'e.nom as etablissement_nom');
+    if (!choisi) throw ApiError.nonAutorise('Établissement non autorisé pour ce numéro');
+
+    return ok(res, await ouvrirSessionParent(db, choisi, req));
+  } catch (err) { next(err); }
+});
+
+// ── POST /auth/changer-etablissement — Parent : passer dans une autre de ses écoles ──
+router.post('/auth/changer-etablissement', authentifier, valider(schemaChangerEtablissement), async (req, res, next) => {
+  const db = getDB();
+  try {
+    const courant = await db('utilisateurs').where({ id: req.session.utilisateur_id, actif: true })
+      .first('telephone', 'mot_de_passe_hash');
+    if (!courant) throw ApiError.nonAutorise();
+
+    // Réservé aux comptes sans mot de passe (parents, OTP) : un compte à mot
+    // de passe se reconnecte avec son mot de passe, jamais par simple bascule.
+    if (courant.mot_de_passe_hash) throw ApiError.interdit('Changement d\'établissement réservé aux parents');
+
+    const comptes = await comptesParentsParTelephone(db, courant.telephone);
+    const cible = comptes.find(c => c.code_officiel === req.body.etablissement_code);
+    // Le compte courant doit lui-même être un compte parent de la liste
+    if (!cible || !comptes.some(c => c.id === req.session.utilisateur_id)) {
+      throw ApiError.interdit('Aucun compte parent avec ce numéro dans cet établissement');
+    }
+    return ok(res, await ouvrirSessionParent(db, cible, req));
+  } catch (err) { next(err); }
+});
+
 // ── POST /auth/otp/demander — Demander un OTP SMS (parents) ─────
 router.post('/auth/otp/demander', limiterAuth, valider(schemaOtpDemander), async (req, res, next) => {
+  if (!req.body.etablissement_code) return demanderOtpSansEcole(req, res, next);
   const { etablissement_code } = req.body;
   const db = getDB();
 
@@ -319,6 +493,7 @@ router.post('/auth/otp/demander', limiterAuth, valider(schemaOtpDemander), async
 
 // ── POST /auth/otp/valider — Valider un OTP et créer session ────
 router.post('/auth/otp/valider', limiterAuth, valider(schemaOtpValider), async (req, res, next) => {
+  if (!req.body.etablissement_code) return validerOtpSansEcole(req, res, next);
   const { code, etablissement_code } = req.body;
   const db = getDB();
 
