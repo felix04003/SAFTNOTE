@@ -40,9 +40,9 @@ export const PageEnsNotes: any = {
       vues[c.classe_id] = true;
       return true;
     });
-    sel.innerHTML = '<option value=””>Toutes mes classes</option>' +
+    sel.innerHTML = '<option value="">Toutes mes classes</option>' +
       classes.map(function(c: any) {
-        return '<option value=”' + escapeHtml(String(c.classe_id || '')) + '”>' + escapeHtml(c.classe || '') + '</option>';
+        return '<option value="' + escapeHtml(String(c.classe_id || '')) + '">' + escapeHtml(c.classe || '') + '</option>';
       }).join('');
     if (PageEnsNotes._filtreClasseId) sel.value = PageEnsNotes._filtreClasseId;
   },
@@ -59,7 +59,7 @@ export const PageEnsNotes: any = {
   async charger() {
     const tbody = document.getElementById('tb-ens-eval') as HTMLElement | null;
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan=”7” style=”text-align:center;padding:30px;color:var(--g400)”>Chargement…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--g400)">Chargement…</td></tr>';
 
     try {
       const params: Record<string, any> = {};
@@ -70,7 +70,7 @@ export const PageEnsNotes: any = {
       this._data = res.data || [];
       this._renderTable(this._data);
     } catch (e: any) {
-      tbody.innerHTML = '<tr><td colspan=”7” style=”text-align:center;padding:30px;color:var(--rouge)”>' + escapeHtml(e.message || 'Erreur de chargement') + '</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--rouge)">' + escapeHtml(e.message || 'Erreur de chargement') + '</td></tr>';
     }
   },
 
@@ -79,7 +79,7 @@ export const PageEnsNotes: any = {
     if (!tbody) return;
 
     if (!evals.length) {
-      tbody.innerHTML = '<tr><td colspan=”7” style=”text-align:center;color:var(--g400);padding:30px”>Aucune évaluation — créez-en une avec “+ Nouvelle évaluation”</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--g400);padding:30px">Aucune évaluation — créez-en une avec « + Nouvelle évaluation »</td></tr>';
       return;
     }
 
@@ -87,24 +87,24 @@ export const PageEnsNotes: any = {
       const moy = ev.moyenne_classe != null ? ev.moyenne_classe : null;
       const st = ev.statut || 'non_saisie';
       const badge = st === 'publiee'
-        ? '<span class=”badge bs”>Publiée</span>'
+        ? '<span class="badge bs">Publiée</span>'
         : st === 'brouillon'
-          ? '<span class=”badge bw”>Brouillon</span>'
-          : '<span class=”badge bd”>À saisir</span>';
+          ? '<span class="badge bw">Brouillon</span>'
+          : '<span class="badge bd">À saisir</span>';
 
       const evalId = escapeHtml(String(ev.id || ''));
 
-      return '<tr style=”cursor:pointer” onclick=”PageEnsNotes.ouvrirSaisie(\'' + evalId + '\')”>' +
-        '<td class=”nc”>' + escapeHtml(ev.matiere || '—') + '</td>' +
-        '<td><span class=”badge bp”>' + escapeHtml(ev.classe || '—') + '</span></td>' +
-        '<td><span class=”badge bo”>' + escapeHtml(ev.type || '—') + '</span></td>' +
-        '<td style=”font-family:\'Space Mono\',monospace;font-size:11.5px”>' + escapeHtml(ev.date_evaluation || '—') + '</td>' +
-        '<td>' + (moy != null ? '<span style=”font-weight:700;color:' + cn(moy) + '”>' + moy + '/20</span>' : '<span class=”badge bd”>—</span>') + '</td>' +
+      return '<tr style="cursor:pointer" onclick="PageEnsNotes.ouvrirSaisie(\'' + evalId + '\')">' +
+        '<td class="nc">' + escapeHtml(ev.matiere || '—') + '</td>' +
+        '<td><span class="badge bp">' + escapeHtml(ev.classe || '—') + '</span></td>' +
+        '<td><span class="badge bo">' + escapeHtml(ev.type || '—') + '</span></td>' +
+        '<td style="font-family:\'Space Mono\',monospace;font-size:11.5px">' + escapeHtml(ev.date_evaluation || '—') + '</td>' +
+        '<td>' + (moy != null ? '<span style="font-weight:700;color:' + cn(moy) + '">' + moy + '/20</span>' : '<span class="badge bd">—</span>') + '</td>' +
         '<td>' + badge + '</td>' +
-        '<td onclick=”event.stopPropagation()”>' +
+        '<td onclick="event.stopPropagation()">' +
           (st !== 'publiee'
-            ? '<button class=”btn btn-l btn-sm” onclick=”event.stopPropagation();PageEnsNotes.ouvrirSaisie(\'' + evalId + '\')”>&#x270f;&#xfe0f; Saisir</button>'
-            : '<button class=”btn btn-sm” style=”background:var(--g100);color:var(--g500);cursor:default”>&#x1f441; Voir</button>') +
+            ? '<button class="btn btn-l btn-sm" onclick="event.stopPropagation();PageEnsNotes.ouvrirSaisie(\'' + evalId + '\')">&#x270f;&#xfe0f; Saisir</button>'
+            : '<button class="btn btn-sm" style="background:var(--g100);color:var(--g500);cursor:default">&#x1f441; Voir</button>') +
         '</td>' +
       '</tr>';
     }).join('');

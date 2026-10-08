@@ -40,7 +40,7 @@ Règles d'exécution (valables pour toutes les phases) :
 | 2.5 Gabarits SMS en un segment | ✅ fait (voir ci-dessous) |
 | 2.6 Fiabiliser et plafonner les notifications | ✅ fait (voir ci-dessous) |
 | Phase 3 | ✅ 3.1, 3.2, 3.3, 3.6 faites (migration 024) ; 3.5 couverte par 2 suites d'intégration ; 3.4 (sélecteur) différée |
-| Phase 4 | ✅ 4.1, 4.2, 4.3, 4.4 faites (limite de sessions inchangée : décision produit en attente) ; ⏳ 4.5 (E2E Playwright, 375 px) non faite |
+| Phase 4 | ✅ 4.1 à 4.5 faites (E2E `dashboard/tests/specs/comptes-web.spec.js`, API simulée) ; limite de sessions inchangée : décision produit en attente |
 
 ---
 
@@ -372,7 +372,7 @@ personnel (les parents resteraient à 3) ; dans les deux cas, ajouter le message
   distinct (`SESSION_REVOQUEE`) et le client afficher « Vous avez été déconnecté : trop d'appareils connectés ».
 - Proposer 5 sessions pour le personnel dans la politique par défaut (décision produit), 3 pour les parents.
 
-### 4.5 — Mobile navigateur et E2E
+### 4.5 — Mobile navigateur et E2E — ✅ FAIT
 
 - Vérifier `login.html`, `parent-login.html`, `changer-mot-de-passe.html`, `parent.html` en 375×667 (Playwright
   `viewport`), corriger les débordements.
