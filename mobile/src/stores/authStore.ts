@@ -16,6 +16,13 @@ export interface Session {
   doit_changer_mdp?: boolean;
 }
 
+export interface EtablissementParent { code: string; nom: string; courant?: boolean }
+
+// Résultat d'une validation de code SMS : session ouverte, ou choix d'école à faire
+export type ResultatOTP =
+  | { choixRequis: false }
+  | { choixRequis: true; ticket: string; etablissements: EtablissementParent[] };
+
 interface AuthState {
   session:        Session | null;
   token:          string | null;
@@ -26,7 +33,9 @@ interface AuthState {
   estEnseignant:  () => boolean;
   chargerSession: () => Promise<void>;
   connexionMDP:   (data: { identifiant: string; mot_de_passe: string; etablissement_code: string }) => Promise<void>;
-  connexionOTP:   (data: { telephone: string; code: string; etablissement_code: string }) => Promise<void>;
+  connexionOTP:   (data: { telephone: string; code: string; etablissement_code?: string }) => Promise<ResultatOTP>;
+  choisirEtablissement: (ticket: string, etablissement_code: string) => Promise<void>;
+  changerEtablissement: (etablissement_code: string) => Promise<void>;
   deconnexion:    () => Promise<void>;
   mdpChange:      () => Promise<void>;
 }
@@ -66,7 +75,26 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   // Connexion OTP (parents)
   connexionOTP: async (data) => {
-    const res = await authApi.validerOTP(data);
+    const res: any = await authApi.validerOTP(data);
+    if (res.choix_requis) {
+      return { choixRequis: true, ticket: res.ticket, etablissements: res.etablissements };
+    }
+    await persisterSession(res, set);
+    return { choixRequis: false };
+  },
+
+  // Après un code valide pour un numéro présent dans plusieurs écoles
+  choisirEtablissement: async (ticket, etablissement_code) => {
+    const res = await authApi.choisirEtablissement({ ticket, etablissement_code });
+    await persisterSession(res, set);
+  },
+
+  // Parent : passer dans une autre de ses écoles. Nouvelle session + base locale
+  // vidée (les données d'une école ne sont jamais mélangées avec celles d'une autre) ;
+  // l'ancienne session reste valable côté serveur.
+  changerEtablissement: async (etablissement_code) => {
+    const res = await authApi.changerEtablissement({ etablissement_code });
+    await viderBaseLocale();
     await persisterSession(res, set);
   },
 
@@ -89,25 +117,28 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await SecureStore.deleteItemAsync('jwt_token');
       await SecureStore.deleteItemAsync('refresh_token');
       await SecureStore.deleteItemAsync('session');
-      // Vider la BD locale
-      try {
-        const db = getDB();
-        await db.execAsync(`
-          DELETE FROM session;
-          DELETE FROM eleves;
-          DELETE FROM evaluations;
-          DELETE FROM notes;
-          DELETE FROM appels;
-          DELETE FROM presences;
-          DELETE FROM absences;
-          DELETE FROM notes_parent;
-          DELETE FROM bulletins;
-        `);
-      } catch {}
+      await viderBaseLocale();
       set({ session: null, token: null, estConnecte: false });
     }
   },
 }));
+
+async function viderBaseLocale() {
+  try {
+    const db = getDB();
+    await db.execAsync(`
+      DELETE FROM session;
+      DELETE FROM eleves;
+      DELETE FROM evaluations;
+      DELETE FROM notes;
+      DELETE FROM appels;
+      DELETE FROM presences;
+      DELETE FROM absences;
+      DELETE FROM notes_parent;
+      DELETE FROM bulletins;
+    `);
+  } catch {}
+}
 
 async function persisterSession(res: any, set: any) {
   const { token, refresh_token, utilisateur } = res;

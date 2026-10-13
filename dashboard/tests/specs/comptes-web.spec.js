@@ -159,3 +159,36 @@ test('(e) parent présent dans deux écoles : code SMS sans code établissement,
   expect(corps[0]).toEqual({ telephone: '77 222 05 01' });       // aucune clé etablissement_code envoyée
   expect(corps[2]).toEqual({ ticket: 'ticket-signe-0123456789', etablissement_code: 'B' });
 });
+
+test('(f) parent.html : sélecteur d\'école, bascule vers l\'autre établissement', async ({ page }) => {
+  let bascule;
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem('em_token')) return;       // le rechargement après bascule ne doit pas réinitialiser la session
+    sessionStorage.setItem('em_token', 't1');
+    localStorage.setItem('em_user', JSON.stringify({ id: 'p1', prenom: 'Papa', nom: 'Ndiaye', role: 'parent', etablissement_nom: 'Lycée A' }));
+  });
+  await page.route('**/api/v1/**', (route) => {
+    const url = route.request().url();
+    if (url.endsWith('/auth/mes-etablissements')) {
+      return json(route, 200, { succes: true, data: [{ code: 'A', nom: 'Lycée A', courant: true }, { code: 'B', nom: 'Collège B', courant: false }] });
+    }
+    if (url.endsWith('/parents/moi/enfants')) {
+      return json(route, 200, { succes: true, data: [{ eleve_utilisateur_id: 'e1', prenom: 'Moussa', nom: 'Ndiaye', classe: '6e A' }] });
+    }
+    if (url.endsWith('/auth/changer-etablissement')) {
+      bascule = route.request().postDataJSON();
+      return json(route, 200, { succes: true, data: { token: 't2', refresh_token: 'r2', utilisateur: { id: 'p2', prenom: 'Papa', nom: 'Ndiaye', role: 'parent', etablissement_nom: 'Collège B' } } });
+    }
+    return json(route, 200, OK_VIDE);
+  });
+
+  await page.goto('/parent.html');
+  const sel = page.locator('#par-ecole-sel');
+  await expect(sel).toBeVisible();
+  await expect(sel.locator('option')).toHaveText(['Lycée A', 'Collège B']);
+  await expect(sel).toHaveValue('A');
+
+  await sel.selectOption('B');
+  await expect.poll(() => bascule).toEqual({ etablissement_code: 'B' });
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem('em_token'))).toBe('t2');
+});

@@ -1,10 +1,11 @@
 // app/(app)/commun/profil.tsx
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../../src/stores/authStore';
+import { authApi } from '../../../src/services/api/client';
 import { syncService } from '../../../src/services/sync/syncService';
 import { Colors, Typography, Spacing, Radius, Shadow } from '../../../src/utils/theme';
 import Entete from '../../../src/components/ui/Entete';
@@ -13,7 +14,32 @@ import Carte from '../../../src/components/ui/Carte';
 export default function ProfilScreen() {
   const session     = useAuthStore(s => s.session);
   const deconnexion = useAuthStore(s => s.deconnexion);
+  const changerEtablissement = useAuthStore(s => s.changerEtablissement);
   const router      = useRouter();
+  const [autresEcoles, setAutresEcoles] = useState<{ code: string; nom: string }[]>([]);
+
+  // Parent présent dans plusieurs écoles : proposer de basculer (3.4). Hors ligne : rien à afficher.
+  useEffect(() => {
+    if (session?.role !== 'parent') return;
+    authApi.mesEtablissements()
+      .then((res: any) => setAutresEcoles((Array.isArray(res) ? res : []).filter((e: any) => !e.courant)))
+      .catch(() => setAutresEcoles([]));
+  }, [session?.etablissement_id]);
+
+  function handleChangerEcole(ecole: { code: string; nom: string }) {
+    Alert.alert('Changer d\'établissement', `Ouvrir ${ecole.nom} ? Les données de l'école actuelle seront retirées de ce téléphone puis rechargées pour la nouvelle.`, [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Ouvrir', onPress: async () => {
+        try {
+          await changerEtablissement(ecole.code);
+          try { await syncService.syncComplete(); } catch { /* resynchronisé plus tard */ }
+          router.replace('/(app)');
+        } catch (err: any) {
+          Alert.alert('Changement impossible', err?.message || 'Vérifiez votre connexion et réessayez.');
+        }
+      }},
+    ]);
+  }
 
   async function handleDeconnexion() {
     Alert.alert('Déconnexion', 'Voulez-vous vraiment vous déconnecter ?', [
@@ -64,6 +90,18 @@ export default function ProfilScreen() {
             </TouchableOpacity>
           ))}
         </Carte>
+
+        {autresEcoles.length > 0 && (
+          <Carte>
+            {autresEcoles.map((e, i) => (
+              <TouchableOpacity key={e.code} style={[styles.menuItem, i > 0 && styles.menuSep]} onPress={() => handleChangerEcole(e)}>
+                <Ionicons name="swap-horizontal-outline" size={20} color={Colors.primary} />
+                <Text style={[styles.menuLabel, { color: Colors.primary }]}>Passer à {e.nom}</Text>
+                <Ionicons name="chevron-forward" size={16} color={Colors.gray300} />
+              </TouchableOpacity>
+            ))}
+          </Carte>
+        )}
 
         <TouchableOpacity style={[styles.btnDeconnexion, Shadow.sm]} onPress={handleDeconnexion} activeOpacity={0.85}>
           <Ionicons name="log-out-outline" size={20} color={Colors.danger} />

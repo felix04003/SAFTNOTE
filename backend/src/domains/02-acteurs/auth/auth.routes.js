@@ -391,6 +391,24 @@ router.post('/auth/otp/choisir', limiterAuth, valider(schemaOtpChoisir), async (
   } catch (err) { next(err); }
 });
 
+// ── GET /auth/mes-etablissements — Écoles où ce parent a un compte (sélecteur) ──
+router.get('/auth/mes-etablissements', authentifier, async (req, res, next) => {
+  const db = getDB();
+  try {
+    const courant = await db('utilisateurs').where({ id: req.session.utilisateur_id, actif: true })
+      .first('telephone', 'mot_de_passe_hash');
+    if (!courant) throw ApiError.nonAutorise();
+    // Même règle que changer-etablissement : comptes sans mot de passe seulement
+    if (courant.mot_de_passe_hash) return ok(res, []);
+
+    const comptes = await comptesParentsParTelephone(db, courant.telephone);
+    if (!comptes.some(c => c.id === req.session.utilisateur_id)) return ok(res, []);
+    return ok(res, comptes.map(c => ({
+      code: c.code_officiel, nom: c.etablissement_nom, courant: c.id === req.session.utilisateur_id,
+    })));
+  } catch (err) { next(err); }
+});
+
 // ── POST /auth/changer-etablissement — Parent : passer dans une autre de ses écoles ──
 router.post('/auth/changer-etablissement', authentifier, valider(schemaChangerEtablissement), async (req, res, next) => {
   const db = getDB();

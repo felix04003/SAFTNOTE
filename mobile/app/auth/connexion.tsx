@@ -12,7 +12,7 @@ import { authApi }         from '../../src/services/api/client';
 import { Colors, Typography, Spacing, Radius, Shadow } from '../../src/utils/theme';
 import Bouton               from '../../src/components/ui/Bouton';
 
-type Mode = 'mdp' | 'otp_demander' | 'otp_valider';
+type Mode = 'mdp' | 'otp_demander' | 'otp_valider' | 'otp_choisir';
 
 const PAYS = [
   { code: 'SN', label: 'Sénégal',       prefixe: '+221' },
@@ -27,6 +27,7 @@ export default function ConnexionScreen() {
   const router = useRouter();
   const connexionMDP = useAuthStore(s => s.connexionMDP);
   const connexionOTP = useAuthStore(s => s.connexionOTP);
+  const choisirEtablissement = useAuthStore(s => s.choisirEtablissement);
 
   const [mode, setMode]         = useState<Mode>('mdp');
   const [loading, setLoading]   = useState(false);
@@ -38,9 +39,18 @@ export default function ConnexionScreen() {
   const [pays,      setPays]       = useState<typeof PAYS[number]>(PAYS[0]);
   const [telephone, setTelephone] = useState('');
   const [otp,       setOtp]       = useState('');
+  const [choix, setChoix] = useState<{ ticket: string; etablissements: { code: string; nom: string }[] } | null>(null);
   const otpRefs = useRef<(TextInput | null)[]>([null, null, null, null, null, null]);
 
   const clearErr = () => setErreur('');
+
+  // Numéro complet + code établissement seulement s'il est saisi
+  const numeroComplet = () => (telephone.trim().startsWith('+') ? telephone.trim() : pays.prefixe + telephone.trim());
+  const corpsOTP = <T extends object>(extra: T) => ({
+    telephone: numeroComplet(),
+    ...extra,
+    ...(etablissement.trim() ? { etablissement_code: etablissement.trim().toUpperCase() } : {}),
+  });
 
   async function handleConnexionMDP() {
     if (!etablissement.trim() || !identifiant.trim() || !motDePasse.trim()) {
@@ -55,10 +65,11 @@ export default function ConnexionScreen() {
   }
 
   async function handleDemanderOTP() {
-    if (!etablissement.trim() || !telephone.trim()) return setErreur('Établissement et téléphone requis');
+    // Le code établissement est facultatif pour un parent (3.4)
+    if (!telephone.trim()) return setErreur('Numéro de téléphone requis');
     setLoading(true); clearErr();
     try {
-      await authApi.demanderOTP({ telephone: telephone.trim().startsWith('+') ? telephone.trim() : pays.prefixe + telephone.trim(), etablissement_code: etablissement.trim().toUpperCase() });
+      await authApi.demanderOTP(corpsOTP({}));
       setMode('otp_valider');
     } catch (err: any) { setErreur(err.message || 'Impossible d\'envoyer le code'); }
     finally { setLoading(false); }
@@ -68,10 +79,27 @@ export default function ConnexionScreen() {
     if (otp.length !== 6) return setErreur('Entrez les 6 chiffres du code');
     setLoading(true); clearErr();
     try {
-      await connexionOTP({ telephone: telephone.trim().startsWith('+') ? telephone.trim() : pays.prefixe + telephone.trim(), code: otp, etablissement_code: etablissement.trim().toUpperCase() });
+      const res = await connexionOTP(corpsOTP({ code: otp }) as any);
+      if (res.choixRequis) {
+        setChoix({ ticket: res.ticket, etablissements: res.etablissements });
+        setMode('otp_choisir');
+        return;
+      }
       router.replace('/(app)');
     } catch (err: any) { setErreur(err.message || 'Code incorrect ou expiré'); setOtp(''); }
     finally { setLoading(false); }
+  }
+
+  async function handleChoisirEcole(code: string) {
+    if (!choix) return;
+    setLoading(true); clearErr();
+    try {
+      await choisirEtablissement(choix.ticket, code);
+      router.replace('/(app)');
+    } catch (err: any) {
+      setErreur(err.message || 'Choix impossible, recommencez la connexion');
+      setMode('otp_demander'); setChoix(null); setOtp('');
+    } finally { setLoading(false); }
   }
 
   return (
@@ -85,7 +113,7 @@ export default function ConnexionScreen() {
           </View>
 
           <View style={[styles.carte, Shadow.lg]}>
-            <Text style={styles.label}>Code établissement</Text>
+            <Text style={styles.label}>{mode === 'mdp' ? 'Code établissement' : 'Code établissement (facultatif pour les parents)'}</Text>
             <View style={styles.inputContainer}>
               <Ionicons name="business-outline" size={18} color={Colors.gray400} style={styles.inputIcon} />
               <TextInput style={styles.input} placeholder="Ex: LYCEE-DAKAR-01" placeholderTextColor={Colors.gray400} value={etablissement} onChangeText={t => { setEtablissement(t.toUpperCase()); clearErr(); }} autoCapitalize="characters" autoCorrect={false} />
@@ -153,6 +181,15 @@ export default function ConnexionScreen() {
                 </View>
                 <Bouton label="Valider le code" onPress={handleValiderOTP} chargement={loading} desactive={otp.length !== 6} pleineLargeur style={styles.boutonPrincipal} />
                 <TouchableOpacity onPress={() => setMode('otp_demander')} style={styles.renvoyerBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}><Text style={styles.renvoyerLabel}>Renvoyer le code</Text></TouchableOpacity>
+              </>
+            )}
+
+            {mode === 'otp_choisir' && choix && (
+              <>
+                <Text style={styles.infoText}>Votre numéro est enregistré dans plusieurs établissements. Choisissez celui à ouvrir.</Text>
+                {choix.etablissements.map(e => (
+                  <Bouton key={e.code} label={e.nom} onPress={() => handleChoisirEcole(e.code)} chargement={loading} pleineLargeur style={styles.boutonPrincipal} />
+                ))}
               </>
             )}
 

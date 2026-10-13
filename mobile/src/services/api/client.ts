@@ -158,11 +158,22 @@ export const authApi = {
   connexion: (data: { identifiant: string; mot_de_passe: string; etablissement_code: string }) =>
     api.post('/auth/connexion', data),
 
-  demanderOTP: (data: { telephone: string; etablissement_code: string }) =>
+  // etablissement_code facultatif pour un parent : le serveur retrouve ses écoles (3.4)
+  demanderOTP: (data: { telephone: string; etablissement_code?: string }) =>
     api.post('/auth/otp/demander', data),
 
-  validerOTP: (data: { telephone: string; code: string; etablissement_code: string }) =>
+  validerOTP: (data: { telephone: string; code: string; etablissement_code?: string }) =>
     api.post('/auth/otp/valider', data),
+
+  // Numéro présent dans plusieurs écoles : choix avec le ticket reçu de validerOTP
+  choisirEtablissement: (data: { ticket: string; etablissement_code: string }) =>
+    api.post('/auth/otp/choisir', data),
+
+  mesEtablissements: () =>
+    api.get('/auth/mes-etablissements'),
+
+  changerEtablissement: (data: { etablissement_code: string }) =>
+    api.post('/auth/changer-etablissement', data),
 
   deconnexion: () =>
     api.post('/auth/deconnexion', {}),

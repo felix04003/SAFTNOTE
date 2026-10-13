@@ -76,3 +76,25 @@ describe('4.4 session fermée (C9)', () => {
     expect(sessionStorage.getItem(CONFIG.FLASH_KEY)).toBeNull();
   });
 });
+
+describe('3.4 sélecteur d\'école de parent.html', () => {
+  it('parent.html contient le sélecteur, caché par défaut', async () => {
+    const html = (await import('../../parent.html?raw')).default;
+    expect(html).toMatch(/<select id="par-ecole-sel"[^>]*display:none/);
+  });
+
+  it('_construireSelecteurEcole : une option par école (texte non interprété), la courante sélectionnée', async () => {
+    const { ParApp } = await import('../par-app');
+    document.body.innerHTML = '<select id="par-ecole-sel" style="display:none"></select>';
+    const sel = document.getElementById('par-ecole-sel') as HTMLSelectElement;
+    ParApp._construireSelecteurEcole([
+      { code: 'A', nom: 'Lycée A', courant: false },
+      { code: 'B', nom: '<img src=x onerror=alert(1)>', courant: true },
+    ], sel);
+    expect(sel.options).toHaveLength(2);
+    expect(sel.value).toBe('B');
+    expect(sel.options[1].textContent).toBe('<img src=x onerror=alert(1)>');
+    expect(sel.querySelector('img')).toBeNull();
+    expect(sel.style.display).toBe('');
+  });
+});

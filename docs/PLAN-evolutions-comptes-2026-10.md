@@ -39,7 +39,7 @@ Règles d'exécution (valables pour toutes les phases) :
 | 2.4 Réglage de la politique par le directeur | ✅ API faite (`GET/PUT /securite/politique`, journal d'audit) ; écran du dashboard non fait |
 | 2.5 Gabarits SMS en un segment | ✅ fait (voir ci-dessous) |
 | 2.6 Fiabiliser et plafonner les notifications | ✅ fait (voir ci-dessous) |
-| Phase 3 | ✅ 3.1, 3.2, 3.3, 3.6 faites (migration 024) ; 3.5 couverte par 2 suites d'intégration ; 3.4 : API + `parent-login.html` faits ; sélecteur dans `parent.html` et écrans mobiles non faits |
+| Phase 3 | ✅ 3.1, 3.2, 3.3, 3.6 faites (migration 024) ; 3.5 couverte par 2 suites d'intégration ; 3.4 ✅ faite (API, `parent-login.html`, sélecteur de `parent.html`, mobile : connexion avec choix d'école et bascule depuis le profil) |
 | Phase 4 | ✅ 4.1 à 4.5 faites (E2E `dashboard/tests/specs/comptes-web.spec.js`, API simulée) ; limite de sessions inchangée : décision produit en attente |
 
 ---
@@ -274,7 +274,7 @@ un compte à mot de passe se reconnecte avec son mot de passe dans chaque école
 - `utils/normaliser-telephones.js` : le test de conflit global devient un test par établissement
   (`pris` indexé par `etablissement_id`).
 
-### 3.4 — Sélecteur d'établissement (option C) — ✅ API et connexion web faites (reste : sélecteur dans `parent.html`, mobile)
+### 3.4 — Sélecteur d'établissement (option C) — ✅ FAIT (API, web et mobile ; `GET /auth/mes-etablissements` ajoutée pour les sélecteurs)
 
 Pour les **parents** (comptes sans mot de passe) uniquement :
 - `POST /auth/otp/valider` : si le numéro vérifié possède des comptes dans plusieurs écoles et qu'aucun

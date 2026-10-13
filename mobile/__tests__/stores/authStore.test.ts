@@ -29,6 +29,8 @@ const mockApiSetRefreshToken = jest.fn();
 const mockConnexion          = jest.fn();
 const mockValiderOTP         = jest.fn();
 const mockDeconnexion        = jest.fn().mockResolvedValue(undefined);
+const mockChoisir            = jest.fn();
+const mockChangerEtab        = jest.fn();
 
 // Emetteur minimal réutilisé pour simuler 'token_rafraichi' émis par
 // ApiClient après un refresh réussi (voir client.ts).
@@ -53,6 +55,8 @@ jest.mock('../../src/services/api/client', () => ({
     connexion:   (...args: any[]) => mockConnexion(...args),
     validerOTP:  (...args: any[]) => mockValiderOTP(...args),
     deconnexion: () => mockDeconnexion(),
+    choisirEtablissement: (...args: any[]) => mockChoisir(...args),
+    changerEtablissement: (...args: any[]) => mockChangerEtab(...args),
   },
   authEventEmitter: mockAuthEventEmitter,
 }));
@@ -328,5 +332,66 @@ describe('mot de passe provisoire (doit_changer_mdp)', () => {
     await Promise.resolve();
     expect(useAuthStore.getState().session).toBeNull();
     expect(mockSetItemAsync).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('parent multi-écoles (3.4)', () => {
+  it('connexionOTP : numéro dans plusieurs écoles → choix requis, aucune session ouverte', async () => {
+    mockValiderOTP.mockResolvedValueOnce({
+      choix_requis: true, ticket: 'ticket-xyz',
+      etablissements: [{ code: 'A', nom: 'Lycée A' }, { code: 'B', nom: 'Collège B' }],
+    });
+
+    const res = await useAuthStore.getState().connexionOTP({ telephone: '+221772220501', code: '123456' });
+
+    expect(res).toEqual({
+      choixRequis: true, ticket: 'ticket-xyz',
+      etablissements: [{ code: 'A', nom: 'Lycée A' }, { code: 'B', nom: 'Collège B' }],
+    });
+    expect(useAuthStore.getState().estConnecte).toBe(false);
+    expect(mockSetItemAsync).not.toHaveBeenCalled();
+  });
+
+  it('connexionOTP : une seule école → session ouverte directement', async () => {
+    mockValiderOTP.mockResolvedValueOnce(API_RESPONSE);
+    const res = await useAuthStore.getState().connexionOTP({ telephone: '+221772220502', code: '654321' });
+    expect(res).toEqual({ choixRequis: false });
+    expect(useAuthStore.getState().estConnecte).toBe(true);
+  });
+
+  it('choisirEtablissement : envoie le ticket et ouvre la session de l\'école choisie', async () => {
+    mockChoisir.mockResolvedValueOnce({ ...API_RESPONSE, utilisateur: { ...API_RESPONSE.utilisateur, role: 'parent', etablissement_id: 'etab-B' } });
+
+    await useAuthStore.getState().choisirEtablissement('ticket-xyz', 'B');
+
+    expect(mockChoisir).toHaveBeenCalledWith({ ticket: 'ticket-xyz', etablissement_code: 'B' });
+    expect(useAuthStore.getState().session?.etablissement_id).toBe('etab-B');
+    expect(mockApiSetToken).toHaveBeenCalledWith(TOKEN_FIXTURE);
+  });
+
+  it('changerEtablissement : base locale vidée AVANT la nouvelle session, jeton remplacé', async () => {
+    useAuthStore.setState({ session: { ...SESSION_FIXTURE, role: 'parent' }, token: 'ancien', estConnecte: true });
+    const ordre: string[] = [];
+    mockExecAsync.mockImplementationOnce(async () => { ordre.push('vidage'); });
+    mockApiSetToken.mockImplementationOnce(() => { ordre.push('nouveau-jeton'); });
+    mockChangerEtab.mockResolvedValueOnce({ ...API_RESPONSE, utilisateur: { ...API_RESPONSE.utilisateur, role: 'parent', etablissement_id: 'etab-B', etablissement_nom: 'Collège B' } });
+
+    await useAuthStore.getState().changerEtablissement('B');
+
+    expect(mockChangerEtab).toHaveBeenCalledWith({ etablissement_code: 'B' });
+    expect(ordre).toEqual(['vidage', 'nouveau-jeton']);
+    expect(useAuthStore.getState().session?.etablissement_nom).toBe('Collège B');
+    expect(mockDeconnexion).not.toHaveBeenCalled();     // l'ancienne session n'est pas révoquée
+  });
+
+  it('changerEtablissement : refus du serveur → session et base locale inchangées', async () => {
+    useAuthStore.setState({ session: { ...SESSION_FIXTURE, role: 'parent' }, token: 'ancien', estConnecte: true });
+    mockChangerEtab.mockRejectedValueOnce(new Error('Aucun compte parent'));
+
+    await expect(useAuthStore.getState().changerEtablissement('C')).rejects.toThrow('Aucun compte parent');
+
+    expect(useAuthStore.getState().token).toBe('ancien');
+    expect(mockExecAsync).not.toHaveBeenCalled();
   });
 });

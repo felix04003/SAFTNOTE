@@ -94,6 +94,18 @@ describe('parent présent dans deux écoles : connexion sans code établissement
     await request.post('/api/v1/auth/otp/choisir').send({ ticket, etablissement_code: codeC }).expect(401);
   });
 
+  test('mes-etablissements : liste les deux écoles, marque la courante ; vide pour un compte à mot de passe', async () => {
+    const tokenB = await creerSession(compteB.id, etabB.id);
+    const res = await request.get('/api/v1/auth/mes-etablissements').set('Authorization', `Bearer ${tokenB}`).expect(200);
+    expect(res.body.data.map(e => e.code).sort()).toEqual([codeA, codeB].sort());
+    expect(res.body.data.find(e => e.courant).code).toBe(codeB);
+
+    const ens = await creerCompte(seed.etablissement.id, 'enseignant', { telephone: '+221772220598', motDePasse: 'Test1234!' });
+    const tokenEns = await creerSession(ens.id, seed.etablissement.id);
+    const vide = await request.get('/api/v1/auth/mes-etablissements').set('Authorization', `Bearer ${tokenEns}`).expect(200);
+    expect(vide.body.data).toEqual([]);
+  });
+
   test('changer-etablissement : A → B accepté, A → C refusé, ancienne session toujours valable', async () => {
     const tokenA = await creerSession(compteA.id, seed.etablissement.id);
 
