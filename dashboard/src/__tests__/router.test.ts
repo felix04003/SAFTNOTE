@@ -47,6 +47,12 @@ describe('goto', () => {
     expect(location.hash).toBe('notes');
   });
 
+  it('met à jour #tb-titre (id réel de la barre du haut) avec TITRES[id]', () => {
+    document.body.insertAdjacentHTML('afterbegin', '<span id="tb-titre">Tableau de bord</span>');
+    goto('eleves');
+    expect(document.getElementById('tb-titre')!.textContent).toBe('Élèves');
+  });
+
   it('met à jour le titre avec TITRES[id]', () => {
     goto('eleves');
     const titre = document.getElementById('page-titre')!;

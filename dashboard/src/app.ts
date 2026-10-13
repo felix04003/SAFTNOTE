@@ -44,5 +44,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll<HTMLElement>('.nav-item').forEach(el => {
       el.classList.toggle('actif', el.dataset.page === page);
     });
+    // Boutons précédent/suivant du navigateur, lien direct : afficher la page du hash
+    const affichee = document.querySelector<HTMLElement>('.page.active');
+    if (document.getElementById('page-' + page) && (!affichee || affichee.id !== 'page-' + page)) goto(page);
   });
 });

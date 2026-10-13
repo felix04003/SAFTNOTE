@@ -41,8 +41,8 @@ test('étape 1 — connexion directeur', async ({ page }) => {
   const etabNom = page.locator('.sb-etab');
   await expect(etabNom).toBeVisible();
 
-  // Le token est dans localStorage
-  const token = await page.evaluate(() => localStorage.getItem('em_token'));
+  // Le jeton est dans sessionStorage
+  const token = await page.evaluate(() => sessionStorage.getItem('em_token'));
   expect(token).toBeTruthy();
 });
 
@@ -109,7 +109,8 @@ test('étape 3 — créer une classe via le modal', async ({ page }) => {
   }
 
   // Remplir le nom de la classe
-  await page.fill('#m-classe-nom', 'A');
+  // Nom unique : la base est conservée entre deux exécutions (contrainte d'unicité année/niveau/nom)
+  await page.fill('#m-classe-nom', 'E' + (Date.now() % 100000));
   await page.fill('#m-classe-salle', 'Salle E2E');
   await page.fill('#m-classe-effectif', '40');
 
@@ -120,7 +121,7 @@ test('étape 3 — créer une classe via le modal', async ({ page }) => {
   // (soit le modal se ferme, soit un toast apparaît)
   await page.waitForFunction(() => {
     const modal = document.getElementById('m-classe');
-    const toast = document.getElementById('tc');
+    const toast = document.getElementById('toast-container');
     const modalClosed = !modal || !modal.classList.contains('visible') && !modal.classList.contains('open');
     const toastVisible = toast && toast.children.length > 0;
     return modalClosed || toastVisible;
@@ -167,7 +168,7 @@ test('étape 4 — inscrire un élève via le modal', async ({ page }) => {
   // Attendre la confirmation (toast ou fermeture modal)
   await page.waitForFunction(() => {
     const modal = document.getElementById('m-eleve');
-    const toast = document.getElementById('tc');
+    const toast = document.getElementById('toast-container');
     const modalHidden = modal && (
       window.getComputedStyle(modal).display === 'none' ||
       !modal.classList.contains('visible') && !modal.classList.contains('open')
@@ -252,7 +253,8 @@ test('étape 6 — créer une évaluation via le modal', async ({ page }) => {
 
   // Sélectionner le type et remplir les champs
   await page.selectOption('#ev-type', 'devoir');
-  await page.fill('#ev-numero', '1');
+  // Numéro unique pour la même raison (affectation, type, numéro, période)
+  await page.fill('#ev-numero', String((Date.now() % 90) + 2));
   await page.fill('#ev-note-max', '20');
   await page.fill('#ev-date', '2025-03-18');
   await page.fill('#ev-titre', 'Devoir E2E Test');
@@ -263,7 +265,7 @@ test('étape 6 — créer une évaluation via le modal', async ({ page }) => {
   // Attendre la fermeture du modal ou toast
   await page.waitForFunction(() => {
     const modal = document.getElementById('m-evaluation');
-    const toast = document.getElementById('tc');
+    const toast = document.getElementById('toast-container');
     const modalHidden = modal && !modal.classList.contains('visible') && !modal.classList.contains('open');
     const toastVisible = toast && toast.children.length > 0;
     return modalHidden || toastVisible;
@@ -333,8 +335,8 @@ test('étape 8 — publier les notes d\'une évaluation', async ({ page }) => {
     await publierBtn.click();
 
     // Une confirmation toast ou dialogue doit apparaître
-    const toast = page.locator('#tc');
-    await expect(toast).not.toBeEmpty({ timeout: 5000 });
+    // Les toasts sont ajoutés à #toast-container (créé à la demande par ui.ts)
+    await expect(page.locator('#toast-container > *').first()).toBeVisible({ timeout: 5000 });
   } else {
     test.skip();
   }

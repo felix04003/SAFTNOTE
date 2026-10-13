@@ -38,8 +38,9 @@ test('connexion avec identifiants valides redirige vers le dashboard', async ({ 
   await expect(page.locator('.sidebar')).toBeVisible();
   await expect(page.locator('#tb-titre')).toBeVisible();
 
-  // Le token est stocké dans localStorage
-  const token = await page.evaluate(() => localStorage.getItem('em_token'));
+  // Le jeton est stocké dans sessionStorage (lot H), jamais dans localStorage
+  const token = await page.evaluate(() => sessionStorage.getItem('em_token'));
+  expect(await page.evaluate(() => localStorage.getItem('em_token'))).toBeNull();
   expect(token).toBeTruthy();
   expect(token.split('.').length).toBe(3); // format JWT
 });
@@ -95,8 +96,8 @@ test('déconnexion redirige vers la page login et efface le token', async ({ pag
   // Attendre la redirection vers login
   await page.waitForURL('**/login.html', { timeout: 8000 });
 
-  // Le token doit être supprimé du localStorage
-  const token = await page.evaluate(() => localStorage.getItem('em_token'));
+  // Le jeton doit être supprimé
+  const token = await page.evaluate(() => sessionStorage.getItem('em_token'));
   expect(token).toBeNull();
 
   // La page login est visible
@@ -105,21 +106,18 @@ test('déconnexion redirige vers la page login et efface le token', async ({ pag
 
 // ── Redirection automatique si déjà connecté ────────────────────
 test('accéder à login.html quand déjà connecté redirige vers le dashboard', async ({ page }) => {
-  // Injecter un faux token valide dans localStorage avant de charger login.html
+  // Une session = jeton (sessionStorage) + profil (localStorage) ; login.html redirige alors
   await page.goto('/login.html');
-
-  // Forcer un token factice (la page redirige si em_token existe)
   await page.evaluate(() => {
-    localStorage.setItem('em_token', 'faux.token.jwt');
+    sessionStorage.setItem('em_token', 'faux.token.jwt');
+    localStorage.setItem('em_user', JSON.stringify({ id: 'u', prenom: 'Awa', nom: 'Diop', role: 'directeur' }));
   });
 
   await page.goto('/login.html');
 
-  // Doit être redirigé vers index.html
+  // Doit être redirigé vers index.html (le contexte de test est jetable : rien à nettoyer ;
+  // le faux jeton est purgé par le dashboard dès le premier 401)
   await page.waitForURL(/index\.html/, { timeout: 5000 });
-
-  // Nettoyer
-  await page.evaluate(() => localStorage.removeItem('em_token'));
 });
 
 // ── Page index redirige vers login si non authentifié ────────────

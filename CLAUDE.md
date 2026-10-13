@@ -145,7 +145,7 @@ ecolemanager/
     ├── css/
     │   └── style.css       ✅ Toute la feuille de style
     ├── src/                ✅ Sources TypeScript (remplace l'ancien dashboard/js/, supprimé — lot K)
-    ├── tests/              ✅ 105 tests Vitest
+    ├── tests/              ✅ 106 tests Vitest
     ├── vite.config.ts / vitest.config.ts / tsconfig.json
     └── dist/               ← build de production (généré, non versionné)
 ```
@@ -468,7 +468,7 @@ META_WA_TOKEN         → WhatsApp Business API
 | 27 | Notifications SMS réparées sur base réelle (le worker ne trouvait jamais le parent : aucun SMS n'avait pu partir), publication des notes → un SMS par parent, contrôle d'établissement sur la publication, report horaire BullMQ 5, plafond mensuel de SMS par établissement avec alertes (migration 023) | ✅ |
 
 > Les compteurs de tests ci-dessus sont historiques (au moment de chaque étape). Compteurs
-> actuels (vérifiés le 2026-10-07) : backend 379 tests (40 suites Jest) + 178 tests d'intégration sur base réelle (21 suites, `npm run test:integration`), dashboard 105 tests (Vitest), mobile 116 tests (Jest).
+> actuels (vérifiés le 2026-10-07) : backend 379 tests (40 suites Jest) + 178 tests d'intégration sur base réelle (21 suites, `npm run test:integration`), dashboard 106 tests (Vitest) + 35 tests E2E Playwright (voir dashboard/tests/README.md), mobile 116 tests (Jest).
 
 ---
 
