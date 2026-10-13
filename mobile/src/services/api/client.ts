@@ -18,6 +18,10 @@ class EventEmitter {
 }
 export const authEventEmitter = new EventEmitter();
 
+// Message affiché sur l'écran de connexion quand le serveur a fermé la session
+// parce que trop d'appareils se sont connectés (code SESSION_REVOQUEE)
+export const MESSAGE_SESSION_REVOQUEE = 'Vous avez été déconnecté : trop d\'appareils connectés avec ce compte.';
+
 // ── Classe ApiClient ─────────────────────────────────────────────
 class ApiClient {
   private token: string | null = null;
@@ -25,6 +29,8 @@ class ApiClient {
   // Dédoublonne les rafraîchissements concurrents (plusieurs requêtes en
   // 401 en même temps ne doivent déclencher qu'un seul appel /auth/refresh).
   private rafraichissementEnCours: Promise<boolean> | null = null;
+  // Renseigné quand /auth/refresh répond SESSION_REVOQUEE ; lu au moment d'émettre 'deconnexion'
+  private sessionRevoquee = false;
 
   setToken(t: string | null) { this.token = t; }
   setRefreshToken(t: string | null) { this.refreshToken = t; }
@@ -58,7 +64,13 @@ class ApiClient {
             body: JSON.stringify({ refresh_token: this.refreshToken }),
           });
 
-          if (!response.ok) return false;
+          if (!response.ok) {
+            try {
+              const echec = await response.json();
+              if (echec?.code === 'SESSION_REVOQUEE') this.sessionRevoquee = true;
+            } catch { /* corps illisible : échec classique */ }
+            return false;
+          }
 
           const data = await response.json();
           const payload = data.data ?? data;
@@ -104,6 +116,11 @@ class ApiClient {
             if (rafraichi) {
               return this.request<T>(method, path, body, { ...opts, _dejaRafraichi: true });
             }
+          }
+          if (this.sessionRevoquee) {
+            this.sessionRevoquee = false;
+            authEventEmitter.emit('deconnexion', { motif: 'session_revoquee', message: MESSAGE_SESSION_REVOQUEE });
+            throw new ApiError(401, MESSAGE_SESSION_REVOQUEE, 'SESSION_REVOQUEE');
           }
           authEventEmitter.emit('deconnexion');
           throw new ApiError(401, 'Session expirée — reconnectez-vous', 'SESSION_EXPIREE');

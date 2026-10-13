@@ -1,5 +1,5 @@
 // app/auth/connexion.tsx
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, KeyboardAvoidingView, Platform,
@@ -28,6 +28,8 @@ export default function ConnexionScreen() {
   const connexionMDP = useAuthStore(s => s.connexionMDP);
   const connexionOTP = useAuthStore(s => s.connexionOTP);
   const choisirEtablissement = useAuthStore(s => s.choisirEtablissement);
+  const messageConnexion = useAuthStore(s => s.messageConnexion);
+  const definirMessageConnexion = useAuthStore(s => s.definirMessageConnexion);
 
   const [mode, setMode]         = useState<Mode>('mdp');
   const [loading, setLoading]   = useState(false);
@@ -43,6 +45,13 @@ export default function ConnexionScreen() {
   const otpRefs = useRef<(TextInput | null)[]>([null, null, null, null, null, null]);
 
   const clearErr = () => setErreur('');
+
+  // Message laissé par une déconnexion forcée : montré une fois, puis oublié
+  useEffect(() => {
+    if (!messageConnexion) return;
+    setErreur(messageConnexion);
+    definirMessageConnexion(null);
+  }, [messageConnexion]);
 
   // Numéro complet + code établissement seulement s'il est saisi
   const numeroComplet = () => (telephone.trim().startsWith('+') ? telephone.trim() : pays.prefixe + telephone.trim());

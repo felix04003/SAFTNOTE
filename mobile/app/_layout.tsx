@@ -34,9 +34,20 @@ export default function RootLayout() {
     }
     init();
 
-    const unsub = authEventEmitter.on('deconnexion', async () => {
-      await deconnexion();
-      router.replace('/auth/connexion');
+    // Un seul traitement à la fois : deconnexion() appelle l'API, dont un 401
+    // ré-émettrait cet événement
+    let deconnexionEnCours = false;
+    const unsub = authEventEmitter.on('deconnexion', async (info?: { message?: string }) => {
+      if (deconnexionEnCours) return;
+      deconnexionEnCours = true;
+      try {
+        await deconnexion();
+        // Après la déconnexion : elle ne touche pas à ce message
+        useAuthStore.getState().definirMessageConnexion(info?.message ?? null);
+        router.replace('/auth/connexion');
+      } finally {
+        deconnexionEnCours = false;
+      }
     });
 
     return () => {

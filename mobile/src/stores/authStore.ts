@@ -27,6 +27,9 @@ interface AuthState {
   session:        Session | null;
   token:          string | null;
   chargement:     boolean;
+  // Message à montrer une fois sur l'écran de connexion (ex. session fermée : trop d'appareils)
+  messageConnexion: string | null;
+  definirMessageConnexion: (message: string | null) => void;
   estConnecte:    boolean;
   estParent:      () => boolean;
   estDirecteur:   () => boolean;
@@ -44,6 +47,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   session:       null,
   token:         null,
   chargement:    true,
+  messageConnexion: null,
+  definirMessageConnexion: (message) => set({ messageConnexion: message }),
   estConnecte:   false,
   estParent:     () => get().session?.role === 'parent',
   estDirecteur:  () => ['directeur', 'censeur'].includes(get().session?.role ?? ''),

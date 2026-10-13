@@ -14,7 +14,7 @@ jest.mock('expo-network', () => ({
 const mockFetch = jest.fn();
 (global as any).fetch = mockFetch;
 
-import { api, authEventEmitter, ApiError } from '../../src/services/api/client';
+import { api, authEventEmitter, ApiError, MESSAGE_SESSION_REVOQUEE } from '../../src/services/api/client';
 
 function reponseOk(data: any, status = 200) {
   return {
@@ -155,6 +155,42 @@ describe('401 avec refresh token disponible (B5)', () => {
     expect(mockFetch).toHaveBeenCalledTimes(2); // /test + /auth/refresh, pas de rejouer
     expect(listener).toHaveBeenCalledTimes(1);
 
+    off();
+  });
+});
+
+describe('refresh refusé car trop d\'appareils (SESSION_REVOQUEE)', () => {
+  it('déconnexion avec le message explicatif, code SESSION_REVOQUEE', async () => {
+    api.setRefreshToken('ancien.refresh.token');
+    mockFetch
+      .mockResolvedValueOnce(reponseErreur(401, { erreur: 'Token expiré' }))
+      .mockResolvedValueOnce(reponseErreur(401, { code: 'SESSION_REVOQUEE', erreur: 'trop d\'appareils' }));
+
+    const listener = jest.fn();
+    const off = authEventEmitter.on('deconnexion', listener);
+
+    await expect(api.get('/test')).rejects.toMatchObject({ code: 'SESSION_REVOQUEE', statusCode: 401 });
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith({ motif: 'session_revoquee', message: MESSAGE_SESSION_REVOQUEE });
+    off();
+  });
+
+  it('le drapeau ne fuit pas : un refus ordinaire ensuite reste SESSION_EXPIREE sans message', async () => {
+    api.setRefreshToken('r1');
+    mockFetch
+      .mockResolvedValueOnce(reponseErreur(401, {}))
+      .mockResolvedValueOnce(reponseErreur(401, { code: 'SESSION_REVOQUEE' }));
+    await expect(api.get('/a')).rejects.toMatchObject({ code: 'SESSION_REVOQUEE' });
+
+    api.setRefreshToken('r2');
+    mockFetch
+      .mockResolvedValueOnce(reponseErreur(401, {}))
+      .mockResolvedValueOnce(reponseErreur(401, { code: 'NON_AUTORISE' }));
+    const listener = jest.fn();
+    const off = authEventEmitter.on('deconnexion', listener);
+    await expect(api.get('/b')).rejects.toMatchObject({ code: 'SESSION_EXPIREE' });
+    expect(listener).toHaveBeenCalledWith();      // aucun message
     off();
   });
 });

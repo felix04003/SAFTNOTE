@@ -395,3 +395,15 @@ describe('parent multi-écoles (3.4)', () => {
     expect(mockExecAsync).not.toHaveBeenCalled();
   });
 });
+
+
+describe('message de connexion (session fermée)', () => {
+  it('definirMessageConnexion garde le message jusqu\'à ce qu\'il soit effacé, et deconnexion() n\'y touche pas', async () => {
+    useAuthStore.getState().definirMessageConnexion('Vous avez été déconnecté : trop d\'appareils');
+    await useAuthStore.getState().deconnexion();
+    expect(useAuthStore.getState().messageConnexion).toBe('Vous avez été déconnecté : trop d\'appareils');
+
+    useAuthStore.getState().definirMessageConnexion(null);
+    expect(useAuthStore.getState().messageConnexion).toBeNull();
+  });
+});
