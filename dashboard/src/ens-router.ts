@@ -10,9 +10,11 @@ export const ENS_TITRES: Record<string, string> = {
 export const PAGE_HOOKS: Record<string, () => void> = {};
 
 export function goto(id: string) {
-  document.querySelectorAll<HTMLElement>('.page').forEach(p => (p.style.display = 'none'));
+  // Le CSS n'affiche une page que si elle porte .active (.page{display:none} .page.active{display:block}) :
+  // basculer seulement style.display laissait toutes les pages masquées
+  document.querySelectorAll<HTMLElement>('.page').forEach(p => { p.style.display = 'none'; p.classList.remove('active'); });
   const page = document.getElementById('page-' + id);
-  if (page) page.style.display = '';
+  if (page) { page.style.display = ''; page.classList.add('active'); }
   const titre = document.getElementById('page-titre');
   if (titre) titre.textContent = ENS_TITRES[id] || id;
   location.hash = id;

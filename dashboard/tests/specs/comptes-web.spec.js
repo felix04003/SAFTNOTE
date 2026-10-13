@@ -192,3 +192,33 @@ test('(f) parent.html : sélecteur d\'école, bascule vers l\'autre établisseme
   await expect.poll(() => bascule).toEqual({ etablissement_code: 'B' });
   await expect.poll(() => page.evaluate(() => sessionStorage.getItem('em_token'))).toBe('t2');
 });
+
+test('(g) paramètres : le directeur règle la politique de sécurité', async ({ page }) => {
+  let envoye;
+  await page.addInitScript(() => {
+    sessionStorage.setItem('em_token', 't');
+    localStorage.setItem('em_user', JSON.stringify({ id: 'd1', prenom: 'Awa', nom: 'Diop', role: 'directeur', etablissement_nom: 'Lycée A' }));
+  });
+  await page.route('**/api/v1/**', (route) => {
+    const req = route.request();
+    if (req.url().endsWith('/securite/politique')) {
+      if (req.method() === 'PUT') { envoye = req.postDataJSON(); return json(route, 200, { succes: true, data: envoye }); }
+      return json(route, 200, { succes: true, data: { mdp_longueur_min: 8, session_max_simultanees: 3, blocage_nb_tentatives: 5, blocage_duree_minutes: 15 } });
+    }
+    return json(route, 200, OK_VIDE);
+  });
+
+  await page.goto('/index.html');
+  await page.click('.nav-item[data-page="parametres"]');
+  await expect(page.locator('#pol-sessions')).toHaveValue('3');
+
+  await page.fill('#pol-blocage', '4');                         // hors bornes : refusé sans requête
+  await page.click('#btn-politique-save');
+  await expect(page.locator('#politique-err')).toContainText('durée du blocage');
+  expect(envoye).toBeUndefined();
+
+  await page.fill('#pol-blocage', '30');
+  await page.fill('#pol-sessions', '5');
+  await page.click('#btn-politique-save');
+  await expect.poll(() => envoye).toEqual({ mdp_longueur_min: 8, session_max_simultanees: 5, blocage_nb_tentatives: 5, blocage_duree_minutes: 30 });
+});

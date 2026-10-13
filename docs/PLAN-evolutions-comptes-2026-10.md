@@ -36,7 +36,7 @@ Règles d'exécution (valables pour toutes les phases) :
 | 2.1 Audit des mots de passe faibles | ✅ fait (`npm run auditer:mots-de-passe`) |
 | 2.2 Mot de passe provisoire par SMS | ✅ fait (`POST /enseignants`, `POST /enseignants/:id/mot-de-passe-provisoire`, bouton « 🔑 MDP » du dashboard) |
 | 2.3 Blocage de connexion par établissement | ✅ fait (migration 022) |
-| 2.4 Réglage de la politique par le directeur | ✅ API faite (`GET/PUT /securite/politique`, journal d'audit) ; écran du dashboard non fait |
+| 2.4 Réglage de la politique par le directeur | ✅ fait (`GET/PUT /securite/politique`, journal d audit, carte « Sécurité » de la page Paramètres du dashboard) |
 | 2.5 Gabarits SMS en un segment | ✅ fait (voir ci-dessous) |
 | 2.6 Fiabiliser et plafonner les notifications | ✅ fait (voir ci-dessous) |
 | Phase 3 | ✅ 3.1, 3.2, 3.3, 3.6 faites (migration 024) ; 3.5 couverte par 2 suites d'intégration ; 3.4 ✅ faite (API, `parent-login.html`, sélecteur de `parent.html`, mobile : connexion avec choix d'école et bascule depuis le profil) |

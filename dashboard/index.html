@@ -272,10 +272,13 @@
             </div>
           </div>
           <div class="carte">
-            <div class="ch"><span>🔒</span><span class="ct">Sécurité</span></div>
+            <div class="ch"><span>🔒</span><span class="ct">Sécurité</span>
+              <button id="btn-politique-save" class="btn btn-p btn-sm" onclick="PageParametres.sauvegarderPolitique()" style="margin-left:auto">Enregistrer</button></div>
             <div class="cb">
-              <div class="fr"><div class="fg"><label class="fl">Durée session (h)</label><input class="fi" value="8" type="number"></div><div class="fg"><label class="fl">Tentatives avant blocage</label><input class="fi" value="5" type="number"></div></div>
-              <div class="fg"><label class="fl">Durée OTP (min)</label><input class="fi" value="10" type="number"></div>
+              <div class="login-err" id="politique-err" role="alert"></div>
+              <div class="fr"><div class="fg"><label class="fl" for="pol-mdp-longueur">Longueur minimale du mot de passe (8 à 32)</label><input class="fi" id="pol-mdp-longueur" type="number" min="8" max="32"></div><div class="fg"><label class="fl" for="pol-sessions">Appareils connectés en même temps (1 à 5)</label><input class="fi" id="pol-sessions" type="number" min="1" max="5"></div></div>
+              <div class="fr"><div class="fg"><label class="fl" for="pol-tentatives">Tentatives avant blocage (3 à 10)</label><input class="fi" id="pol-tentatives" type="number" min="3" max="10"></div><div class="fg"><label class="fl" for="pol-blocage">Durée du blocage en minutes (5 à 120)</label><input class="fi" id="pol-blocage" type="number" min="5" max="120"></div></div>
+              <div style="font-size:11.5px;color:var(--g500);margin-bottom:12px">Un mot de passe contient toujours une minuscule, une majuscule et un chiffre ; cette règle ne peut pas être assouplie. Chaque modification est inscrite au journal d'audit.</div>
               <button class="btn btn-d btn-sm" onclick="toast('Journal exporté','s')">📥 Journal d'audit</button>
             </div>
           </div>
