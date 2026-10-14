@@ -188,6 +188,7 @@ Tous les 9 domaines sont **implémentés et testés** (60/60 tests passent).
   1. `backend-lint-test` — ESLint + Jest (379 tests, couverture, services Postgres/Redis réels)
   2. `backend-docker` — Build image Docker (après tests)
   3. `mobile-typecheck` — TypeScript `tsc --noEmit`
+  4. `dashboard-test` — Vitest + build Vite ; `dashboard-e2e` — Playwright (`dashboard/tests/`) contre un vrai backend (PostgreSQL 16 + Redis 7 éphémères, dashboard servi par `dashboard/tests/serve-e2e.js` qui relaie `/api` : la CSP n'autorise que la même origine). Variables du relais : `E2E_PORT` / `E2E_API_PORT` (jamais `PORT`, réservé au backend)
 - **ESLint** : `backend/.eslintrc.js` — 0 erreurs, <60 warnings
 
 ### 🖥️ Dashboard — Architecture

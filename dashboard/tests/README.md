@@ -34,7 +34,7 @@ vers le backend, donc tout est de même origine :
 cd backend && npm run migrate && npm run seed:test && npm start        # :3010
 # 2. Dashboard construit pour l'API de même origine, puis servi avec le relais
 cd dashboard && VITE_API_BASE=http://localhost:3003/api/v1 npm run build
-node tests/serve-e2e.js                                                 # :3003
+node tests/serve-e2e.js                                                 # :3003 (E2E_PORT, E2E_API_PORT pour changer)
 # 3. Tests
 cd tests && npx playwright test
 ```
@@ -73,3 +73,8 @@ npm run test:report       # ouvrir le rapport HTML
 | `specs/ecole.spec.js` | Création d'un établissement par le wizard `inscription.html` |
 | `specs/comptes-web.spec.js` | Parcours comptes (mot de passe provisoire, jeton expiré, session fermée, parent multi-écoles, politique), API simulée |
 | `specs/workflow-complet.spec.js` | Workflow complet : connexion → classe → élève → évaluation → notes |
+
+## En CI
+
+Le job `dashboard-e2e` de `.github/workflows/ci.yml` rejoue exactement cette procédure (PostgreSQL et Redis éphémères, migrations,
+seeds, build, relais, `npx playwright test`) ; le rapport et les captures sont téléversés en artefact si un test échoue.
