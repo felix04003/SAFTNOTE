@@ -21,7 +21,17 @@ export const MESSAGE_SESSION_REVOQUEE = 'Vous avez été déconnecté : trop d\'
 
 let rafraichissementEnCours: Promise<boolean> | null = null;
 
+// Génération de session : change à chaque bascule d'établissement (parent). Une requête lancée avant la bascule
+// et terminée après n'est jamais livrée à son appelant (voir request) : sa réponse concerne l'ancienne école et
+// ne doit ni s'afficher dans la page remise à zéro, ni déclencher une purge de session sur un 401.
+let generationSession = 0;
+const jamais = <T>() => new Promise<T>(() => { /* ne se résout ni ne se rejette : l'appelant est abandonné */ });
+
 export const Api = {
+  /** À appeler quand la session change d'école : abandonne toutes les requêtes en vol. */
+  nouvelleGeneration(): number { return ++generationSession; },
+  generation(): number { return generationSession; },
+
   /**
    * Tente un rafraîchissement du token via POST /auth/refresh, en fetch
    * direct (pas Api.request) pour éviter toute récursion. Persiste le
@@ -76,6 +86,7 @@ export const Api = {
     params?: Record<string, any>,
     opts: { dejaRafraichi?: boolean } = {}
   ): Promise<T> {
+    const generation = generationSession;
     const token = sessionStorage.getItem(CONFIG.TOKEN_KEY);
     const url = new URL(CONFIG.API_BASE + path);
     if (params) {
@@ -89,6 +100,7 @@ export const Api = {
     if (body != null) fetchOpts.body = JSON.stringify(body);
 
     const res = await fetch(url.toString(), fetchOpts);
+    if (generation !== generationSession) return jamais<T>();   // avant tout : pas de rejeu ni de purge sur une réponse périmée
 
     if (res.status === 401) {
       // Tenter un refresh une seule fois puis rejouer la requête, sinon
@@ -114,6 +126,7 @@ export const Api = {
     }
 
     const data = await res.json();
+    if (generation !== generationSession) return jamais<T>();
 
     // Mot de passe provisoire : le serveur refuse tout sauf le changement.
     if (res.status === 403 && data.code === 'MDP_CHANGEMENT_REQUIS') {

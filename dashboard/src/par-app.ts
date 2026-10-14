@@ -71,6 +71,7 @@ export const ParApp = {
       if (d.refresh_token) sessionStorage.setItem(CONFIG.REFRESH_TOKEN_KEY, d.refresh_token);
       localStorage.setItem(CONFIG.USER_KEY, JSON.stringify(d.utilisateur));
       localStorage.removeItem('par_enfant_actif');    // les enfants changent avec l'école
+      Api.nouvelleGeneration();                       // les requêtes de l'ancienne école encore en vol sont abandonnées
 
       if (ParApp._ecranVide) { window.location.reload(); return; }
 

@@ -216,6 +216,44 @@ test('(f) parent.html : sélecteur d\'école, bascule sans rechargement de la pa
   expect(await page.evaluate(() => window.__avantBascule)).toBe(true);
 });
 
+test('(f bis) bascule d\'école : une réponse de l\'ancienne école arrivée en retard n\'est pas affichée', async ({ page }) => {
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem('em_token')) return;
+    sessionStorage.setItem('em_token', 't1');
+    localStorage.setItem('em_user', JSON.stringify({ id: 'p1', prenom: 'Papa', nom: 'Ndiaye', role: 'parent', etablissement_nom: 'Lycée A' }));
+  });
+  await page.route('**/api/v1/**', async (route) => {
+    const req = route.request();
+    const url = req.url();
+    const dansB = (req.headers()['authorization'] || '') === 'Bearer t2';
+    if (url.endsWith('/auth/mes-etablissements')) {
+      return json(route, 200, { succes: true, data: [{ code: 'A', nom: 'Lycée A', courant: !dansB }, { code: 'B', nom: 'Collège B', courant: dansB }] });
+    }
+    if (url.endsWith('/parents/moi/enfants')) {
+      return json(route, 200, { succes: true, data: [{ eleve_utilisateur_id: dansB ? 'e2' : 'e1', prenom: dansB ? 'Aida' : 'Moussa', nom: 'Ndiaye', classe: dansB ? '5e B' : '6e A' }] });
+    }
+    if (url.endsWith('/auth/changer-etablissement')) {
+      return json(route, 200, { succes: true, data: { token: 't2', refresh_token: 'r2', utilisateur: { id: 'p2', prenom: 'Papa', nom: 'Ndiaye', role: 'parent', etablissement_nom: 'Collège B' } } });
+    }
+    if (url.endsWith('/notifications')) {
+      if (dansB) return json(route, 200, { succes: true, data: { total: 0 } });
+      await new Promise((r) => setTimeout(r, 1500));            // l'ancienne école répond APRÈS la bascule
+      return json(route, 200, { succes: true, data: { total: 9, categories: [] } });
+    }
+    return json(route, 200, OK_VIDE);
+  });
+
+  await page.goto('/parent.html');
+  await expect(page.locator('#par-ecole-sel')).toBeVisible();
+  await page.locator('#par-ecole-sel').selectOption('B');
+  await expect(page.locator('#sb-etab-nom')).toHaveText('Collège B');
+
+  // Laisser arriver la réponse tardive de l'ancienne école (1,5 s) : le badge ne doit jamais passer à 9
+  await page.waitForTimeout(2200);
+  await expect(page.locator('#notif-badge')).toHaveText('0');
+  await expect(page.locator('#notif-badge')).not.toHaveClass(/show/);
+});
+
 test('(g) paramètres : le directeur règle la politique de sécurité', async ({ page }) => {
   let envoye;
   await page.addInitScript(() => {
