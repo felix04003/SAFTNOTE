@@ -160,24 +160,31 @@ test('(e) parent présent dans deux écoles : code SMS sans code établissement,
   expect(corps[2]).toEqual({ ticket: 'ticket-signe-0123456789', etablissement_code: 'B' });
 });
 
-test('(f) parent.html : sélecteur d\'école, bascule vers l\'autre établissement', async ({ page }) => {
-  let bascule;
+test('(f) parent.html : sélecteur d\'école, bascule sans rechargement de la page', async ({ page }) => {
+  const bascules = [];
   await page.addInitScript(() => {
-    if (sessionStorage.getItem('em_token')) return;       // le rechargement après bascule ne doit pas réinitialiser la session
+    if (sessionStorage.getItem('em_token')) return;
     sessionStorage.setItem('em_token', 't1');
     localStorage.setItem('em_user', JSON.stringify({ id: 'p1', prenom: 'Papa', nom: 'Ndiaye', role: 'parent', etablissement_nom: 'Lycée A' }));
   });
   await page.route('**/api/v1/**', (route) => {
-    const url = route.request().url();
+    const req = route.request();
+    const url = req.url();
+    const dansB = (req.headers()['authorization'] || '') === 'Bearer t2';
     if (url.endsWith('/auth/mes-etablissements')) {
-      return json(route, 200, { succes: true, data: [{ code: 'A', nom: 'Lycée A', courant: true }, { code: 'B', nom: 'Collège B', courant: false }] });
+      return json(route, 200, { succes: true, data: [{ code: 'A', nom: 'Lycée A', courant: !dansB }, { code: 'B', nom: 'Collège B', courant: dansB }] });
     }
     if (url.endsWith('/parents/moi/enfants')) {
-      return json(route, 200, { succes: true, data: [{ eleve_utilisateur_id: 'e1', prenom: 'Moussa', nom: 'Ndiaye', classe: '6e A' }] });
+      // Les enfants dépendent de l'école de la session
+      return json(route, 200, { succes: true, data: [dansB
+        ? { eleve_utilisateur_id: 'e2', prenom: 'Aida', nom: 'Ndiaye', classe: '5e B' }
+        : { eleve_utilisateur_id: 'e1', prenom: 'Moussa', nom: 'Ndiaye', classe: '6e A' }] });
     }
     if (url.endsWith('/auth/changer-etablissement')) {
-      bascule = route.request().postDataJSON();
-      return json(route, 200, { succes: true, data: { token: 't2', refresh_token: 'r2', utilisateur: { id: 'p2', prenom: 'Papa', nom: 'Ndiaye', role: 'parent', etablissement_nom: 'Collège B' } } });
+      const corps = req.postDataJSON();
+      bascules.push(corps.etablissement_code);
+      const versB = corps.etablissement_code === 'B';
+      return json(route, 200, { succes: true, data: { token: versB ? 't2' : 't3', refresh_token: 'r2', utilisateur: { id: versB ? 'p2' : 'p1', prenom: 'Papa', nom: 'Ndiaye', role: 'parent', etablissement_nom: versB ? 'Collège B' : 'Lycée A' } } });
     }
     return json(route, 200, OK_VIDE);
   });
@@ -187,17 +194,26 @@ test('(f) parent.html : sélecteur d\'école, bascule vers l\'autre établisseme
   await expect(sel).toBeVisible();
   await expect(sel.locator('option')).toHaveText(['Lycée A', 'Collège B']);
   await expect(sel).toHaveValue('A');
+  await expect(page.locator('#par-enfant-wrap')).toContainText('Moussa');
 
-  // Choisir une école stocke la nouvelle session puis RECHARGE la page (par-app.ts) : attendre ce chargement avant
-  // de lire le navigateur, sinon page.evaluate peut tomber pendant la navigation (« Execution context was
-  // destroyed »). L'écouteur est posé avant l'action, pour ne pas manquer un rechargement rapide.
-  const rechargement = page.waitForEvent('load');
+  // Marqueur posé dans la page : s'il survit à la bascule, la page n'a pas été rechargée
+  await page.evaluate(() => { window.__avantBascule = true; });
+
   await sel.selectOption('B');
-  await rechargement;
-
-  expect(bascule).toEqual({ etablissement_code: 'B' });
+  await expect(page.locator('#sb-etab-nom')).toHaveText('Collège B');
+  await expect(page.locator('#par-enfant-wrap')).toContainText('Aida');       // enfant de la nouvelle école
+  await expect(page.locator('#par-enfant-wrap')).not.toContainText('Moussa'); // plus rien de l'ancienne
+  await expect(sel).toHaveValue('B');
+  await expect(sel).toBeEnabled();
+  expect(await page.evaluate(() => window.__avantBascule)).toBe(true);        // pas de rechargement
   expect(await page.evaluate(() => sessionStorage.getItem('em_token'))).toBe('t2');
-  await expect(page.locator('#sb-etab-nom')).toHaveText('Collège B');   // la page rechargée affiche l'école choisie
+
+  // Retour dans la première école : une seule requête par choix (pas d'écouteurs empilés)
+  await sel.selectOption('A');
+  await expect(page.locator('#sb-etab-nom')).toHaveText('Lycée A');
+  await expect(page.locator('#par-enfant-wrap')).toContainText('Moussa');
+  expect(bascules).toEqual(['B', 'A']);
+  expect(await page.evaluate(() => window.__avantBascule)).toBe(true);
 });
 
 test('(g) paramètres : le directeur règle la politique de sécurité', async ({ page }) => {

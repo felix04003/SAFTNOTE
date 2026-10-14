@@ -43,7 +43,8 @@ export const ParApp = {
     }
   },
 
-  // Crée le <select> d'écoles ; basculer ouvre une session dans l'autre école (l'ancienne reste valable)
+  // Crée le <select> d'écoles ; basculer ouvre une session dans l'autre école (l'ancienne reste valable).
+  // `onchange` (et non addEventListener) : le sélecteur est reconstruit à chaque bascule, sans empiler d'écouteurs.
   _construireSelecteurEcole(ecoles: Array<{ code: string; nom: string; courant: boolean }>, sel: HTMLSelectElement) {
     sel.textContent = '';
     ecoles.forEach(function(e) {
@@ -54,21 +55,52 @@ export const ParApp = {
       sel.appendChild(opt);
     });
     sel.style.display = '';
-    sel.addEventListener('change', async function() {
-      sel.disabled = true;
-      try {
-        var res = await Api.post('/auth/changer-etablissement', { etablissement_code: sel.value });
-        var d: any = res.data;
-        sessionStorage.setItem(CONFIG.TOKEN_KEY, d.token);
-        if (d.refresh_token) sessionStorage.setItem(CONFIG.REFRESH_TOKEN_KEY, d.refresh_token);
-        localStorage.setItem(CONFIG.USER_KEY, JSON.stringify(d.utilisateur));
-        localStorage.removeItem('par_enfant_actif');    // les enfants changent avec l'école
-        window.location.reload();
-      } catch (e) {
-        sel.disabled = false;
-        var courante = ecoles.find(function(x) { return x.courant; });
-        if (courante) sel.value = courante.code;
-      }
+    sel.disabled = false;
+    sel.onchange = function() { ParApp._basculerEcole(sel.value, ecoles, sel); };
+  },
+
+  // Passe dans une autre école SANS recharger la page : nouvelle session, puis tout ce qui dépend de l'école est
+  // remis à zéro (pages, enfant choisi, notifications) et rechargé. Seul l'écran « aucun enfant » (qui a remplacé
+  // tout le corps de la page) ne peut pas être restauré : il recharge la page.
+  async _basculerEcole(code: string, ecoles: Array<{ code: string; nom: string; courant: boolean }>, sel: HTMLSelectElement) {
+    sel.disabled = true;
+    try {
+      var res = await Api.post('/auth/changer-etablissement', { etablissement_code: code });
+      var d: any = res.data;
+      sessionStorage.setItem(CONFIG.TOKEN_KEY, d.token);
+      if (d.refresh_token) sessionStorage.setItem(CONFIG.REFRESH_TOKEN_KEY, d.refresh_token);
+      localStorage.setItem(CONFIG.USER_KEY, JSON.stringify(d.utilisateur));
+      localStorage.removeItem('par_enfant_actif');    // les enfants changent avec l'école
+
+      if (ParApp._ecranVide) { window.location.reload(); return; }
+
+      ParApp._restaurerModeles();                     // aucune donnée de l'ancienne école ne reste affichée
+      Notifs.reinitialiser();
+      await ParApp._demarrer(false);
+    } catch (e) {
+      sel.disabled = false;
+      var courante = ecoles.find(function(x) { return x.courant; });
+      if (courante) sel.value = courante.code;
+    }
+  },
+
+  // Gabarits d'origine des pages et du bloc « enfant » : pris avant toute donnée, remis à la bascule d'école
+  _modeles: new Map<string, string>(),
+  _ecranVide: false,
+  // Défini plus bas (il utilise goto et Notifs) ; déclaré ici pour le typage
+  _demarrer: (async function(_premiere: boolean) { /* remplacé ci-dessous */ }) as (premiere: boolean) => Promise<void>,
+
+  _memoriserModeles() {
+    ParApp._modeles.clear();
+    document.querySelectorAll<HTMLElement>('.page').forEach(function(p) { ParApp._modeles.set(p.id, p.innerHTML); });
+    var wrap = document.getElementById('par-enfant-wrap');
+    if (wrap) ParApp._modeles.set('par-enfant-wrap', wrap.innerHTML);
+  },
+
+  _restaurerModeles() {
+    ParApp._modeles.forEach(function(html, id) {
+      var el = document.getElementById(id);
+      if (el) el.innerHTML = html;
     });
   },
 
@@ -106,41 +138,41 @@ export const ParApp = {
       '</option>';
     }).join('');
     if (ParApp._enfantActif) sel.value = ParApp._enfantActif.eleve_utilisateur_id;
-    sel.addEventListener('change', function() {
+    sel.onchange = function() {
       ParApp._activerEnfant(sel.value);
       var pageActive = document.querySelector('.page.active');
       if (pageActive) {
         var id = (pageActive as HTMLElement).id.replace('page-', '');
         if (PAR_HOOKS[id]) PAR_HOOKS[id]();
       }
-    });
+    };
   },
 };
 
 (window as any).ParApp = ParApp;
 
-document.addEventListener('DOMContentLoaded', async function() {
-  if (!Auth.requireAuth()) return;
+// Démarrage (premier affichage) et redémarrage après un changement d'école
+ParApp._demarrer = async function(premiere: boolean) {
   var user = Auth.getUser();
-  var role = (user && user.role) ? user.role.toLowerCase() : '';
-  if (role !== 'parent') { window.location.href = 'index.html'; return; }
-
   var ecoles = await ParApp._chargerEcoles();
   await ParApp._chargerEnfants();
   if (!ParApp._enfants.length) {
+    ParApp._ecranVide = true;
     document.body.innerHTML = '<div style="display:flex;flex-direction:column;gap:12px;align-items:center;justify-content:center;min-height:100vh;font-family:Sora,sans-serif;color:#64748b"><div>Aucun enfant lié à votre compte dans cet établissement.</div><select id="par-ecole-sel" aria-label="Établissement" style="display:none;padding:6px 10px;border-radius:6px;border:1px solid #cbd5e1"></select></div>';
     var selVide = document.getElementById('par-ecole-sel') as HTMLSelectElement;
     if (ecoles.length > 1) ParApp._construireSelecteurEcole(ecoles, selVide);
     return;
   }
   var selEcole = document.getElementById('par-ecole-sel') as HTMLSelectElement | null;
-  if (selEcole && ecoles.length > 1) ParApp._construireSelecteurEcole(ecoles, selEcole);
+  if (selEcole) {
+    if (ecoles.length > 1) ParApp._construireSelecteurEcole(ecoles, selEcole);
+    else selEcole.style.display = 'none';
+  }
 
   var dernier = localStorage.getItem('par_enfant_actif');
   ParApp._activerEnfant(dernier);
   ParApp._peuplerSidebar();
   ParApp._peuplerSelecteur();
-  Notifs.init();
 
   var dateEl = document.getElementById('ph-sous-date');
   if (dateEl) {
@@ -152,10 +184,24 @@ document.addEventListener('DOMContentLoaded', async function() {
     dateEl.textContent = etab + ' · ' + dateStr;
   }
 
-  var logoutBtn = document.getElementById('btn-logout');
-  if (logoutBtn) logoutBtn.addEventListener('click', function(e) { e.preventDefault(); Auth.logout(); });
+  if (premiere) {
+    Notifs.init();
+    var logoutBtn = document.getElementById('btn-logout');
+    if (logoutBtn) logoutBtn.addEventListener('click', function(e) { e.preventDefault(); Auth.logout(); });
+  }
 
+  // Page affichée : celle du hash (rester où l'on est après une bascule), sinon le tableau de bord
   var hash = location.hash.slice(1);
   if (hash && PAR_TITRES[hash]) goto(hash);
   else goto('par-dashboard');
+};
+
+document.addEventListener('DOMContentLoaded', async function() {
+  if (!Auth.requireAuth()) return;
+  var user = Auth.getUser();
+  var role = (user && user.role) ? user.role.toLowerCase() : '';
+  if (role !== 'parent') { window.location.href = 'index.html'; return; }
+
+  ParApp._memoriserModeles();
+  await ParApp._demarrer(true);
 });
