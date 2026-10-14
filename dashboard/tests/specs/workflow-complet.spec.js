@@ -56,6 +56,21 @@ async function creneauEvaluationLibre(request, entetes) {
   return null;
 }
 
+const AFFECTATION_SEED = '77777777-7777-7777-7777-777777777777';
+const PERIODE_SEED = '88888888-8888-8888-8888-888888888888';
+
+// Évaluation neuve (non publiée) créée par l'API sur un créneau libre ; échoue explicitement si les 35 sont pris
+async function creerEvaluationApi(request, entetes, titre) {
+  const creneau = await creneauEvaluationLibre(request, entetes);
+  expect(creneau, 'Les 35 créneaux (type, numéro) de l\'affectation de test sont pris : repartir d\'une base neuve ou supprimer les évaluations E2E (voir README)').not.toBeNull();
+  const creation = await request.post('/api/v1/evaluations', {
+    headers: entetes,
+    data: { affectation_id: AFFECTATION_SEED, periode_id: PERIODE_SEED, type: creneau.type, numero: creneau.numero, note_max: 20, titre, date_evaluation: '2025-11-20' },
+  });
+  expect(creation.status()).toBe(201);
+  return (await creation.json()).data.id;
+}
+
 // ── Étape 1 : connexion ──────────────────────────────────────────
 test('étape 1 — connexion directeur', async ({ page }) => {
   await seConnecter(page);
@@ -148,7 +163,8 @@ test('étape 3 — créer une classe via le modal', async ({ page }) => {
 });
 
 // ── Étape 4 : inscrire un élève ──────────────────────────────────
-test('étape 4 — inscrire un élève via le modal', async ({ page }) => {
+test('étape 4 — inscrire un élève via le modal', async ({ page, request }) => {
+  const entetes = await entetesApi(request);
   await seConnecter(page);
 
   // Aller sur la page Élèves
@@ -168,7 +184,9 @@ test('étape 4 — inscrire un élève via le modal', async ({ page }) => {
   }, { timeout: 8000 });
 
   // Remplir le formulaire
-  await page.fill('#m-eleve-prenom', 'Fatou');
+  // Nom unique : une inscription par exécution, retrouvée ensuite côté serveur
+  const prenom = 'Fatou' + (Date.now() % 100000);
+  await page.fill('#m-eleve-prenom', prenom);
   await page.fill('#m-eleve-nom', 'Ndiaye');
   await page.fill('#m-eleve-ddn', '2009-05-20');
   await page.selectOption('#m-eleve-genre', 'F');
@@ -184,17 +202,12 @@ test('étape 4 — inscrire un élève via le modal', async ({ page }) => {
   // Soumettre
   await page.click('#btn-inscrire-eleve');
 
-  // Attendre la confirmation (toast ou fermeture modal)
-  await page.waitForFunction(() => {
-    const modal = document.getElementById('m-eleve');
-    const toast = document.getElementById('toast-container');
-    const modalHidden = modal && (
-      window.getComputedStyle(modal).display === 'none' ||
-      !modal.classList.contains('visible') && !modal.classList.contains('open')
-    );
-    const toastVisible = toast && toast.children.length > 0;
-    return modalHidden || toastVisible;
-  }, { timeout: 8000 });
+  // Succès réel : la fenêtre se ferme (elle reste ouverte sur une erreur) ET l'élève existe côté serveur
+  await expect(page.locator('#m-eleve')).not.toHaveClass(/open/, { timeout: 8000 });
+  await expect.poll(async () => {
+    const res = await request.get(`/api/v1/eleves?recherche=${prenom}`, { headers: entetes });
+    return JSON.stringify((await res.json()).data || []).includes(prenom);
+  }, { timeout: 8000 }).toBe(true);
 });
 
 // ── Étape 5 : vérifier que les élèves s'affichent ───────────────
@@ -257,15 +270,10 @@ test('étape 6 — créer une évaluation via le modal', async ({ page, request 
       txt.includes('Aucune') || txt.includes('Choisir') || txt.includes('—');
   }, { timeout: 8000 });
 
-  // Vérifier si des affectations sont disponibles
+  // Le seed 02 crée une affectation (enseignant × matière × classe) : son absence est une anomalie, pas un cas à ignorer
   const affectSelect = page.locator('#ev-affectation');
   const affectOptions = await affectSelect.locator('option').all();
-  if (affectOptions.length <= 1) {
-    // Pas d'affectations disponibles — fermer le modal et passer le test
-    await page.click('button:has-text("Annuler")', { timeout: 2000 }).catch(() => {});
-    test.skip(); // Pas d'affectations dans la base de test
-    return;
-  }
+  expect(affectOptions.length, 'aucune affectation proposée : seeds de test non appliqués ?').toBeGreaterThan(1);
 
   // Sélectionner la première affectation
   const firstValue = await affectOptions[1].getAttribute('value');
@@ -273,7 +281,7 @@ test('étape 6 — créer une évaluation via le modal', async ({ page, request 
 
   // Créneau (type, numéro) encore libre : la base est conservée entre deux exécutions
   const creneau = await creneauEvaluationLibre(request, entetes);
-  test.skip(!creneau, 'Les 35 créneaux (type, numéro) de l\'affectation de test sont déjà pris : repartir d\'une base neuve');
+  expect(creneau, 'Les 35 créneaux (type, numéro) de l\'affectation de test sont pris : repartir d\'une base neuve ou supprimer les évaluations E2E (voir README)').not.toBeNull();
   const titre = `Devoir E2E ${creneau.type} ${creneau.numero}`;
   await page.selectOption('#ev-type', creneau.type);
   await page.fill('#ev-numero', String(creneau.numero));
@@ -290,70 +298,43 @@ test('étape 6 — créer une évaluation via le modal', async ({ page, request 
 });
 
 // ── Étape 7 : saisir des notes ───────────────────────────────────
-test('étape 7 — saisir des notes depuis le tableau des évaluations', async ({ page }) => {
-  await seConnecter(page);
+test('étape 7 — saisir des notes depuis le tableau des évaluations', async ({ page, request }) => {
+  // Évaluation neuve et non publiée : le bouton "Saisir" de sa ligne existe forcément
+  const entetes = await entetesApi(request);
+  const evaluationId = await creerEvaluationApi(request, entetes, 'Devoir saisie E2E');
 
+  await seConnecter(page);
   await page.click('[data-page="notes"]');
   await expect(page.locator('#page-notes')).toHaveClass(/active/);
 
-  // Attendre que le tableau des évaluations se charge
-  await page.waitForFunction(() => {
-    const tbody = document.getElementById('tb-eval');
-    return tbody && tbody.children.length > 0;
-  }, { timeout: 10000 });
+  // Sa ligne dans le tableau (le gestionnaire de clic porte l'identifiant), puis son bouton "Saisir"
+  const saisirBtn = page.locator(`#tb-eval tr[onclick*="${evaluationId}"] button:has-text("Saisir")`);
+  await expect(saisirBtn).toBeVisible({ timeout: 10000 });
+  await saisirBtn.click();
+  await expect(page.locator('#m-notes')).toBeVisible({ timeout: 5000 });
 
-  // Bouton "Saisir" de la première évaluation non publiée (les publiées affichent "Voir")
-  const saisirBtn = page.locator('#tb-eval button:has-text("Saisir")').first();
-  const hasSaisir = await saisirBtn.count();
+  await page.waitForFunction(() => document.getElementById('tb-notes-saisie')?.children.length, null, { timeout: 8000 });
+  const premierChamp = page.locator('#tb-notes-saisie tr:first-child input[type="number"]').first();
+  await expect(premierChamp).toBeVisible();
+  await premierChamp.fill('14');
+  expect(parseFloat(await premierChamp.inputValue())).toBe(14);
 
-  if (hasSaisir > 0) {
-    await saisirBtn.click();
-
-    const notesModal = page.locator('#m-notes');
-    await expect(notesModal).toBeVisible({ timeout: 5000 });
-
-    // Attendre que les lignes d'élèves soient chargées
-    await page.waitForFunction(() => {
-      const tbody = document.getElementById('tb-notes-saisie');
-      return tbody && tbody.children.length > 0;
-    }, { timeout: 8000 });
-
-    // Saisir une note dans le premier champ
-    const premierChamp = page.locator('#tb-notes-saisie tr:first-child input[type="number"]').first();
-    await expect(premierChamp).toBeVisible();
-    await premierChamp.fill('14');
-
-    // Vérifier que la valeur est bien saisie
-    const valeur = await premierChamp.inputValue();
-    expect(parseFloat(valeur)).toBe(14);
-  } else {
-    // Pas de bouton "Saisir" visible → test passé (tableau peut être vide)
-    test.skip();
-  }
+  // Enregistrer, puis vérifier que la note est réellement stockée côté serveur
+  await page.click('#btn-sauver-notes');
+  await expect.poll(async () => {
+    const res = await request.get(`/api/v1/evaluations/${evaluationId}/notes`, { headers: entetes });
+    return JSON.stringify((await res.json()).data || []);
+  }, { timeout: 8000 }).toMatch(/"valeur":\s*"?14/);
 });
 
 // ── Étape 8 : publier les notes ──────────────────────────────────
 // La publication se fait dans la fenêtre de saisie (#btn-publier-notes), pas dans le tableau.
 // Chaque exécution crée sa propre évaluation (API) : la publication est irréversible, le test
 // reste donc rejouable sur une base conservée. Dépend des seeds 01 à 03 (affectation et période fixes).
-const AFFECTATION_SEED = '77777777-7777-7777-7777-777777777777';
-const PERIODE_SEED = '88888888-8888-8888-8888-888888888888';
-
 test('étape 8 — publier les notes d\'une évaluation', async ({ page, request }) => {
   // 1. Évaluation neuve, créée par l'API avec le compte du directeur
   const entetes = await entetesApi(request);
-  const creneau = await creneauEvaluationLibre(request, entetes);
-  test.skip(!creneau, 'Les 35 créneaux (type, numéro) de l\'affectation de test sont déjà pris : repartir d\'une base neuve');
-
-  const creation = await request.post('/api/v1/evaluations', {
-    headers: entetes,
-    data: {
-      affectation_id: AFFECTATION_SEED, periode_id: PERIODE_SEED, type: creneau.type,
-      numero: creneau.numero, note_max: 20, titre: 'Devoir à publier E2E', date_evaluation: '2025-11-20',
-    },
-  });
-  expect(creation.status()).toBe(201);
-  const evaluationId = (await creation.json()).data.id;
+  const evaluationId = await creerEvaluationApi(request, entetes, 'Devoir à publier E2E');
 
   // 2. Ouvrir sa fenêtre de saisie, saisir une note, publier
   await seConnecter(page);
