@@ -151,7 +151,8 @@ test('étape 3 — créer une classe via le modal', async ({ page }) => {
 
   // Remplir le nom de la classe
   // Nom unique : la base est conservée entre deux exécutions (contrainte d'unicité année/niveau/nom)
-  await page.fill('#m-classe-nom', 'E' + (Date.now() % 100000));
+  const nomClasse = 'E' + (Date.now() % 100000);
+  await page.fill('#m-classe-nom', nomClasse);
   await page.fill('#m-classe-salle', 'Salle E2E');
   await page.fill('#m-classe-effectif', '40');
 
@@ -160,6 +161,9 @@ test('étape 3 — créer une classe via le modal', async ({ page }) => {
 
   // Succès réel : la fenêtre se ferme (elle reste ouverte sur une erreur serveur)
   await expect(page.locator('#m-classe')).not.toHaveClass(/open/, { timeout: 8000 });
+
+  // Et la liste affichée contient la nouvelle classe (la grille est rechargée après la création)
+  await expect(page.locator('#cls-grid')).toContainText(nomClasse, { timeout: 8000 });
 });
 
 // ── Étape 4 : inscrire un élève ──────────────────────────────────
@@ -208,6 +212,10 @@ test('étape 4 — inscrire un élève via le modal', async ({ page, request }) 
     const res = await request.get(`/api/v1/eleves?recherche=${prenom}`, { headers: entetes });
     return JSON.stringify((await res.json()).data || []).includes(prenom);
   }, { timeout: 8000 }).toBe(true);
+
+  // Et la liste affichée : on cherche l'élève par son prénom (la liste est paginée) et sa ligne apparaît
+  await page.locator('#page-eleves input[placeholder="Rechercher…"]').fill(prenom);
+  await expect(page.locator('#tb-eleves tr', { hasText: prenom })).toBeVisible({ timeout: 8000 });
 });
 
 // ── Étape 5 : vérifier que les élèves s'affichent ───────────────
@@ -294,7 +302,17 @@ test('étape 6 — créer une évaluation via le modal', async ({ page, request 
 
   // Succès réel : la fenêtre se ferme (elle reste ouverte sur une erreur) ET l'évaluation existe côté serveur
   await expect(page.locator('#m-evaluation')).not.toHaveClass(/open/, { timeout: 8000 });
-  await expect.poll(async () => (await listerEvaluations(request, entetes)).some((e) => e.titre === titre), { timeout: 8000 }).toBe(true);
+  let evaluationId;
+  await expect.poll(async () => {
+    evaluationId = (await listerEvaluations(request, entetes)).find((e) => e.titre === titre)?.id;
+    return !!evaluationId;
+  }, { timeout: 8000 }).toBe(true);
+
+  // Et le tableau affiché la montre : sa ligne (identifiée par son id), non saisie, avec son type
+  const ligne = page.locator(`#tb-eval tr[onclick*="${evaluationId}"]`);
+  await expect(ligne).toBeVisible({ timeout: 8000 });
+  await expect(ligne).toContainText('Non saisie');
+  await expect(ligne).toContainText(creneau.type);
 });
 
 // ── Étape 7 : saisir des notes ───────────────────────────────────
