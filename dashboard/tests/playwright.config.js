@@ -11,6 +11,8 @@ module.exports = defineConfig({
     headless: true,
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
+    // La trace contient aussi console, réseau et instantanés du DOM ; ouvrir avec : npx playwright show-trace <trace.zip>
+    trace: 'retain-on-failure',
   },
   reporter: [['html', { open: 'never' }], ['list']],
 });

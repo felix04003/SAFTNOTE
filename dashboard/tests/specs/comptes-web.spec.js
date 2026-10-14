@@ -1,5 +1,5 @@
 // @ts-check
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures');
 
 /**
  * E2E Phase 4.5 : parcours web des comptes, API entièrement simulée
@@ -188,9 +188,16 @@ test('(f) parent.html : sélecteur d\'école, bascule vers l\'autre établisseme
   await expect(sel.locator('option')).toHaveText(['Lycée A', 'Collège B']);
   await expect(sel).toHaveValue('A');
 
+  // Choisir une école stocke la nouvelle session puis RECHARGE la page (par-app.ts) : attendre ce chargement avant
+  // de lire le navigateur, sinon page.evaluate peut tomber pendant la navigation (« Execution context was
+  // destroyed »). L'écouteur est posé avant l'action, pour ne pas manquer un rechargement rapide.
+  const rechargement = page.waitForEvent('load');
   await sel.selectOption('B');
-  await expect.poll(() => bascule).toEqual({ etablissement_code: 'B' });
-  await expect.poll(() => page.evaluate(() => sessionStorage.getItem('em_token'))).toBe('t2');
+  await rechargement;
+
+  expect(bascule).toEqual({ etablissement_code: 'B' });
+  expect(await page.evaluate(() => sessionStorage.getItem('em_token'))).toBe('t2');
+  await expect(page.locator('#sb-etab-nom')).toHaveText('Collège B');   // la page rechargée affiche l'école choisie
 });
 
 test('(g) paramètres : le directeur règle la politique de sécurité', async ({ page }) => {

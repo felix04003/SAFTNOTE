@@ -364,6 +364,19 @@ jobs:
         if: failure()
         run: tail -n 200 backend.log
 
+      # Console, erreurs de page, requêtes échouées et navigations de chaque test en échec
+      # (fixtures.js), lisibles ici sans télécharger le rapport
+      - name: Journaux du navigateur des tests en échec
+        if: failure()
+        working-directory: dashboard/tests
+        run: |
+          find test-results -name journal-navigateur.txt 2>/dev/null | sort | while read f; do
+            echo "::group::$f"
+            cat "$f"
+            echo
+            echo "::endgroup::"
+          done
+
       - name: Rapport Playwright
         if: failure()
         uses: actions/upload-artifact@v4

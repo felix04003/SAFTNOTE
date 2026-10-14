@@ -1,5 +1,5 @@
 // @ts-check
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../fixtures');
 
 /**
  * Tests E2E — Création d'un établissement par le wizard inscription.html

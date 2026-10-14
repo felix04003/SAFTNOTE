@@ -82,3 +82,16 @@ npm run test:report       # ouvrir le rapport HTML
 
 Le job `dashboard-e2e` de `.github/workflows/ci.yml` rejoue exactement cette procédure (PostgreSQL et Redis éphémères, migrations,
 seeds, build, relais, `npx playwright test`) ; le rapport et les captures sont téléversés en artefact si un test échoue.
+
+## Diagnostiquer un test en échec
+
+Chaque spec importe `test` depuis `fixtures.js` (et non directement de `@playwright/test`) : tout test en échec
+reçoit un `journal-navigateur.txt` (console, erreurs de page, requêtes échouées, réponses HTTP >= 400, navigations et
+boîtes de dialogue, avec l'instant en ms depuis le début du test) dans `test-results/<test>/`. En CI, l'étape
+« Journaux du navigateur des tests en échec » l'affiche dans le journal du job ; le rapport Playwright (artefact) contient
+en plus la capture, la vidéo et la trace (`npx playwright show-trace test-results/<test>/trace.zip`).
+
+Piège connu : une page qui se recharge d'elle-même (ex. choix d'école de `parent.html`) détruit le contexte d'exécution ;
+un `page.evaluate` lancé à ce moment échoue (« Execution context was destroyed »). Poser `page.waitForEvent('load')`
+AVANT l'action, puis l'attendre. Pour reproduire une instabilité de timing, charger le processeur
+(`node -e "while(true){}"` x 2 par cœur) et utiliser `--repeat-each`.
