@@ -19,7 +19,13 @@ const test = base.test.extend({
     page.on('requestfailed', (r) => note(`[requête échouée] ${r.method()} ${r.url()} : ${r.failure()?.errorText}`));
     page.on('response', (r) => { if (r.status() >= 400) note(`[HTTP ${r.status()}] ${r.request().method()} ${r.url()}`); });
     page.on('framenavigated', (f) => { if (f === page.mainFrame()) note(`[navigation] ${f.url()}`); });
-    page.on('dialog', (d) => note(`[boîte de dialogue ${d.type()}] ${d.message()}`));
+    // Avec un écouteur 'dialog', Playwright ne ferme plus les boîtes de dialogue tout seul : la page resterait figée.
+    // On garde donc le comportement par défaut (fermer) pour toute boîte qu'un test n'a pas prise en charge lui-même
+    // (page.once('dialog', ...) s'exécute juste après cet écouteur ; sa réponse l'emporte, la nôtre échoue sans effet).
+    page.on('dialog', (d) => {
+      note(`[boîte de dialogue ${d.type()}] ${d.message().replace(/\n/g, ' ')}`);
+      setTimeout(() => { d.dismiss().catch(() => { /* déjà traitée par le test */ }); }, 0);
+    });
 
     await use(page);
 

@@ -292,6 +292,10 @@ jobs:
       POSTGRES_DB: ecole_manager_e2e
       POSTGRES_USER: ecole_user
       POSTGRES_PASSWORD: ecole_password_dev
+      # Rôle PostgreSQL dédié à la RLS (migration 019, créé sans mot de passe) : GET /configs/matieres, donc les
+      # listes de matières du dashboard, répondent 500 tant qu'il n'en a pas (étape « Mot de passe du rôle RLS »)
+      POSTGRES_RLS_USER: ecole_app_rls
+      POSTGRES_RLS_PASSWORD: ci_e2e_rls_password
       REDIS_HOST: localhost
       REDIS_PORT: 6379
       JWT_SECRET: ci_e2e_jwt_secret_32_chars_minimum_ok
@@ -323,6 +327,13 @@ jobs:
           npm ci
           node src/utils/migrate.js
           node src/utils/seed-test.js
+
+      # psql sert aussi au parcours (specs/parcours-ecole.spec.js) à fixer le code SMS des parents
+      - name: Mot de passe du rôle RLS
+        run: |
+          command -v psql >/dev/null || sudo apt-get install -y postgresql-client
+          PGPASSWORD="$POSTGRES_PASSWORD" psql -h localhost -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+            -v ON_ERROR_STOP=1 -c "ALTER ROLE ecole_app_rls WITH PASSWORD '$POSTGRES_RLS_PASSWORD'"
 
       - name: Backend — démarrage
         working-directory: backend

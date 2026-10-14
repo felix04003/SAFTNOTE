@@ -48,7 +48,8 @@ Remarques :
   `DELETE FROM notes WHERE evaluation_id IN (SELECT id FROM evaluations WHERE titre LIKE '%E2E%'); DELETE FROM evaluations WHERE titre LIKE '%E2E%';`
 - Les tests de connexion ratée comptent comme tentatives : après 5 échecs le blocage s'applique 15 minutes.
   Pour relancer à la suite : `DELETE FROM tentatives_connexion;`
-- Sans `ecole_app_rls` configuré (`POSTGRES_RLS_*`), `GET /configs/matieres` répond 500 (RLS phase 1) : renseigner ces variables.
+- **Rôle `ecole_app_rls`** (migration 019, créé sans mot de passe) : sans mot de passe, `GET /configs/matieres` répond 500 et les listes de matières du dashboard échouent. Après `migrate` : `ALTER ROLE ecole_app_rls WITH PASSWORD '...'`, et démarrer le backend avec `POSTGRES_RLS_USER` / `POSTGRES_RLS_PASSWORD`.
+- Le parcours (étape 11, connexion des parents par code SMS) remplace le code SMS en base avec `psql` et les variables `POSTGRES_HOST/PORT/DB/USER/PASSWORD` : à définir dans l'environnement des tests ; sans `psql`, l'étape est ignorée avec un message.
 - `comptes-web.spec.js` simule l'API et n'a pas besoin du backend.
 
 ## Variables d'environnement
@@ -75,6 +76,7 @@ npm run test:report       # ouvrir le rapport HTML
 |---------|-------------|
 | `specs/auth.spec.js` | Connexion, déconnexion, redirections |
 | `specs/ecole.spec.js` | Création d'un établissement par le wizard `inscription.html` |
+| `specs/parcours-ecole.spec.js` | Parcours « école complète » en 12 étapes (école, directeur, matières, classes, enseignants, affectations, élèves et parents, évaluations, notes, publication, connexion de chaque profil, isolation entre écoles). Profils : `data/profils-parcours.js`. Agent : `docs/agents/testeur-parcours-web.md` |
 | `specs/comptes-web.spec.js` | Parcours comptes (mot de passe provisoire, jeton expiré, session fermée, parent multi-écoles, politique), API simulée |
 | `specs/workflow-complet.spec.js` | Workflow complet : connexion → classe → élève → évaluation → notes |
 
