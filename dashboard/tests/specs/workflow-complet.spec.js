@@ -30,6 +30,32 @@ async function seConnecter(page) {
   await expect(page.locator('.sidebar')).toBeVisible();
 }
 
+// ── Aides API (création de données de test indépendantes de l'interface) ─────────
+// Une évaluation est unique par (affectation, type, numéro 1 à 5, période) : 7 types × 5 numéros.
+// Chaque test qui en crée une cherche un créneau libre, pour rester rejouable sur une base conservée.
+const TYPES_EVALUATION = ['devoir', 'composition', 'interrogation', 'tp', 'expose', 'oral', 'projet'];
+
+async function entetesApi(request) {
+  const connexion = await request.post('/api/v1/auth/connexion', {
+    data: { identifiant: CREDENTIALS.identifiant, mot_de_passe: CREDENTIALS.mot_de_passe, etablissement_code: CREDENTIALS.etablissement_code },
+  });
+  expect(connexion.ok()).toBeTruthy();
+  return { Authorization: `Bearer ${(await connexion.json()).data.token}` };
+}
+
+async function listerEvaluations(request, entetes) {
+  const res = await request.get('/api/v1/evaluations?limite=100', { headers: entetes });
+  return (await res.json()).data || [];
+}
+
+async function creneauEvaluationLibre(request, entetes) {
+  const pris = new Set((await listerEvaluations(request, entetes)).map((e) => `${e.type}|${e.numero}`));
+  for (let numero = 1; numero <= 5; numero++) {
+    for (const type of TYPES_EVALUATION) if (!pris.has(`${type}|${numero}`)) return { type, numero };
+  }
+  return null;
+}
+
 // ── Étape 1 : connexion ──────────────────────────────────────────
 test('étape 1 — connexion directeur', async ({ page }) => {
   await seConnecter(page);
@@ -117,15 +143,8 @@ test('étape 3 — créer une classe via le modal', async ({ page }) => {
   // Soumettre
   await page.click('#btn-creer-classe');
 
-  // Attendre la fermeture du modal ou un toast de succès
-  // (soit le modal se ferme, soit un toast apparaît)
-  await page.waitForFunction(() => {
-    const modal = document.getElementById('m-classe');
-    const toast = document.getElementById('toast-container');
-    const modalClosed = !modal || !modal.classList.contains('visible') && !modal.classList.contains('open');
-    const toastVisible = toast && toast.children.length > 0;
-    return modalClosed || toastVisible;
-  }, { timeout: 8000 });
+  // Succès réel : la fenêtre se ferme (elle reste ouverte sur une erreur serveur)
+  await expect(page.locator('#m-classe')).not.toHaveClass(/open/, { timeout: 8000 });
 });
 
 // ── Étape 4 : inscrire un élève ──────────────────────────────────
@@ -198,7 +217,8 @@ test('étape 5 — la liste des élèves se charge et affiche des données', asy
 });
 
 // ── Étape 6 : créer une évaluation ──────────────────────────────
-test('étape 6 — créer une évaluation via le modal', async ({ page }) => {
+test('étape 6 — créer une évaluation via le modal', async ({ page, request }) => {
+  const entetes = await entetesApi(request);
   await seConnecter(page);
 
   // Aller sur la page Notes
@@ -251,25 +271,22 @@ test('étape 6 — créer une évaluation via le modal', async ({ page }) => {
   const firstValue = await affectOptions[1].getAttribute('value');
   await affectSelect.selectOption(firstValue);
 
-  // Sélectionner le type et remplir les champs
-  await page.selectOption('#ev-type', 'devoir');
-  // Numéro unique pour la même raison (affectation, type, numéro, période)
-  await page.fill('#ev-numero', String((Date.now() % 90) + 2));
+  // Créneau (type, numéro) encore libre : la base est conservée entre deux exécutions
+  const creneau = await creneauEvaluationLibre(request, entetes);
+  test.skip(!creneau, 'Les 35 créneaux (type, numéro) de l\'affectation de test sont déjà pris : repartir d\'une base neuve');
+  const titre = `Devoir E2E ${creneau.type} ${creneau.numero}`;
+  await page.selectOption('#ev-type', creneau.type);
+  await page.fill('#ev-numero', String(creneau.numero));
   await page.fill('#ev-note-max', '20');
   await page.fill('#ev-date', '2025-03-18');
-  await page.fill('#ev-titre', 'Devoir E2E Test');
+  await page.fill('#ev-titre', titre);
 
   // Soumettre
   await page.click('#btn-creer-eval');
 
-  // Attendre la fermeture du modal ou toast
-  await page.waitForFunction(() => {
-    const modal = document.getElementById('m-evaluation');
-    const toast = document.getElementById('toast-container');
-    const modalHidden = modal && !modal.classList.contains('visible') && !modal.classList.contains('open');
-    const toastVisible = toast && toast.children.length > 0;
-    return modalHidden || toastVisible;
-  }, { timeout: 8000 });
+  // Succès réel : la fenêtre se ferme (elle reste ouverte sur une erreur) ET l'évaluation existe côté serveur
+  await expect(page.locator('#m-evaluation')).not.toHaveClass(/open/, { timeout: 8000 });
+  await expect.poll(async () => (await listerEvaluations(request, entetes)).some((e) => e.titre === titre), { timeout: 8000 }).toBe(true);
 });
 
 // ── Étape 7 : saisir des notes ───────────────────────────────────
@@ -285,8 +302,8 @@ test('étape 7 — saisir des notes depuis le tableau des évaluations', async (
     return tbody && tbody.children.length > 0;
   }, { timeout: 10000 });
 
-  // Cliquer sur le bouton "Saisir notes" de la première évaluation
-  const saisirBtn = page.locator('#tb-eval tr:first-child button:has-text("Saisir")');
+  // Bouton "Saisir" de la première évaluation non publiée (les publiées affichent "Voir")
+  const saisirBtn = page.locator('#tb-eval button:has-text("Saisir")').first();
   const hasSaisir = await saisirBtn.count();
 
   if (hasSaisir > 0) {
@@ -316,30 +333,48 @@ test('étape 7 — saisir des notes depuis le tableau des évaluations', async (
 });
 
 // ── Étape 8 : publier les notes ──────────────────────────────────
-test('étape 8 — publier les notes d\'une évaluation', async ({ page }) => {
+// La publication se fait dans la fenêtre de saisie (#btn-publier-notes), pas dans le tableau.
+// Chaque exécution crée sa propre évaluation (API) : la publication est irréversible, le test
+// reste donc rejouable sur une base conservée. Dépend des seeds 01 à 03 (affectation et période fixes).
+const AFFECTATION_SEED = '77777777-7777-7777-7777-777777777777';
+const PERIODE_SEED = '88888888-8888-8888-8888-888888888888';
+
+test('étape 8 — publier les notes d\'une évaluation', async ({ page, request }) => {
+  // 1. Évaluation neuve, créée par l'API avec le compte du directeur
+  const entetes = await entetesApi(request);
+  const creneau = await creneauEvaluationLibre(request, entetes);
+  test.skip(!creneau, 'Les 35 créneaux (type, numéro) de l\'affectation de test sont déjà pris : repartir d\'une base neuve');
+
+  const creation = await request.post('/api/v1/evaluations', {
+    headers: entetes,
+    data: {
+      affectation_id: AFFECTATION_SEED, periode_id: PERIODE_SEED, type: creneau.type,
+      numero: creneau.numero, note_max: 20, titre: 'Devoir à publier E2E', date_evaluation: '2025-11-20',
+    },
+  });
+  expect(creation.status()).toBe(201);
+  const evaluationId = (await creation.json()).data.id;
+
+  // 2. Ouvrir sa fenêtre de saisie, saisir une note, publier
   await seConnecter(page);
-
   await page.click('[data-page="notes"]');
+  await expect(page.locator('#page-notes')).toHaveClass(/active/);
+  await page.waitForFunction(() => document.getElementById('tb-eval')?.children.length);
 
-  // Attendre les évaluations
-  await page.waitForFunction(() => {
-    const tbody = document.getElementById('tb-eval');
-    return tbody && tbody.children.length > 0;
-  }, { timeout: 10000 });
+  await page.evaluate((id) => window.PageNotes.ouvrirSaisie(id), evaluationId);
+  await expect(page.locator('#m-notes')).toBeVisible({ timeout: 5000 });
+  await page.waitForFunction(() => document.getElementById('tb-notes-saisie')?.children.length, null, { timeout: 8000 });
+  await page.locator('#tb-notes-saisie tr:first-child input[type="number"]').first().fill('15');
 
-  // Chercher un bouton "Publier" dans le tableau
-  const publierBtn = page.locator('#tb-eval button:has-text("Publier")').first();
-  const hasPublier = await publierBtn.count();
+  page.once('dialog', (dialogue) => dialogue.accept());     // confirm("Publier les notes ? …")
+  await page.click('#btn-publier-notes');
 
-  if (hasPublier > 0) {
-    await publierBtn.click();
-
-    // Une confirmation toast ou dialogue doit apparaître
-    // Les toasts sont ajoutés à #toast-container (créé à la demande par ui.ts)
-    await expect(page.locator('#toast-container > *').first()).toBeVisible({ timeout: 5000 });
-  } else {
-    test.skip();
-  }
+  // 3. Toast de succès et évaluation réellement publiée côté serveur
+  await expect(page.locator('#toast-container')).toContainText('publiées', { timeout: 8000 });
+  await expect.poll(async () => {
+    const ev = (await listerEvaluations(request, entetes)).find((e) => e.id === evaluationId);
+    return ev && (ev.statut || (ev.notes_publiees ? 'publiee' : ''));
+  }, { timeout: 8000 }).toBe('publiee');
 });
 
 // ── Routing hash : navigation directe par URL ────────────────────
@@ -376,3 +411,4 @@ test('page paramètres affiche les informations de l\'établissement', async ({ 
   const codeValue = await codeInput.inputValue();
   expect(codeValue.length).toBeGreaterThan(0);
 });
+

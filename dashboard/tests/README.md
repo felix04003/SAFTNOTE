@@ -40,8 +40,11 @@ cd tests && npx playwright test
 ```
 
 Remarques :
-- Dans l'environnement de test, mettre `RATE_LIMIT_AUTH_MAX` et `RATE_LIMIT_REGISTER_MAX` à une valeur élevée
-  (`POST /inscription` est limité à 5 par heure).
+- Dans l'environnement de test, mettre `RATE_LIMIT_AUTH_MAX`, `RATE_LIMIT_REGISTER_MAX` et `RATE_LIMIT_GLOBAL_MAX` à une
+  valeur élevée : `POST /inscription` est limité à 5 par heure, et le limiteur global à 100 requêtes par minute et par
+  adresse (tout passe par le relais) : sans cela des connexions échouent au hasard (« Trop de requêtes »).
+- Les tests qui créent des évaluations (étapes 6 et 8) prennent un créneau (type, numéro 1 à 5) libre : une évaluation est
+  unique par (affectation, type, numéro, période), soit 35 créneaux ; la publication est irréversible. Au-delà, repartir d'une base neuve.
 - Les tests de connexion ratée comptent comme tentatives : après 5 échecs le blocage s'applique 15 minutes.
   Pour relancer à la suite : `DELETE FROM tentatives_connexion;`
 - Sans `ecole_app_rls` configuré (`POSTGRES_RLS_*`), `GET /configs/matieres` répond 500 (RLS phase 1) : renseigner ces variables.
