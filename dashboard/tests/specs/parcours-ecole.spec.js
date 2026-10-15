@@ -304,6 +304,10 @@ test('9. saisie des notes depuis le tableau, puis publication', async ({ page, r
       return Object.fromEntries(lignes.filter((l) => l.valeur != null).map((l) => [`${l.prenom} ${l.nom}`, Number(l.valeur)]));
     }, { timeout: 8000 }).toEqual(ev.notes);
 
+    if (ev.publiee === false) {                                       // brouillon : on referme sans publier
+      await page.evaluate(() => document.getElementById('m-notes')?.classList.remove('open'));
+      continue;
+    }
     page.once('dialog', (d) => d.accept());                           // confirm("Publier les notes ? …")
     await page.click('#btn-publier-notes');
     await expect(page.locator('#m-notes')).not.toBeVisible({ timeout: 8000 });
@@ -391,11 +395,35 @@ test('11. chaque parent se connecte par code SMS et ne voit que ses enfants et l
       if (enfants.length > 1) await choisir(page, '#par-enfant-sel', el.prenom);
       await aller(page, 'par-notes');
       const conteneur = page.locator('#par-notes-container');
-      const siennes = jeu.evaluations.filter((ev) => ev.notes[`${el.prenom} ${el.nom}`] !== undefined);
+      const nomComplet = `${el.prenom} ${el.nom}`;
+      const siennes = jeu.evaluations.filter((ev) => ev.publiee !== false && ev.notes[nomComplet] !== undefined);
       for (const ev of siennes) {
         await expect(conteneur).toContainText(ev.matiere, { timeout: 8000 });
         // Affichage : « 12.50/20.00 » (note et barème avec deux décimales)
-        await expect(conteneur).toContainText(`${ev.notes[`${el.prenom} ${el.nom}`].toFixed(2)}/${ev.noteMax.toFixed(2)}`);
+        await expect(conteneur).toContainText(`${ev.notes[nomComplet].toFixed(2)}/${ev.noteMax.toFixed(2)}`);
+      }
+      // Les notes d'une évaluation non publiée ne doivent apparaître nulle part
+      for (const ev of jeu.evaluations.filter((x) => x.publiee === false && x.notes[nomComplet] !== undefined)) {
+        await expect(conteneur).not.toContainText(`${ev.notes[nomComplet].toFixed(2)}/`);
+      }
+    }
+
+    // Même contrôle côté API, avec le jeton de ce parent : ses enfants (publiées seulement) ; ceux des autres, refusés
+    const jeton = await page.evaluate(() => sessionStorage.getItem('em_token'));
+    const appel = (chemin) => page.request.get(`/api/v1${chemin}`, { headers: { Authorization: `Bearer ${jeton}` } });
+    const idsEleves = Object.fromEntries((await lire(page.request, '/eleves?limite=100')).map((e) => [`${e.prenom} ${e.nom}`, e.id]));
+    for (const el of jeu.eleves) {
+      const nomComplet = `${el.prenom} ${el.nom}`;
+      expect(idsEleves[nomComplet], `élève ${nomComplet} introuvable côté directeur`).toBeTruthy();
+      const reponse = await appel(`/parents/moi/enfants/${idsEleves[nomComplet]}/notes`);
+      if (!enfants.includes(el)) {
+        expect(reponse.status(), `${parent.prenom} ${parent.nom} ne doit pas lire les notes de ${el.prenom}`).toBe(403);
+        continue;
+      }
+      expect(reponse.status()).toBe(200);
+      const texte = JSON.stringify(await reponse.json());
+      for (const ev of jeu.evaluations.filter((x) => x.publiee === false && x.notes[nomComplet] !== undefined)) {
+        expect(texte, `brouillon « ${ev.titre} » visible par le parent de ${el.prenom}`).not.toMatch(new RegExp(`${ev.date}|"${ev.notes[nomComplet]}"|:${ev.notes[nomComplet]}[,}]`));
       }
     }
     await page.evaluate(() => { sessionStorage.clear(); localStorage.clear(); });

@@ -86,6 +86,9 @@ function creerJeuDeProfils(suffixe = String(Date.now()).slice(-7)) {
         notes: { 'Moussa Ndiaye': 9, 'Cheikh Fall': 17 } },
       { matiere: 'Français',      classe: '6ème A', type: 'composition', numero: 1, titre: 'Composition 1 Fr 6A', noteMax: 20, date: '2026-11-20',
         notes: { 'Fatou Ndiaye': 13, 'Awa Traoré': 16 } },
+      // Saisie mais JAMAIS publiée : aucun parent ne doit en voir les notes (valeurs à deux décimales, introuvables ailleurs)
+      { matiere: 'Mathématiques', classe: '5ème B', type: 'devoir',      numero: 2, titre: 'Devoir 2 Maths 5B (brouillon)', noteMax: 20, date: '2026-11-27',
+        publiee: false, notes: { 'Moussa Ndiaye': 3.25, 'Cheikh Fall': 5.75 } },
     ],
   };
 }

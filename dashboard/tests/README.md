@@ -50,6 +50,7 @@ Remarques :
   Pour relancer à la suite : `DELETE FROM tentatives_connexion;`
 - **Rôle `ecole_app_rls`** (migration 019, créé sans mot de passe) : sans mot de passe, `GET /configs/matieres` répond 500 et les listes de matières du dashboard échouent. Après `migrate` : `ALTER ROLE ecole_app_rls WITH PASSWORD '...'`, et démarrer le backend avec `POSTGRES_RLS_USER` / `POSTGRES_RLS_PASSWORD`.
 - Le parcours (étape 11, connexion des parents par code SMS) remplace le code SMS en base avec `psql` et les variables `POSTGRES_HOST/PORT/DB/USER/PASSWORD` : à définir dans l'environnement des tests ; sans `psql`, l'étape est ignorée avec un message.
+- Le parcours a été éprouvé par mutation (code applicatif faussé, puis rétabli) : `GET /eleves` sans filtre d'établissement (étapes 7 ou 12), enseignant qui voit toutes les classes (10), parent qui lit les notes d'un enfant qui n'est pas le sien (11), notes non publiées visibles du parent (11), affectation non enregistrée (6). Les deux mutations côté parent n'étaient d'abord PAS détectées : l'évaluation « brouillon » (jamais publiée) et le contrôle d'accès API de l'étape 11 ont été ajoutés pour cela.
 - `comptes-web.spec.js` simule l'API et n'a pas besoin du backend.
 
 ## Variables d'environnement
