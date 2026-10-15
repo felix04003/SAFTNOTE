@@ -340,6 +340,8 @@ function createIntegrationApp() {
   // Patcher le pool pour utiliser la base de test
   const pool = require('../../src/infrastructure/database/pool');
   pool.getDB = () => getTestDB();
+  // withTransaction appelle le getDB interne du module : il faut le patcher aussi (appels.routes.js l'utilise)
+  pool.withTransaction = (fn) => getTestDB().transaction(fn);
   pool.connectDB = async () => {
     const database = getTestDB();
     await database.raw('SELECT 1');

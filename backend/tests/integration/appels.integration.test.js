@@ -42,8 +42,8 @@ beforeAll(async () => {
     annee_scolaire_id: seed.annee.id,
   }).onConflict(['classe_id', 'matiere_id', 'annee_scolaire_id']).merge().returning('*');
 
-  const plage = await db('plages_horaires').first('id');
-  if (!plage) return; // Skip si pas de plages
+  // Plages créées avec l'établissement (migration 026)
+  const plage = await db('plages_horaires').where({ etablissement_id: seed.etablissement.id }).orderBy('numero').first('id');
 
   const [edt] = await db('emplois_du_temps').insert({
     classe_id: seed.classe.id,
@@ -65,7 +65,7 @@ afterAll(async () => {
 
 describe('POST /api/v1/appels', () => {
   it('devrait créer un appel pour un créneau', async () => {
-    if (!edtId) return; // Skip si pas de créneau
+    expect(edtId).toBeDefined();
 
     const res = await request
       .post('/api/v1/appels')
@@ -77,56 +77,31 @@ describe('POST /api/v1/appels', () => {
       .expect(201);
 
     expect(res.body.succes).toBe(true);
-    expect(res.body.data).toHaveProperty('id');
+    expect(res.body.data).toHaveProperty('appel_id');
+    expect(res.body.data.nb_eleves).toBe(3);
   });
 
-  it('devrait refuser de créer un doublon d\'appel (même créneau + date)', async () => {
-    if (!edtId) return;
+  it('un second appel pour le même créneau et la même date est idempotent (renvoie l\'appel existant)', async () => {
+    expect(edtId).toBeDefined();
 
-    await request
-      .post('/api/v1/appels')
-      .set('Authorization', `Bearer ${tokenEns}`)
-      .send({
-        emploi_du_temps_id: edtId,
-        date_cours: '2024-11-18', // même date
-      })
-      .expect(409); // Conflict
+    const premier = await request.post('/api/v1/appels').set('Authorization', `Bearer ${tokenEns}`)
+      .send({ emploi_du_temps_id: edtId, date_cours: '2024-11-18' }).expect(200);
+    const db = getTestDB();
+    expect(await db('appels').where({ emploi_du_temps_id: edtId, date_cours: '2024-11-18' })).toHaveLength(1);
+    expect(premier.body.data.id).toBeDefined();
   });
 });
 
-// ── GET /appels/:id/presences ───────────────────────────────────
+// ── Présences pré-remplies à l'ouverture de l'appel ─────────────
 
-describe('GET /api/v1/appels/:id/presences', () => {
-  let appelId;
-
-  beforeAll(async () => {
-    if (!edtId) return;
+describe('présences d\'un appel ouvert', () => {
+  it('une ligne « non_saisi » par élève inscrit dans la classe', async () => {
     const db = getTestDB();
-    const appel = await db('appels')
-      .where({ emploi_du_temps_id: edtId })
-      .first('id');
-    appelId = appel?.id;
-  });
-
-  it('devrait retourner la grille de présence', async () => {
-    if (!appelId) return;
-
-    const res = await request
-      .get(`/api/v1/appels/${appelId}/presences`)
-      .set('Authorization', `Bearer ${tokenEns}`)
-      .expect(200);
-
-    expect(res.body.succes).toBe(true);
-    expect(Array.isArray(res.body.data)).toBe(true);
-    // 3 élèves inscrits dans la classe de test
-    expect(res.body.data.length).toBe(3);
-  });
-
-  it('devrait retourner 404 pour un appel inexistant', async () => {
-    await request
-      .get('/api/v1/appels/00000000-0000-0000-0000-000000000099/presences')
-      .set('Authorization', `Bearer ${tokenEns}`)
-      .expect(404);
+    const appel = await db('appels').where({ emploi_du_temps_id: edtId }).first('id');
+    expect(appel).toBeDefined();
+    const presences = await db('presences').where({ appel_id: appel.id });
+    expect(presences).toHaveLength(3);
+    expect(presences.every((p) => p.statut === 'non_saisi')).toBe(true);
   });
 });
 
@@ -134,7 +109,7 @@ describe('GET /api/v1/appels/:id/presences', () => {
 
 describe('GET /api/v1/appels/cours', () => {
   it('devrait retourner null + élèves si aucun appel existant', async () => {
-    if (!edtId) return;
+    expect(edtId).toBeDefined();
 
     const res = await request
       .get('/api/v1/appels/cours')
@@ -149,7 +124,7 @@ describe('GET /api/v1/appels/cours', () => {
   });
 
   it('devrait retourner appel_id + statut si un appel existe', async () => {
-    if (!edtId) return;
+    expect(edtId).toBeDefined();
 
     await request
       .post('/api/v1/appels')

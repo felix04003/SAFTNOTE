@@ -141,6 +141,9 @@ async function viderBaseLocale() {
       DELETE FROM absences;
       DELETE FROM notes_parent;
       DELETE FROM bulletins;
+      DELETE FROM edt;
+      DELETE FROM affectations;
+      DELETE FROM periodes;
     `);
   } catch {}
 }

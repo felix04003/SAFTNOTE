@@ -548,6 +548,7 @@ describe('Workflow 5 — Notes : POST /evaluations + PUT notes + PUT publier', (
 
   // ── POST /evaluations ──────────────────────────────────────────
   test('POST /evaluations crée une évaluation', async () => {
+    db.mockReturnValueOnce(mockQuery({ id: IDS.affectation, classe_id: IDS.classe }));   // affectation accessible
     db.mockReturnValueOnce(mockQuery([{
       id: IDS.evaluation,
       affectation_id: IDS.affectation,

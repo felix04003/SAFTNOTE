@@ -210,18 +210,18 @@ beforeAll(async () => {
   }
 
   // Un créneau d'emploi du temps pour l'appel : Mathématiques 6ème A, lundi, première plage
-  // CONTOURNEMENT : une école neuve n'a AUCUNE plage horaire et aucune route ne permet d'en créer (GET seulement) ;
-  // sans elle, ni emploi du temps ni appel. On l'insère donc en base, comme le fait le seed de test.
-  sql(`INSERT INTO plages_horaires (etablissement_id, numero, libelle, heure_debut, heure_fin)
-       SELECT id, 1, '8h-9h', '08:00', '09:00' FROM etablissements WHERE code_officiel = '${etat.codeEtablissement}'
-       ON CONFLICT (etablissement_id, numero) DO NOTHING`);
+  // Une école neuve reçoit des plages horaires par défaut (migration 026)
   const plages = await dir('GET', '/plages-horaires');
+  expect(plages.filter((p: any) => !p.est_pause).length).toBeGreaterThanOrEqual(4);
   const affMaths6A = affectations['6ème A | Mathématiques'];
   const creneau = await dir('POST', '/edt/creneaux', {
     classe_id: classeId('6ème A'), affectation_id: affMaths6A,
     plage_id: plages.find((p: any) => !p.est_pause).id, jour_semaine: 1, salle: 'Salle 1',
   });
   etat.creneauId = creneau.id;
+  etat.affMaths6A = affMaths6A;
+  etat.plagesLibres = plages.filter((p: any) => !p.est_pause).map((p: any) => p.id);
+  etat.classe6A = classeId('6ème A');
 });
 
 afterAll(async () => { mockEnLigne = true; });
@@ -251,6 +251,10 @@ describe('Parcours mobile : enseignants', () => {
     // Ses évaluations (Maths 6A, Maths 5B, brouillon Maths 5B), pas celle de Français
     const titres = (await lignes('SELECT matiere, classe FROM evaluations')).map((e) => `${e.classe} | ${e.matiere}`).sort();
     expect(titres).toEqual(['5ème B | Mathématiques', '5ème B | Mathématiques', '6ème A | Mathématiques']);
+    // Ses affectations (matière × classe) et les périodes de l'année, nécessaires pour créer une évaluation
+    expect((await lignes('SELECT classe, matiere FROM affectations ORDER BY classe')).map((a) => `${a.classe} | ${a.matiere}`))
+      .toEqual(['5ème B | Mathématiques', '6ème A | Mathématiques']);
+    expect((await lignes('SELECT numero FROM periodes ORDER BY numero')).length).toBeGreaterThanOrEqual(2);
     // Son emploi du temps contient le créneau créé par le directeur
     expect((await lignes('SELECT id FROM edt')).map((r) => r.id)).toContain(etat.creneauId);
   });
@@ -335,15 +339,70 @@ describe('Parcours mobile : enseignants', () => {
     expect(statuts.Fatou).not.toBe('absent');
   });
 
-  test('M5b. nouvelle synchronisation descendante : ses notes reviennent du serveur et s\'affichent pour les bons élèves', async () => {
+  test('M5b. synchronisation suivante : incrémentale, sans doublon de notes ni perte du reste', async () => {
+    const espion = jest.spyOn(syncApi, 'telecharger');
     const res = await syncService.syncDescendante();
     expect(res, JSON.stringify(res)).toMatchObject({ succes: true });
 
-    // notes-saisie.tsx lit les notes par élève (jointure sur eleves.id) : chaque élève doit retrouver SA note
+    // La date de dernière synchro est enregistrée et utilisée : plus de retéléchargement complet
+    expect((await lignes('SELECT derniere_sync FROM session'))[0]?.derniere_sync, 'ligne session absente').toBeTruthy();
+    const res2 = await syncService.syncDescendante();
+    expect(res2).toMatchObject({ succes: true });
+    expect(espion.mock.calls[1][0], 'la 2e synchro doit envoyer la date de la précédente').toBeTruthy();
+    espion.mockRestore();
+
+    // Un envoi partiel ne doit rien effacer : l'emploi du temps est toujours là...
+    expect((await lignes('SELECT id FROM edt')).map((r) => r.id)).toContain(etat.creneauId);
+    // ...y compris quand UN SEUL créneau change : le serveur renvoie l'emploi du temps entier, le mobile le remplace
+    const second = await dir('POST', '/edt/creneaux', {
+      classe_id: etat.classe6A, affectation_id: etat.affMaths6A, plage_id: etat.plagesLibres[1], jour_semaine: 2, salle: 'Salle 1',
+    });
+    await syncService.syncDescendante();
+    expect((await lignes('SELECT id FROM edt')).map((r) => r.id).sort()).toEqual([etat.creneauId, second.id].sort());
+
+    // notes-saisie.tsx lit les notes par élève (jointure sur eleves.id) : une seule ligne par élève, avec SA note
     const ev = evaluation('Devoir 1 Maths 6A');
     const lues = await lignes(
       `SELECT e.prenom, e.nom, n.valeur FROM eleves e JOIN notes n ON n.eleve_id = e.id WHERE n.evaluation_id = ?`, [ev.id]);
+    expect(lues).toHaveLength(Object.keys(ev.notes).length);
     expect(Object.fromEntries(lues.map((l) => [`${l.prenom} ${l.nom}`, Number(l.valeur)]))).toEqual(ev.notes);
+
+    // Tout ce qui est parti n'est plus « en attente » (compteur de notes à envoyer)
+    expect(await lignes('SELECT id FROM notes WHERE synced = 0')).toHaveLength(0);
+    expect(await lignes('SELECT id FROM presences WHERE synced = 0')).toHaveLength(0);
+  });
+
+  test('M5c. évaluation créée hors ligne puis en ligne : même identifiant partout, numéros qui se suivent', async () => {
+    const { creerEvaluationMobile } = require('../../src/services/evaluations/creerEvaluation');
+    const affectation = (await lignes(`SELECT id FROM affectations WHERE classe = '6ème A'`))[0].id;
+    const champs = { affectation_id: affectation, type: 'interrogation', titre: 'Interro hors ligne', date_evaluation: aujourdhui, note_max: 10 };
+
+    mockEnLigne = false;
+    const horsLigne = await creerEvaluationMobile(champs);
+    expect(horsLigne.enLigne).toBe(false);
+    expect((await lignes('SELECT type FROM operations_pending WHERE statut = ?', ['en_attente'])).map((o) => o.type))
+      .toContain('evaluations.creer');
+
+    mockEnLigne = true;
+    const envoi = await syncService.syncMontante();
+    expect(envoi, JSON.stringify(await lignes('SELECT type, statut, erreur_msg FROM operations_pending'))).toMatchObject({ echecs: 0 });
+
+    const cote = await dir('GET', '/evaluations?limite=100');
+    const creee = cote.find((e: any) => e.id === horsLigne.id);
+    expect(creee, 'évaluation créée hors ligne absente du serveur').toBeTruthy();
+    expect(creee).toMatchObject({ type: 'interrogation', titre: 'Interro hors ligne', numero: 1, matiere: 'Mathématiques' });
+    expect((await lignes('SELECT matiere, classe FROM evaluations WHERE id = ?', [horsLigne.id]))[0])
+      .toEqual({ matiere: 'Mathématiques', classe: '6ème A' });
+
+    // En ligne : créée directement, numéro suivant
+    const enLigne = await creerEvaluationMobile({ ...champs, titre: 'Interro en ligne' });
+    expect(enLigne.enLigne).toBe(true);
+    expect((await dir('GET', '/evaluations?limite=100')).find((e: any) => e.id === enLigne.id)).toMatchObject({ numero: 2 });
+
+    // Un refus du serveur n'est pas mis en file et ne laisse pas d'évaluation fantôme sur le téléphone
+    const avant = (await lignes('SELECT id FROM evaluations')).length;
+    await expect(creerEvaluationMobile({ ...champs, affectation_id: randomUUID() })).rejects.toThrow();
+    expect(await lignes('SELECT id FROM evaluations')).toHaveLength(avant);
   });
 
   test('M6. relance de l\'application : la session est rouverte sans nouvelle connexion', async () => {
@@ -469,6 +528,26 @@ describe('Parcours mobile : parents', () => {
     await useAuthStore.getState().deconnexion();
     for (const table of ['eleves', 'notes_parent', 'absences']) expect(await lignes(`SELECT id FROM ${table}`), table).toHaveLength(0);
     expect(useAuthStore.getState().estConnecte).toBe(false);
+  });
+});
+
+describe('Parcours mobile : synchronisation incrémentale côté parent', () => {
+  test('M14. une évaluation publiée APRÈS la dernière synchro arrive quand même chez le parent', async () => {
+    test_skip_sans_psql();
+    const brouillon = evaluation('Devoir 2 Maths 5B');
+    const parent = jeu.parents.fall;
+    await nouvelAppareil();
+    await authApi.demanderOTP({ telephone: parent.telephone });
+    fixerCodeSms(parent.telephone, '424242');
+    await useAuthStore.getState().connexionOTP({ telephone: parent.telephone, code: '424242' });
+
+    await syncService.syncDescendante();
+    const valeurs = async () => (await lignes('SELECT valeur FROM notes_parent')).map((n) => Number(n.valeur)).sort((a, b) => a - b);
+    expect(await valeurs()).toEqual([17]);                                             // le brouillon n'est pas là
+
+    await dir('PUT', `/evaluations/${brouillon.id}/publier`, {});                      // publication après la synchro
+    await syncService.syncDescendante();
+    expect(await valeurs()).toEqual([5.75, 17]);                                       // arrivé, et l'ancien n'a pas bougé
   });
 });
 

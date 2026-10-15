@@ -10,6 +10,7 @@ const { isolerEtablissement } = require('../middleware/permission.middleware');
 const { valider }    = require('../middleware/validate.middleware');
 const { ok }         = require('../utils/reponse');
 const logger         = require('../utils/logger');
+const { affectationAccessible } = require('../utils/affectation-acces');
 const { getUrlSignee, DUREE_URL_SIGNEE_SECONDES } = require('../infrastructure/storage/storage.service');
 
 const router = express.Router();
@@ -37,7 +38,7 @@ router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) =>
       const enseignantId = enseignantRow?.id ?? null;
 
       // Payload enseignant : ses classes + élèves + évaluations + notes + EDT
-      const [classes, eleves, evaluations, notes, edt] = await Promise.all([
+      const [classes, eleves, evaluations, notes, edt, affectations, periodes] = await Promise.all([
         // Classes de l'enseignant
         db('affectations_enseignants as ae')
           .join('classes as c', 'c.id', 'ae.classe_id')
@@ -56,7 +57,8 @@ router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) =>
           .join('annees_scolaires as a', 'a.id', 'i.annee_scolaire_id')
           .join('affectations_enseignants as ae', 'ae.classe_id', 'i.classe_id')
           .where({ 'ae.enseignant_id': enseignantId, 'a.est_courante': true, 'i.statut': 'actif' })
-          .where('u.updated_at', '>', syncDepuis)
+          // un élève change de classe : seule son inscription est modifiée, pas son compte
+          .where(db.raw('GREATEST(u.updated_at, i.updated_at) > ?', [syncDepuis]))
           .select('u.id', 'u.nom', 'u.prenom', 'u.photo_url', 'e.matricule', 'i.id as inscription_id', db.raw("CONCAT(n.nom, ' ', c.nom) as classe"))
           .distinct(),
 
@@ -88,12 +90,30 @@ router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) =>
           .join('matieres as m', 'm.id', 'ae.matiere_id')
           .join('classes as c', 'c.id', 'ae.classe_id')
           .join('niveaux as n', 'n.id', 'c.niveau_id')
+          // Toujours l'emploi du temps COMPLET (petit) : le mobile le remplace en bloc, un envoi partiel
+          // effacerait les créneaux inchangés
           .where({ 'ae.enseignant_id': enseignantId })
-          .where('edt.updated_at', '>', syncDepuis)
           .select('edt.id', 'edt.jour_semaine', 'edt.salle', 'ph.heure_debut', 'ph.heure_fin', 'm.nom as matiere', 'ae.classe_id', db.raw("CONCAT(n.nom, ' ', c.nom) as classe")),
+
+        // Ses affectations de l'année : le mobile en a besoin pour créer une évaluation (matière × classe)
+        db('affectations_enseignants as ae')
+          .join('matieres as m', 'm.id', 'ae.matiere_id')
+          .join('classes as c', 'c.id', 'ae.classe_id')
+          .join('niveaux as nv', 'nv.id', 'c.niveau_id')
+          .join('annees_scolaires as a', 'a.id', 'ae.annee_scolaire_id')
+          .where({ 'ae.enseignant_id': enseignantId, 'a.est_courante': true })
+          .whereNull('ae.date_fin')
+          .select('ae.id', 'ae.classe_id', 'm.nom as matiere', db.raw("CONCAT(nv.nom, ' ', c.nom) as classe")),
+
+        // Périodes de l'année courante (une évaluation appartient à une période)
+        db('periodes as p')
+          .join('annees_scolaires as a', 'a.id', 'p.annee_scolaire_id')
+          .where({ 'a.etablissement_id': req.etablissement_id, 'a.est_courante': true })
+          .orderBy('p.numero')
+          .select('p.id', 'p.numero', 'p.libelle', 'p.date_debut', 'p.date_fin'),
       ]);
 
-      payload = { classes, eleves, evaluations, notes, edt };
+      payload = { classes, eleves, evaluations, notes, edt, affectations, periodes };
 
     } else if (isParent) {
       // Payload parent : enfants + notes publiées + absences + bulletins + EDT
@@ -119,7 +139,8 @@ router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) =>
           .join('eleves as el', 'el.id', 'n.eleve_id')
           .join('periodes as p', 'p.id', 'ev.periode_id')
           .where({ 'pe.parent_id': utilisateur_id, 'ev.notes_publiees': true })
-          .where('n.saisie_at', '>', syncDepuis)
+          // une note saisie AVANT la dernière synchro mais publiée APRÈS doit arriver : on compte aussi la date de publication
+          .where(db.raw('GREATEST(n.saisie_at, ev.updated_at) > ?', [syncDepuis]))
           // eleve_id : utilisateurs.id, comme `enfants` ci-dessus (le mobile filtre ses écrans sur cet identifiant)
           .select('n.id', 'el.utilisateur_id as eleve_id', 'm.nom as matiere', 'ev.type', 'ev.date_evaluation', 'n.valeur', 'p.numero as trimestre'),
 
@@ -187,6 +208,17 @@ router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) =>
     return ok(res, { sync_at: syncAt, payload });
 
   } catch (err) { next(err); }
+});
+
+const schemaEvaluationMobile = z.object({
+  id:              z.string().uuid(),
+  affectation_id:  z.string().uuid(),
+  periode_id:      z.string().uuid(),
+  type:            z.enum(['devoir', 'composition', 'interrogation', 'tp', 'expose', 'oral', 'projet']),
+  numero:          z.number().int().min(1).max(5),
+  titre:           z.string().nullish().transform((t) => t ?? undefined),
+  note_max:        z.number().min(0).max(20).default(20),
+  date_evaluation: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
 // Enregistre UNE note envoyée par le mobile (opération 'notes.saisir', ou une ligne d'un lot 'notes.saisir_batch').
@@ -298,6 +330,41 @@ router.post('/sync/operations', authentifier, isolerEtablissement,
               if (echec) break;
             }
             resultats.push(echec ? { op_id: op.id, statut: 'erreur', code: echec } : { op_id: op.id, statut: 'ok' });
+            break;
+          }
+
+          // Évaluation créée hors ligne (mobile/app/(app)/enseignant/evaluations.tsx) : l'id est choisi par le téléphone
+          case 'evaluations.creer': {
+            const donnees = schemaEvaluationMobile.safeParse(op.payload);
+            if (!donnees.success) {
+              resultats.push({ op_id: op.id, statut: 'erreur', code: 'PAYLOAD_INVALIDE', detail: donnees.error.issues[0]?.message });
+              break;
+            }
+            const e = donnees.data;
+            if (!(await affectationAccessible(db, req.session, req.etablissement_id, e.affectation_id))) {
+              resultats.push({ op_id: op.id, statut: 'erreur', code: 'RESSOURCE_INTROUVABLE' });
+              break;
+            }
+            // Idempotent : rejouer la même opération ne crée pas de doublon
+            const existante = await db('evaluations').where({ id: e.id }).first('id', 'affectation_id');
+            if (existante && existante.affectation_id !== e.affectation_id) {
+              resultats.push({ op_id: op.id, statut: 'erreur', code: 'ID_DEJA_UTILISE' });
+              break;
+            }
+            if (!existante) {
+              try {
+                await db('evaluations').insert({ ...e, notes_publiees: false });
+              } catch (errInsert) {
+                // Même (affectation, type, numéro, période) déjà pris : on le dit au lieu d'un échec muet
+                if (errInsert.code === '23505') {
+                  resultats.push({ op_id: op.id, statut: 'erreur', code: 'EVALUATION_EXISTANTE',
+                    detail: 'Une évaluation de ce type et de ce numéro existe déjà pour cette période' });
+                  break;
+                }
+                throw errInsert;
+              }
+            }
+            resultats.push({ op_id: op.id, statut: 'ok' });
             break;
           }
 

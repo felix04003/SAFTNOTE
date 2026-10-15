@@ -212,20 +212,28 @@ router.put('/appels/:appel_id/presences', auth, isoler, perm('absences.faire_app
 
       // Déclencher les notifications pour absences/retards (hors transaction)
       if (absentesNonJustifies.length > 0) {
-        const { enqueuerNotification } = require('../../../infrastructure/queue/bullmq');
-        for (const abs of absentesNonJustifies) {
-          await enqueuerNotification({
-            type_notif:       abs.statut === 'absent' ? 'absence' : 'retard',
-            inscription_id:   abs.inscription_id,
-            appel_id:         req.params.appel_id,
-            etablissement_id: req.etablissement_id,
-          }, 1); // Priorité 1 = urgence
-        }
+        // Best-effort, comme la publication des notes : l'appel est DÉJÀ enregistré (transaction validée). Si la file
+        // est indisponible, répondre 500 ferait croire à l'enseignant que l'appel a échoué (et le mobile le rejouerait).
+        try {
+          const { enqueuerNotification } = require('../../../infrastructure/queue/bullmq');
+          for (const abs of absentesNonJustifies) {
+            await enqueuerNotification({
+              type_notif:       abs.statut === 'absent' ? 'absence' : 'retard',
+              inscription_id:   abs.inscription_id,
+              appel_id:         req.params.appel_id,
+              etablissement_id: req.etablissement_id,
+            }, 1); // Priorité 1 = urgence
+          }
 
-        logger.info('Notifications absence enqueueées', {
-          nb:       absentesNonJustifies.length,
-          appel_id: req.params.appel_id,
-        });
+          logger.info('Notifications absence enqueueées', {
+            nb:       absentesNonJustifies.length,
+            appel_id: req.params.appel_id,
+          });
+        } catch (errFile) {
+          logger.error('Notifications absence non enqueueées (appel enregistré)', {
+            appel_id: req.params.appel_id, error: errFile.message,
+          });
+        }
       }
 
       return ok(res, {

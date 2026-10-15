@@ -215,6 +215,11 @@ export const enseignantApi = {
   saisirNotes: (evaluationId: string, notes: any[]) =>
     api.put(`/evaluations/${evaluationId}/notes`, { notes }),
 
+  creerEvaluation: (data: {
+    id: string; affectation_id: string; periode_id: string; type: string; numero: number;
+    titre?: string; note_max: number; date_evaluation: string;
+  }) => api.post('/evaluations', data),
+
   // Appels
   ouvrirAppel: (data: { emploi_du_temps_id: string; date_cours: string }) =>
     api.post('/appels', data),

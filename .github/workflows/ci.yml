@@ -472,8 +472,7 @@ jobs:
           npm ci
           node src/utils/migrate.js
 
-      # Rôle RLS (GET /configs/matieres) ; psql sert aussi au parcours : fixer le code SMS des parents,
-      # créer la plage horaire qu'aucune route ne crée
+      # Rôle RLS (GET /configs/matieres) ; psql sert aussi au parcours : fixer le code SMS des parents
       - name: Mot de passe du rôle RLS
         run: |
           command -v psql >/dev/null || sudo apt-get install -y postgresql-client

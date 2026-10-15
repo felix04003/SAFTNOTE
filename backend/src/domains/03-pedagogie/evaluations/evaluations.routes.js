@@ -12,6 +12,7 @@ const { autoriserAccesEleve } = require('../../../middleware/acces-eleve.middlew
 const { ok, cree, liste } = require('../../../utils/reponse');
 const ApiError           = require('../../../utils/ApiError');
 const logger             = require('../../../utils/logger');
+const { affectationAccessible } = require('../../../utils/affectation-acces');
 
 const router = express.Router();
 const auth   = authentifier;
@@ -64,6 +65,8 @@ router.get('/evaluations', auth, isoler, perm('notes.voir_classe'), async (req, 
 // ── POST /evaluations ────────────────────────────────────────────
 router.post('/evaluations', auth, isoler, perm('evaluations.creer'),
   valider(z.object({
+    // Identifiant fourni par le mobile : l'évaluation créée hors ligne garde le même id côté serveur et côté téléphone
+    id:              z.string().uuid().optional(),
     affectation_id:  z.string().uuid(),
     periode_id:      z.string().uuid(),
     type:            z.enum(['devoir', 'composition', 'interrogation', 'tp', 'expose', 'oral', 'projet']),
@@ -74,10 +77,21 @@ router.post('/evaluations', auth, isoler, perm('evaluations.creer'),
   })),
   async (req, res, next) => {
     try {
-      const [evaluation] = await getDB()('evaluations')
+      const db = getDB();
+      if (!(await affectationAccessible(db, req.session, req.etablissement_id, req.body.affectation_id))) {
+        throw ApiError.nonTrouve('Affectation introuvable');
+      }
+      if (req.body.id) {                                 // rejeu d'une création déjà reçue : idempotent
+        const existante = await db('evaluations').where({ id: req.body.id }).first();
+        if (existante) {
+          if (existante.affectation_id !== req.body.affectation_id) throw ApiError.conflit('Identifiant déjà utilisé');
+          return ok(res, existante);
+        }
+      }
+      const [evaluation] = await db('evaluations')
         .insert({
-          id: uuid(),
           ...req.body,
+          id: req.body.id || uuid(),
           notes_publiees: false,
         })
         .returning('*');

@@ -66,7 +66,7 @@ beforeAll(async () => {
   const [plage] = await db('plages_horaires').insert({
     etablissement_id: seed.etablissement.id, numero: 1, libelle: '1ère heure',
     heure_debut: '08:00', heure_fin: '09:00',
-  }).returning('*');
+  }).onConflict(['etablissement_id', 'numero']).merge().returning('*');   // plage n°1 créée avec l'établissement (migration 026)
   const [edt] = await db('emplois_du_temps').insert({
     classe_id: seed.classe.id, affectation_id: aff.id, plage_id: plage.id, jour_semaine: 1,
   }).returning('*');

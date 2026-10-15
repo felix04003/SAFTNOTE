@@ -113,6 +113,22 @@ export const SCHEMA_SQL = `
       FOREIGN KEY (appel_id) REFERENCES appels(id)
     );
 
+    -- Affectations de l'enseignant (matière × classe) et périodes de l'année : nécessaires pour créer une évaluation
+    CREATE TABLE IF NOT EXISTS affectations (
+      id               TEXT PRIMARY KEY,
+      classe_id        TEXT,
+      classe           TEXT,
+      matiere          TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS periodes (
+      id               TEXT PRIMARY KEY,
+      numero           INTEGER NOT NULL,
+      libelle          TEXT,
+      date_debut       TEXT NOT NULL,
+      date_fin         TEXT NOT NULL
+    );
+
     -- Emploi du temps
     CREATE TABLE IF NOT EXISTS edt (
       id               TEXT PRIMARY KEY,
@@ -219,7 +235,11 @@ export async function upsertEvaluations(evals: any[]): Promise<void> {
     await db.runAsync(
       `INSERT INTO evaluations (id, affectation_id, type, numero, titre, date_evaluation, note_max, notes_publiees, matiere, classe, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET type=excluded.type, notes_publiees=excluded.notes_publiees, updated_at=excluded.updated_at`,
+       ON CONFLICT(id) DO UPDATE SET
+         type=excluded.type, numero=excluded.numero, titre=excluded.titre, date_evaluation=excluded.date_evaluation,
+         note_max=excluded.note_max, notes_publiees=excluded.notes_publiees,
+         matiere=COALESCE(excluded.matiere, matiere), classe=COALESCE(excluded.classe, classe),
+         updated_at=excluded.updated_at`,
       [ev.id, ev.affectation_id, ev.type, ev.numero, ev.titre, ev.date_evaluation,
        ev.note_max, ev.notes_publiees ? 1 : 0, ev.matiere, ev.classe, ev.updated_at]
     );

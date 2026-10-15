@@ -120,7 +120,7 @@ cd backend && npm run migrate && npm start      # :3010 (voir dashboard/tests/RE
 cd mobile && POSTGRES_HOST=… POSTGRES_PORT=… POSTGRES_DB=… POSTGRES_USER=… POSTGRES_PASSWORD=… npm run test:parcours
 ```
 
-`psql` est nécessaire (code SMS des parents, plage horaire qu'aucune route ne crée). Exclu de `npm test` / `test:ci`.
+`psql` est nécessaire (remplacement du code SMS des parents). Exclu de `npm test` / `test:ci`.
 
 ## 📲 Build de production
 
