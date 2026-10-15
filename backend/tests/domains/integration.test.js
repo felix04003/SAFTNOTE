@@ -396,6 +396,8 @@ describe('Workflow 4 — POST /eleves', () => {
       trx.mockReturnValueOnce(mockQuery({ id: IDS.annee }));
       // 2. trx('utilisateurs').insert()
       trx.mockReturnValueOnce(mockQuery(undefined));
+      // 2bis. trx('eleves').where({ matricule }).first() → matricule généré encore libre
+      trx.mockReturnValueOnce(mockQuery(null));
       // 3. trx('eleves').insert()...returning('id')
       trx.mockReturnValueOnce(mockQuery([{ id: IDS.eleve }]));
       // 4. trx('roles').where({ code: 'eleve' }).first()
@@ -486,6 +488,8 @@ describe('Workflow 4 — POST /eleves', () => {
       trx.mockReturnValueOnce(mockQuery({ id: IDS.annee }));
       // 2. INSERT utilisateurs (élève)
       trx.mockReturnValueOnce(mockQuery(undefined));
+      // 2bis. matricule généré : encore libre
+      trx.mockReturnValueOnce(mockQuery(null));
       // 3. INSERT eleves...returning('id')
       trx.mockReturnValueOnce(mockQuery([{ id: IDS.eleve }]));
       // 4. SELECT role 'eleve'

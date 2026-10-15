@@ -470,7 +470,7 @@ META_WA_TOKEN         → WhatsApp Business API
 | 27 | Notifications SMS réparées sur base réelle (le worker ne trouvait jamais le parent : aucun SMS n'avait pu partir), publication des notes → un SMS par parent, contrôle d'établissement sur la publication, report horaire BullMQ 5, plafond mensuel de SMS par établissement avec alertes (migration 023) | ✅ |
 
 > Les compteurs de tests ci-dessus sont historiques (au moment de chaque étape). Compteurs
-> actuels (vérifiés le 2026-10-07) : backend 379 tests (40 suites Jest) + 186 tests d'intégration sur base réelle (22 suites, `npm run test:integration`), dashboard 114 tests (Vitest) + 36 tests E2E Playwright (voir dashboard/tests/README.md), mobile 116 tests (Jest).
+> actuels (vérifiés le 2026-10-07) : backend 379 tests (40 suites Jest) + 186 tests d'intégration sur base réelle (22 suites, `npm run test:integration`), dashboard 114 tests (Vitest) + 36 tests E2E Playwright (voir dashboard/tests/README.md), mobile 119 tests (Jest) + 16 étapes de parcours contre un vrai backend (`cd mobile && npm run test:parcours`, job CI `mobile-parcours`, voir `mobile/__tests__/parcours/parcours-mobile.test.ts`).
 
 ---
 

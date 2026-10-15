@@ -94,7 +94,7 @@ class SyncService {
       try {
         const ops = batch.flatMap(op => {
           try {
-            return [{ id: op.id, type: op.type, payload: JSON.parse(op.payload), cree_at_local: op.created_at_local }];
+            return [{ id: op.id, type: op.type, payload: JSON.parse(op.payload), cree_at_local: versIso(op.created_at_local) }];
           } catch {
             console.warn('[Sync] Payload corrompu ignoré', op.id);
             return [];
@@ -217,6 +217,13 @@ async function persisterDonneesParent(db: any, payload: any) {
       );
     }
   }
+}
+
+// SQLite écrit datetime('now') sous la forme « 2026-10-15 13:16:35 » (UTC, sans « T » ni fuseau) ;
+// le serveur n'accepte que de l'ISO 8601 et rejetait donc toute la file d'attente.
+export function versIso(local: string | null | undefined): string {
+  const date = new Date(local && !/[zZ]|[+-]\d\d:?\d\d$/.test(local) ? `${local.replace(' ', 'T')}Z` : (local ?? ''));
+  return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
 }
 
 async function estConnecte(): Promise<boolean> {

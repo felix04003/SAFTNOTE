@@ -106,6 +106,22 @@ src/
 
 ---
 
+## 🧪 Parcours « école complète » (vrai backend)
+
+`__tests__/parcours/parcours-mobile.test.ts` fait tourner le vrai code de l'app (client HTTP, `authStore`, `syncService`,
+base locale au schéma de production) contre un vrai backend PostgreSQL, avec les mêmes profils que le parcours web
+(`dashboard/tests/data/profils-parcours.js`) : première connexion avec mot de passe provisoire, synchronisation, notes et
+appel saisis hors ligne puis envoyés au retour du réseau, relance de l'app, jeton expiré, parents (code SMS) qui ne voient
+que leurs enfants et les notes publiées. Les écrans ne sont pas montés (React Native) ; l'interrupteur « mode avion » et
+SQLite (better-sqlite3) sont simulés.
+
+```bash
+cd backend && npm run migrate && npm start      # :3010 (voir dashboard/tests/README.md pour le rôle RLS et les limites de débit)
+cd mobile && POSTGRES_HOST=… POSTGRES_PORT=… POSTGRES_DB=… POSTGRES_USER=… POSTGRES_PASSWORD=… npm run test:parcours
+```
+
+`psql` est nécessaire (code SMS des parents, plage horaire qu'aucune route ne crée). Exclu de `npm test` / `test:ci`.
+
 ## 📲 Build de production
 
 ```bash

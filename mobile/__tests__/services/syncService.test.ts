@@ -415,3 +415,24 @@ describe('401 pendant la sync — déconnexion sans boucle', () => {
     expect((syncService as any).enCours).toBe(false);
   });
 });
+
+// ── versIso : le serveur n'accepte que de l'ISO 8601 ─────────────
+
+describe('versIso', () => {
+  const { versIso } = require('../../src/services/sync/syncService');
+
+  test('convertit le format de datetime(\'now\') de SQLite (UTC, sans T ni fuseau)', () => {
+    expect(versIso('2026-10-15 13:16:35')).toBe('2026-10-15T13:16:35.000Z');
+  });
+
+  test('laisse passer une date déjà ISO', () => {
+    expect(versIso('2026-10-15T13:16:35.000Z')).toBe('2026-10-15T13:16:35.000Z');
+    expect(versIso('2026-10-15T14:16:35+01:00')).toBe('2026-10-15T13:16:35.000Z');
+  });
+
+  test('valeur absente ou illisible : date du jour plutôt qu\'une opération perdue', () => {
+    for (const v of [null, undefined, '', 'pas une date']) {
+      expect(new Date(versIso(v as any)).getTime()).not.toBeNaN();
+    }
+  });
+});

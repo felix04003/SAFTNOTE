@@ -3,6 +3,7 @@
 // Stratégie offline-first : toutes les données critiques sont stockées localement
 
 import * as SQLite from 'expo-sqlite';
+import * as Crypto from 'expo-crypto';
 import { insererOperationPendante, getOperationsPendantesDb, marquerOperationSyncedDb } from './queries';
 
 let db: SQLite.SQLiteDatabase;
@@ -274,8 +275,9 @@ export async function sauvegarderPresenceLocale(p: {
 
 export async function ajouterOperationPendante(type: string, payload: object): Promise<void> {
   const db = getDB();
-  const { v4: uuid } = await import('react-native-uuid' as any).catch(() => ({ v4: () => Date.now().toString() }));
-  await insererOperationPendante(db, uuid() as string, type, JSON.stringify(payload));
+  // Le serveur n'accepte que des UUID (z.string().uuid()) : l'ancien repli sur Date.now() faisait rejeter
+  // toute la file d'attente hors ligne, et `import('react-native-uuid')` n'expose pas `v4` en export nommé.
+  await insererOperationPendante(db, Crypto.randomUUID(), type, JSON.stringify(payload));
 }
 
 export async function getOperationsPendantes(): Promise<any[]> {

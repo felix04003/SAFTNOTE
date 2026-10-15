@@ -154,9 +154,10 @@ router.post('/eleves', auth, isoler, perm('eleves.creer'),
           groupe_sanguin:       req.body.groupe_sanguin,
           medecin_urgence:      req.body.medecin_urgence,
         });
+        const matricule = req.body.matricule || await genMatriculeUnique(trx);
         const [eleveRecord] = await trx('eleves').insert({
           utilisateur_id:   utilisateurId,
-          matricule:        req.body.matricule || genMatricule(req.etablissement_id),
+          matricule,
           date_inscription: trx.raw('NOW()'),
           ...colonnesMedicales,
         }).returning('id');
@@ -430,10 +431,17 @@ router.get('/eleves/:eleve_id/absences', auth, isoler, autoriserAccesEleve('abse
 });
 
 // ── Helpers ──────────────────────────────────────────────────────
-function genMatricule(_etablissementId) {
+// Le matricule est unique pour toute la plateforme (eleves.matricule UNIQUE, toutes écoles confondues).
+// Avec 4 chiffres au hasard seulement, une collision devenait probable après une centaine d'élèves
+// (HTTP 500 « eleves_matricule_key » à l'inscription) : 6 chiffres, et on vérifie avant d'insérer.
+async function genMatriculeUnique(db) {
   const annee = new Date().getFullYear().toString().slice(2);
-  const rand  = Math.floor(1000 + Math.random() * 9000);
-  return `E${annee}${rand}`;
+  for (let essai = 0; essai < 10; essai++) {
+    const matricule = `E${annee}${Math.floor(100000 + Math.random() * 900000)}`;
+    // eslint-disable-next-line no-await-in-loop
+    if (!(await db('eleves').where({ matricule }).first('id'))) return matricule;
+  }
+  throw new Error('Impossible de générer un matricule unique');
 }
 
 module.exports = router;

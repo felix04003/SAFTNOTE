@@ -94,6 +94,7 @@ describe('Eleves Routes', () => {
       const trx = jest.fn()
         .mockReturnValueOnce(mockQuery({ id: IDS.annee }))
         .mockReturnValueOnce(mockQuery(null))
+        .mockReturnValueOnce(mockQuery(null))                       // matricule généré : encore libre
         .mockReturnValueOnce(mockQuery([{ id: IDS.eleve }]))
         .mockReturnValueOnce(mockQuery({ id: 'role-eleve' }))
         .mockReturnValueOnce(mockQuery(null))
@@ -116,6 +117,7 @@ describe('Eleves Routes', () => {
       const trx = jest.fn()
         .mockReturnValueOnce(mockQuery({ id: IDS.annee }))
         .mockReturnValueOnce(mockQuery(null))
+        .mockReturnValueOnce(mockQuery(null))                       // matricule généré : encore libre
         .mockReturnValueOnce(mockQuery([{ id: IDS.eleve }]))
         .mockReturnValueOnce(mockQuery({ id: 'role-eleve' }))
         .mockReturnValueOnce(mockQuery(null))
