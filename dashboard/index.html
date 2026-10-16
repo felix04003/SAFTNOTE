@@ -145,6 +145,15 @@
       </div>
     </div>
 
+    <!-- ═══ PAGE FICHE ÉLÈVE ═══ -->
+    <div class="page" id="page-fiche-eleve">
+      <div class="ph">
+        <div><div class="ph-titre" id="fiche-eleve-titre">Fiche élève</div><div class="ph-sous">Identité, parents, résultats, absences et discipline</div></div>
+        <button class="btn btn-l" onclick="PageFicheEleve.retour()">← Retour aux élèves</button>
+      </div>
+      <div id="fiche-eleve-contenu"></div>
+    </div>
+
     <!-- ═══ PAGE NOTES ═══ -->
     <div class="page" id="page-notes">
       <div class="ph">
@@ -429,29 +438,6 @@
 </div>
 
 <!-- MODAL FICHE ELEVE -->
-<div class="mo" id="m-fiche-eleve">
-  <div class="modal" style="max-width:480px">
-    <div class="mh"><span style="font-size:19px">🎓</span><span class="mt">Fiche élève</span><button class="mc" onclick="closeModal('m-fiche-eleve')">✕</button></div>
-    <div class="mb">
-      <div style="text-align:center;margin-bottom:18px">
-        <div class="av" style="width:56px;height:56px;font-size:22px;margin:0 auto 8px" id="fiche-avatar">—</div>
-        <div style="font-size:18px;font-weight:700" id="fiche-nom">—</div>
-        <div style="font-size:12px;color:var(--g400);margin-top:3px" id="fiche-matricule">—</div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--g400);margin-bottom:3px">Date de naissance</div><div style="font-size:13px" id="fiche-ddn">—</div></div>
-        <div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--g400);margin-bottom:3px">Sexe</div><div style="font-size:13px" id="fiche-genre">—</div></div>
-        <div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--g400);margin-bottom:3px">Classe actuelle</div><div style="font-size:13px" id="fiche-classe">—</div></div>
-        <div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--g400);margin-bottom:3px">Parent / Tuteur</div><div style="font-size:13px" id="fiche-parent">—</div></div>
-        <div style="grid-column:1/-1"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--g400);margin-bottom:3px">Téléphone parent</div><div style="font-size:13px" id="fiche-parent-tel">—</div></div>
-      </div>
-    </div>
-    <div class="mf">
-      <button class="btn btn-l" onclick="closeModal('m-fiche-eleve')">Fermer</button>
-    </div>
-  </div>
-</div>
-
 <!-- MODAL ENSEIGNANT -->
 <div class="mo" id="m-enseignant">
   <div class="modal">

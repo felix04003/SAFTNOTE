@@ -6,7 +6,7 @@ const { v4: uuid } = require('uuid');
 
 const { getDB }      = require('../../../infrastructure/database/pool');
 const { authentifier } = require('../../../middleware/auth.middleware');
-const { exigerPermission, isolerEtablissement } = require('../../../middleware/permission.middleware');
+const { exigerPermission, isolerEtablissement, utilisateurAPermission } = require('../../../middleware/permission.middleware');
 const { valider }    = require('../../../middleware/validate.middleware');
 const { ok, cree, liste, paginee, getPagination } = require('../../../utils/reponse');
 const ApiError       = require('../../../utils/ApiError');
@@ -274,19 +274,49 @@ router.post('/eleves', auth, isoler, perm('eleves.creer'),
 router.get('/eleves/:eleve_id', auth, isoler, perm('eleves.voir'), async (req, res, next) => {
   try {
     const db = getDB();
+    // Données médicales : réservées à 'eleves.medicale' (direction). Avant, tout porteur de 'eleves.voir',
+    // enseignants compris, les recevait déchiffrées.
+    const voitMedical = await utilisateurAPermission(req.session, 'eleves.medicale');
+
     const eleve = await db('utilisateurs as u')
       .join('eleves as e', 'e.utilisateur_id', 'u.id')
       .where({ 'u.id': req.params.eleve_id, 'u.etablissement_id': req.etablissement_id })
       .select(
         'u.id', 'u.nom', 'u.prenom', 'u.date_naissance', 'u.genre',
         'u.telephone', 'u.adresse', 'u.photo_url',
-        'e.matricule', 'e.date_inscription',
-        ...selecteursMedicaux(db, 'e')
+        'e.id as eleve_pk', 'e.matricule', 'e.date_inscription',
+        ...(voitMedical ? selecteursMedicaux(db, 'e') : [])
       )
       .first();
 
     if (!eleve) throw ApiError.nonTrouve('Élève introuvable');
-    return ok(res, eleve);
+
+    // Classe de l'année courante
+    const inscription = await db('inscriptions as i')
+      .join('classes as c', 'c.id', 'i.classe_id')
+      .join('niveaux as n', 'n.id', 'c.niveau_id')
+      .join('annees_scolaires as a', 'a.id', 'i.annee_scolaire_id')
+      .where({ 'i.eleve_id': eleve.eleve_pk, 'a.etablissement_id': req.etablissement_id, 'a.est_courante': true, 'i.statut': 'actif' })
+      .first('c.id as classe_id', db.raw("CONCAT(n.nom, ' ', c.nom) as classe"), 'n.nom as niveau', 'a.libelle as annee');
+
+    // Parents / tuteurs (contact principal en premier)
+    const parents = await db('parents_eleves as pe')
+      .join('utilisateurs as up', 'up.id', 'pe.parent_id')
+      .where({ 'pe.eleve_id': eleve.eleve_pk })
+      .orderBy([{ column: 'pe.est_contact_principal', order: 'desc' }, 'up.nom'])
+      .select('up.id', 'up.nom', 'up.prenom', 'up.telephone', 'pe.lien', 'pe.est_contact_principal');
+
+    // eslint-disable-next-line no-unused-vars -- identifiant interne, retiré de la réponse
+    const { eleve_pk, ...identite } = eleve;
+    return ok(res, {
+      ...identite,
+      classe: inscription ? inscription.classe : null,
+      classe_id: inscription ? inscription.classe_id : null,
+      niveau: inscription ? inscription.niveau : null,
+      annee: inscription ? inscription.annee : null,
+      parents,
+      medical_masque: !voitMedical,
+    });
   } catch (err) { next(err); }
 });
 

@@ -15,6 +15,7 @@ import './pages/absences';
 import './pages/edt';
 import './pages/alertes';
 import './pages/parametres';
+import './pages/fiche-eleve';
 import './pages/agenda';
 import './pages/securite';
 import './pages/plages';

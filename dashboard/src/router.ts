@@ -8,6 +8,7 @@ export const TITRES: Record<string, string> = {
   absences:    'Absences & Présences',
   edt:         'Emploi du temps',
   alertes:     'Alertes',
+  'fiche-eleve': 'Fiche élève',
   agenda:      'Agenda',
   securite:    'Sécurité',
   donnees:     'Mes données',

@@ -17,6 +17,7 @@ jest.mock('../../src/middleware/auth.middleware', () => ({
 }));
 jest.mock('../../src/middleware/permission.middleware', () => ({
   exigerPermission: () => (req, res, next) => next(),
+  utilisateurAPermission: jest.fn().mockResolvedValue(true),
   isolerEtablissement: (req, res, next) => {
     if (req.session) req.etablissement_id = req.session.etablissement_id;
     next();
@@ -161,15 +162,17 @@ describe('Eleves Routes', () => {
 
   // ── GET /eleves/:eleve_id ─────────────────────────────────────────
   describe('GET /eleves/:eleve_id', () => {
-    test('retourne la fiche élève avec champs médicaux déchiffrés', async () => {
+    test('retourne la fiche élève avec classe, parents et champs médicaux déchiffrés (permission eleves.medicale)', async () => {
       db.mockReturnValueOnce(mockQuery({
-        id: IDS.eleve, nom: 'Traoré', prenom: 'Aminata',
+        id: IDS.eleve, eleve_pk: 'el-1', nom: 'Traoré', prenom: 'Aminata',
         date_naissance: '2008-03-15', genre: 'F',
         telephone: null, adresse: null, photo_url: null,
         matricule: 'E24001', date_inscription: '2024-09-01',
         allergies: 'Arachides', conditions_medicales: null,
         groupe_sanguin: 'O+', medecin_urgence: 'Dr Sow',
       }));
+      db.mockReturnValueOnce(mockQuery({ classe_id: IDS.classe, classe: '6ème A', niveau: '6ème', annee: '2026-2027' }));
+      db.mockReturnValueOnce(mockQuery([{ id: 'p1', nom: 'Traoré', prenom: 'Mariama', telephone: '+221770000001', lien: 'mere', est_contact_principal: true }]));
 
       const res = await request(app)
         .get(`/eleves/${IDS.eleve}`)
@@ -179,6 +182,25 @@ describe('Eleves Routes', () => {
       expect(res.body.data).toHaveProperty('nom', 'Traoré');
       expect(res.body.data).toHaveProperty('allergies', 'Arachides');
       expect(res.body.data).toHaveProperty('groupe_sanguin', 'O+');
+      expect(res.body.data).toMatchObject({ classe: '6ème A', medical_masque: false });
+      expect(res.body.data.parents).toHaveLength(1);
+      expect(res.body.data).not.toHaveProperty('eleve_pk');
+    });
+
+    test('sans la permission eleves.medicale, aucune donnée médicale n\'est demandée ni renvoyée', async () => {
+      const { utilisateurAPermission } = require('../../src/middleware/permission.middleware');
+      utilisateurAPermission.mockResolvedValueOnce(false);
+      const { selecteursMedicaux } = require('../../src/utils/medical-crypto');
+      selecteursMedicaux.mockClear();
+      db.mockReturnValueOnce(mockQuery({ id: IDS.eleve, eleve_pk: 'el-1', nom: 'Traoré', prenom: 'Aminata', matricule: 'E24001' }));
+      db.mockReturnValueOnce(mockQuery(null));
+      db.mockReturnValueOnce(mockQuery([]));
+
+      const res = await request(app).get(`/eleves/${IDS.eleve}`).expect(200);
+
+      expect(selecteursMedicaux).not.toHaveBeenCalled();
+      expect(res.body.data).toMatchObject({ medical_masque: true, classe: null, parents: [] });
+      expect(res.body.data).not.toHaveProperty('allergies');
     });
 
     test('retourne 404 si élève inexistant', async () => {

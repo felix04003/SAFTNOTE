@@ -592,3 +592,33 @@ test('14. le directeur règle les horaires et le plafond SMS, tient l\'agenda, s
   // La suppression du compte reste verrouillée tant que le mot n'est pas tapé
   await expect(page.locator('#btn-donnees-supprimer')).toBeDisabled();
 });
+
+// ── 15. Fiche élève ─────────────────────────────────────────────────────────
+
+test('15. la fiche d\'un élève réunit identité, parents, résultats, notes et absences', async ({ page }) => {
+  const fatou = jeu.eleves.find((e) => e.prenom === 'Fatou');
+  await seConnecterEnDirecteur(page);
+  await aller(page, 'eleves');
+  await page.locator('#tb-eleves tr', { hasText: 'Fatou' }).locator('button:has-text("Fiche")').click();
+
+  const fiche = page.locator('#fiche-eleve-contenu');
+  await expect(page.locator('#page-fiche-eleve')).toHaveClass(/active/);
+  await expect(fiche).toContainText('Fatou Ndiaye', { timeout: 10000 });
+  await expect(fiche).toContainText('6ème A');
+  await expect(fiche).toContainText('14/03/2013');                                   // date de naissance (profil)
+  await expect(fiche).toContainText(`${fatou.parent.prenom} ${fatou.parent.nom}`);   // parent / tuteur
+  await expect(fiche).toContainText(fatou.parent.telephone);
+  await expect(fiche).toContainText('Contact principal');
+  await expect(fiche).toContainText('Aucune donnée médicale renseignée');           // la direction voit la section
+
+  // Résultats calculés à l'étape 13 : Maths 15, Français 13 → 14 ; Awa (14,25) est devant : Fatou 2e sur 2
+  await expect(fiche).toContainText('14/20');
+  await expect(fiche).toContainText('Rang 2/2');
+  await expect(fiche).toContainText('Mathématiques');
+  await expect(fiche).toContainText('15/20');                                        // note publiée du devoir de maths
+  await expect(fiche).toContainText('Aucune absence enregistrée');
+
+  // Retour à la liste
+  await page.click('button:has-text("Retour aux élèves")');
+  await expect(page.locator('#page-eleves')).toHaveClass(/active/);
+});

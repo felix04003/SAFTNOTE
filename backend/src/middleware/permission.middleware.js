@@ -172,4 +172,18 @@ async function isolerEtablissement(req, res, next) {
   }
 }
 
-module.exports = { exigerPermission, isolerEtablissement };
+/**
+ * Test ponctuel (hors middleware) : la session a-t-elle cette permission ?
+ * Pour une route accessible à plusieurs profils dont la RÉPONSE varie selon les droits
+ * (ex. fiche élève : les données médicales ne sont montrées qu'avec 'eleves.medicale').
+ */
+async function utilisateurAPermission(session, permissionCode) {
+  if (!session) return false;
+  const { utilisateur_id, etablissement_id } = session;
+  const permsSet = await chargerPermissions(utilisateur_id, etablissement_id);
+  if (permsSet) return permsSet.has(permissionCode);
+  const result = await getDB().raw('SELECT verifier_permission(?, ?, ?) AS autorise', [utilisateur_id, permissionCode, etablissement_id]);
+  return Boolean(result.rows[0]?.autorise);
+}
+
+module.exports = { exigerPermission, isolerEtablissement, utilisateurAPermission };
