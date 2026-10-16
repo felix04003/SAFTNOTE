@@ -827,3 +827,63 @@ test('18. le directeur clôture l\'année et réinscrit les élèves dans la nou
   await aller(page, 'eleves');
   await expect(page.locator('#tb-eleves tr', { hasText: 'Fatou' })).toContainText('5ème A', { timeout: 8000 });
 });
+
+// ── 19. Parents d'un élève après l'inscription ──────────────────────────────
+
+test('19. le directeur ajoute, corrige et retire un parent depuis la fiche d\'un élève', async ({ page, request }) => {
+  const supp = jeu.parentSupplementaire;
+  await seConnecterEnDirecteur(page);
+  await aller(page, 'eleves');
+  await page.locator('#tb-eleves tr', { hasText: 'Fatou' }).locator('button:has-text("Fiche")').click();
+  const fiche = page.locator('#fiche-eleve-contenu');
+  const ligne = (texte) => fiche.locator('tr', { hasText: texte });
+  await expect(ligne('Papa Ndiaye')).toContainText('Contact principal', { timeout: 10000 });
+
+  // ── Ajouter un second parent, contact principal ──
+  await page.click('button:has-text("+ Ajouter")');
+  await expect(page.locator('#m-parent')).toHaveClass(/open/);
+  await page.fill('#fpar-prenom', supp.prenom);
+  await page.fill('#fpar-nom', supp.nom);
+  await page.fill('#fpar-tel', supp.telephone);
+  await page.selectOption('#fpar-lien', supp.lien);
+  await page.check('#fpar-principal');
+  await page.click('#fpar-enregistrer');
+  await expect(page.locator('#m-parent')).not.toHaveClass(/open/, { timeout: 8000 });
+  await expect(ligne('Aminata Ndiaye')).toContainText('Contact principal', { timeout: 8000 });
+  await expect(ligne('Papa Ndiaye')).not.toContainText('Contact principal');         // un seul principal
+
+  // ── Corriger son numéro : le compte change, pour tous ses enfants ──
+  await ligne('Aminata Ndiaye').locator('button:has-text("Modifier")').click();
+  await expect(page.locator('#fpar-tel')).toHaveValue(/\+221/);
+  await page.fill('#fpar-tel', supp.nouveauTelephone);
+  await page.click('#fpar-enregistrer');
+  await expect(ligne('Aminata Ndiaye')).toContainText(supp.nouveauTelephone, { timeout: 8000 });
+  const fatou = (await lire(request, '/eleves?recherche=Fatou'))[0];
+  const parents = (await lire(request, `/eleves/${fatou.id}`)).parents;
+  expect(parents.map((p) => p.telephone)).toContain(supp.nouveauTelephone);
+  expect(parents.map((p) => p.telephone)).not.toContain(supp.telephone);
+
+  // ── Un numéro déjà connu est réutilisé : Papa Ndiaye devient aussi le tuteur d'Awa, sans second compte ──
+  await aller(page, 'eleves');
+  await page.locator('#tb-eleves tr', { hasText: 'Awa' }).locator('button:has-text("Fiche")').click();
+  await expect(fiche).toContainText('Awa', { timeout: 10000 });
+  await page.click('button:has-text("+ Ajouter")');
+  await page.fill('#fpar-prenom', 'Autre');
+  await page.fill('#fpar-nom', 'Nom');
+  await page.fill('#fpar-tel', jeu.parents.ndiaye.telephone);
+  await page.click('#fpar-enregistrer');
+  await expect(page.locator('#toast-container')).toContainText('déjà celui de Papa Ndiaye', { timeout: 8000 });
+  await expect(ligne('Papa Ndiaye')).toBeVisible({ timeout: 8000 });
+  await expect(fiche).not.toContainText('Autre Nom');                                  // les noms saisis sont ignorés
+
+  // ── Retirer Aminata de Fatou : confirmation, Papa redevient le contact principal ──
+  await aller(page, 'eleves');
+  await page.locator('#tb-eleves tr', { hasText: 'Fatou' }).locator('button:has-text("Fiche")').click();
+  await expect(ligne('Aminata Ndiaye')).toBeVisible({ timeout: 10000 });
+  page.once('dialog', (d) => d.accept());
+  await ligne('Aminata Ndiaye').locator('button:has-text("Retirer")').click();
+  await expect(fiche).not.toContainText('Aminata Ndiaye', { timeout: 8000 });
+  await expect(ligne('Papa Ndiaye')).toContainText('Contact principal');
+  const apres = (await lire(request, `/eleves/${fatou.id}`)).parents;
+  expect(apres.map((p) => `${p.prenom} ${p.nom}`)).toEqual(['Papa Ndiaye']);
+});

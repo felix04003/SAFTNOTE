@@ -42,6 +42,9 @@ function creerJeuDeProfils(suffixe = String(Date.now()).slice(-7)) {
       email: mail('mamadou', 'diallo'), telephone: tel(1), mdp: 'Direction2026x',
     },
 
+    // Parent ajouté après l'inscription à la fiche d'un élève (étape 19), puis son numéro corrigé
+    parentSupplementaire: { prenom: 'Aminata', nom: 'Ndiaye', telephone: tel(9), lien: 'mere', nouveauTelephone: tel(0) },
+
     // Second directeur, nommé par le premier (étape 16) ; le mot de passe provisoire est lu à l'écran (pas de SMS en test)
     directeur2: {
       prenom: 'Khady', nom: 'Gueye', email: mail('khady', 'gueye'), telephone: tel(8),

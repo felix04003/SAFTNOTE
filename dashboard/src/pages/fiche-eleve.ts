@@ -1,5 +1,5 @@
 import { Api } from '../api';
-import { escapeHtml, cn, init2, toast } from '../ui';
+import { escapeHtml, cn, init2, toast, openModal, closeModal } from '../ui';
 import { PAGE_HOOKS, goto } from '../router';
 
 const nombre = (v: any, decimales = 2): string => (v == null || v === '' || Number.isNaN(Number(v))) ? '—' : Number(v).toFixed(decimales).replace(/\.?0+$/, '');
@@ -20,10 +20,10 @@ export function grillePeriodes(moyennesMatieres: any[]): { periodes: number[]; l
 }
 
 const GENRES: Record<string, string> = { M: 'Masculin', F: 'Féminin' };
-const LIENS: Record<string, string> = { pere: 'Père', mere: 'Mère', tuteur: 'Tuteur', autre: 'Autre' };
+const LIENS: Record<string, string> = { pere: 'Père', mere: 'Mère', tuteur: 'Tuteur', grand_parent: 'Grand-parent', oncle_tante: 'Oncle / tante', autre: 'Autre' };
 
-const carte = (icone: string, titre: string, corps: string) =>
-  '<div class="carte" style="margin-bottom:18px"><div class="ch"><span>' + icone + '</span><span class="ct">' + titre + '</span></div><div class="cb">' + corps + '</div></div>';
+const carte = (icone: string, titre: string, corps: string, action = '') =>
+  '<div class="carte" style="margin-bottom:18px"><div class="ch"><span>' + icone + '</span><span class="ct">' + titre + '</span>' + action + '</div><div class="cb">' + corps + '</div></div>';
 const vide = (texte: string) => '<div style="color:var(--g400);font-size:13px;padding:6px 0">' + escapeHtml(texte) + '</div>';
 const indisponible = (e: any) => '<div style="color:var(--g500);font-size:13px;padding:6px 0">Indisponible : ' + escapeHtml((e && e.message) || 'erreur') + '</div>';
 const champ = (label: string, valeur: string) =>
@@ -93,16 +93,112 @@ export const PageFicheEleve: any = {
       '</div>');
   },
 
+  _parents: [] as any[],
+  _parentEdit: '',
+  _parentInitial: null as any,
+
   rendreParents(e: any): string {
     const parents = e.parents || [];
+    this._parents = parents;
+    const ajouter = '<button class="btn btn-p btn-sm" style="margin-left:auto" onclick="PageFicheEleve.ajouterParent()">+ Ajouter</button>';
     return carte('👨‍👩‍👧', 'Parents et tuteurs', parents.length
       ? '<table style="width:100%;font-size:13px"><tbody>' + parents.map(function(p: any) {
-          return '<tr><td style="padding:5px 0"><b>' + escapeHtml((p.prenom || '') + ' ' + (p.nom || '')) + '</b>' +
+          const id = escapeHtml(p.id);
+          return '<tr><td style="padding:6px 0"><b>' + escapeHtml((p.prenom || '') + ' ' + (p.nom || '')) + '</b>' +
             (p.est_contact_principal ? ' <span class="badge bs">Contact principal</span>' : '') +
             '<br><span style="color:var(--g500)">' + escapeHtml(LIENS[p.lien] || p.lien || '') + '</span></td>' +
-            '<td style="text-align:right;font-family:\'Space Mono\',monospace;font-size:12px">' + escapeHtml(p.telephone || '—') + '</td></tr>';
+            '<td style="text-align:right;font-family:\'Space Mono\',monospace;font-size:12px">' + escapeHtml(p.telephone || '—') + '</td>' +
+            '<td style="text-align:right;white-space:nowrap;padding-left:10px">' +
+              '<button class="btn btn-l btn-sm" onclick="PageFicheEleve.modifierParent(\'' + id + '\')">Modifier</button> ' +
+              '<button class="btn btn-l btn-sm" onclick="PageFicheEleve.retirerParent(\'' + id + '\')">Retirer</button></td></tr>';
         }).join('') + '</tbody></table>'
-      : vide('Aucun parent enregistré : aucune notification ne pourra être envoyée.'));
+      : vide('Aucun parent enregistré : aucune notification ne pourra être envoyée.'), ajouter);
+  },
+
+  // ── Ajouter / corriger / retirer un parent (ids seuls dans les attributs : règle 21) ──
+  _champ(id: string): HTMLInputElement | null { return document.getElementById(id) as HTMLInputElement | null; },
+  _val(id: string): string { return (this._champ(id)?.value || '').trim(); },
+  _coche(id: string): boolean { return Boolean(this._champ(id)?.checked); },
+  _remplir(id: string, v: any) { const el = this._champ(id); if (el) el.value = v == null ? '' : String(v); },
+  _cocher(id: string, v: boolean) { const el = this._champ(id); if (el) el.checked = v; },
+
+  _modeParent(edition: boolean) {
+    const titre = document.getElementById('fpar-titre'); if (titre) titre.textContent = edition ? 'Modifier le parent' : 'Ajouter un parent ou tuteur';
+    const droits = document.getElementById('fpar-droits'); if (droits) droits.style.display = edition ? '' : 'none';
+    const note = document.getElementById('fpar-note-compte'); if (note) note.style.display = edition ? '' : 'none';
+  },
+
+  ajouterParent() {
+    this._parentEdit = ''; this._parentInitial = null;
+    ['fpar-prenom', 'fpar-nom', 'fpar-tel'].forEach((id) => this._remplir(id, ''));
+    this._remplir('fpar-lien', 'tuteur'); this._cocher('fpar-principal', !this._parents.length);
+    this._modeParent(false);
+    openModal('m-parent');
+  },
+
+  modifierParent(parentId: string) {
+    const p = this._parents.find((x: any) => x.id === parentId);
+    if (!p) return;
+    this._parentEdit = parentId;
+    this._parentInitial = p;
+    this._remplir('fpar-prenom', p.prenom); this._remplir('fpar-nom', p.nom); this._remplir('fpar-tel', p.telephone);
+    this._remplir('fpar-lien', p.lien); this._cocher('fpar-principal', Boolean(p.est_contact_principal));
+    this._cocher('fpar-notes', p.peut_voir_notes !== false); this._cocher('fpar-absences', p.peut_voir_absences !== false);
+    this._cocher('fpar-bulletins', p.peut_voir_bulletins !== false); this._cocher('fpar-discipline', p.peut_voir_discipline !== false);
+    this._modeParent(true);
+    openModal('m-parent');
+  },
+
+  async enregistrerParent() {
+    const prenom = this._val('fpar-prenom'), nom = this._val('fpar-nom'), telephone = this._val('fpar-tel');
+    if (prenom.length < 2 || nom.length < 2) return toast('Prénom et nom obligatoires', 'w');
+    if (telephone.length < 6) return toast('Numéro de téléphone obligatoire', 'w');
+    const lien = this._val('fpar-lien') || 'tuteur';
+    const principal = this._coche('fpar-principal');
+    const bouton = this._champ('fpar-enregistrer') as HTMLButtonElement | null;
+    if (bouton) bouton.disabled = true;
+    try {
+      const eleve = encodeURIComponent(this._id);
+      if (!this._parentEdit) {
+        const res = await Api.post('/eleves/' + eleve + '/parents', { prenom, nom, telephone, lien, est_contact_principal: principal });
+        const existant = res.data && res.data.compte_existant;
+        toast(existant
+          ? 'Ce numéro est déjà celui de ' + existant.prenom + ' ' + existant.nom + ' : rattaché(e) à l\'élève ✓'
+          : 'Parent ajouté ✓', 's');
+      } else {
+        const avant = this._parentInitial || {};
+        const corps: Record<string, any> = {};
+        if (prenom !== avant.prenom) corps.prenom = prenom;
+        if (nom !== avant.nom) corps.nom = nom;
+        if (telephone !== avant.telephone) corps.telephone = telephone;
+        if (lien !== avant.lien) corps.lien = lien;
+        if (principal !== Boolean(avant.est_contact_principal)) corps.est_contact_principal = principal;
+        const droits: [string, string][] = [['peut_voir_notes', 'fpar-notes'], ['peut_voir_absences', 'fpar-absences'], ['peut_voir_bulletins', 'fpar-bulletins'], ['peut_voir_discipline', 'fpar-discipline']];
+        for (const [cle, id] of droits) if (this._coche(id) !== (avant[cle] !== false)) corps[cle] = this._coche(id);
+        if (!Object.keys(corps).length) { closeModal('m-parent'); return; }
+        await Api.put('/eleves/' + eleve + '/parents/' + encodeURIComponent(this._parentEdit), corps);
+        toast('Parent modifié ✓', 's');
+      }
+      closeModal('m-parent');
+      await this.charger();
+    } catch (e: any) {
+      toast(e.message || 'Enregistrement impossible', 'e');
+    } finally {
+      if (bouton) bouton.disabled = false;
+    }
+  },
+
+  async retirerParent(parentId: string) {
+    const p = this._parents.find((x: any) => x.id === parentId);
+    const nom = p ? ((p.prenom || '') + ' ' + (p.nom || '')).trim() : 'ce parent';
+    if (!confirm('Retirer ' + nom + ' de cet élève ?\nSon compte est conservé (ses autres enfants), mais il ne verra plus les informations de cet élève.')) return;
+    try {
+      await Api.del('/eleves/' + encodeURIComponent(this._id) + '/parents/' + encodeURIComponent(parentId));
+      toast(nom + ' : retiré(e) de cet élève ✓', 's');
+      await this.charger();
+    } catch (e: any) {
+      toast(e.message || 'Retrait impossible', 'e');
+    }
   },
 
   rendreMedical(e: any): string {
