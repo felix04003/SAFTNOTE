@@ -773,3 +773,57 @@ test('17. le directeur modifie et retire un élève, modifie et archive une clas
   await rangee('Histoire-Géographie').locator('button:has-text("Réactiver")').click();
   await expect(rangee('Histoire-Géographie')).not.toContainText('Inactif', { timeout: 8000 });
 });
+
+// ── 18. Fin d'année et réinscription ────────────────────────────────────────
+
+test('18. le directeur clôture l\'année et réinscrit les élèves dans la nouvelle', async ({ page, request }) => {
+  await seConnecterEnDirecteur(page);
+  const ancienne = await lire(request, '/annees-scolaires/courante');
+  await page.click('[data-page="passage"]');
+  await expect(page.locator('#page-passage')).toHaveClass(/active/);
+
+  // Aperçu : l'année suivante est proposée, chaque élève inscrit a une ligne et une décision
+  const lignes = page.locator('#psg-classes tbody tr');
+  await expect(lignes.first()).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('#psg-annee-courante')).toHaveText(ancienne.libelle);
+  const [debutAnnee, finAnnee] = ancienne.libelle.split('-').map(Number);
+  const suivante = `${debutAnnee + 1}-${finAnnee + 1}`;
+  await expect(page.locator('#psg-libelle')).toHaveValue(suivante);
+  await expect(page.locator('#psg-resume')).toContainText('4 élèves');
+  const ligne = (texte) => page.locator('#psg-classes tbody tr', { hasText: texte });
+  await expect(ligne('Fatou')).toBeVisible();
+
+  // Décisions explicites (indépendantes des moyennes calculées) ; chaque changement réaffiche la liste
+  await ligne('Awa Traoré').locator('select').first().selectOption('redouble');
+  await ligne('Moussa').locator('select').first().selectOption('admis');
+  await ligne('Cheikh').locator('select').first().selectOption('transfere');
+  await expect(page.locator('#psg-resume')).toContainText('1 sortie');
+
+  // Confirmation
+  const messages = [];
+  page.once('dialog', (d) => { messages.push(d.message()); d.accept(); });
+  await page.click('#psg-confirmer');
+  await expect(page.locator('#page-dashboard')).toHaveClass(/active/, { timeout: 15000 });
+  expect(messages[0]).toContain(`Clôturer l'année ${ancienne.libelle}`);
+  expect(messages[0]).toContain('ne peut pas être annulée');
+
+  // Effets côté serveur
+  const courante = await lire(request, '/annees-scolaires/courante');
+  expect(courante.libelle).toBe(suivante);
+  expect(courante.periodes).toHaveLength(3);
+  const annees = await lire(request, '/annees-scolaires');
+  expect(annees.find((a) => a.libelle === ancienne.libelle).cloturee_at).not.toBeNull();
+
+  const eleves = await lire(request, '/eleves?limite=50');
+  const classeDe = (prenom) => (eleves.find((e) => e.prenom.startsWith(prenom)) || {}).classe;
+  expect(classeDe('Fatou')).toBe('5ème A');             // 6ème A -> 5ème (même lettre, classe créée)
+  expect(classeDe('Awa')).toBe('6ème A');               // redouble
+  expect(classeDe('Moussa')).toBe('4ème B');            // 5ème B -> 4ème B
+  expect(classeDe('Cheikh')).toBeUndefined();           // transféré : pas réinscrit
+  const libelles = (await lire(request, '/classes')).map((c) => c.nom_classe);
+  for (const attendu of ['6ème A', '5ème B', '5ème A', '4ème B']) expect(libelles).toContain(attendu);
+
+  // L'écran Élèves reflète la nouvelle année
+  await aller(page, 'eleves');
+  await expect(page.locator('#tb-eleves tr', { hasText: 'Fatou' })).toContainText('5ème A', { timeout: 8000 });
+});

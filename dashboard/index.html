@@ -48,6 +48,7 @@
     <a class="nav-item" data-page="edt" onclick="goto('edt')"><span class="nav-ico">🗓️</span>Emploi du temps</a>
     <a class="nav-item" data-page="agenda" onclick="goto('agenda')"><span class="nav-ico">📅</span>Agenda</a>
     <div class="nav-sec">Administration</div>
+    <a class="nav-item" data-page="passage" onclick="goto('passage')"><span class="nav-ico">🎓</span>Fin d'année</a>
     <a class="nav-item" data-page="securite" onclick="goto('securite')"><span class="nav-ico">🛡️</span>Sécurité</a>
     <a class="nav-item" data-page="donnees" onclick="goto('donnees')"><span class="nav-ico">🔒</span>Mes données</a>
     <a class="nav-item" data-page="parametres" onclick="goto('parametres')"><span class="nav-ico">⚙️</span>Paramètres</a>
@@ -265,6 +266,29 @@
         </div>
       </div>
       <div class="carte"><div class="tw"><table><thead><tr><th>Événement</th><th>Type</th><th>Quand</th><th>Lieu</th><th>Parents</th><th>Actions</th></tr></thead><tbody id="tb-agenda"></tbody></table></div></div>
+    </div>
+
+    <!-- ═══ PAGE FIN D'ANNÉE (passage et réinscription) ═══ -->
+    <div class="page" id="page-passage">
+      <div class="ph"><div><div class="ph-titre">Fin d'année et réinscription</div><div class="ph-sous">Clôturer l'année <b id="psg-annee-courante">…</b> et ouvrir la suivante</div></div>
+        <button class="btn btn-p" id="psg-confirmer" onclick="PagePassage.confirmer()">Clôturer l'année et réinscrire</button></div>
+      <div class="carte" style="margin-bottom:18px">
+        <div class="ch"><span>📅</span><span class="ct">Nouvelle année scolaire</span></div>
+        <div class="cb">
+          <div class="fr">
+            <div class="fg"><label class="fl">Année *</label><input class="fi" id="psg-libelle" placeholder="2026-2027" oninput="this.dataset.modifie=1"></div>
+            <div class="fg"><label class="fl">Début *</label><input class="fi" id="psg-debut" type="date" oninput="this.dataset.modifie=1"></div>
+            <div class="fg"><label class="fl">Fin *</label><input class="fi" id="psg-fin" type="date" oninput="this.dataset.modifie=1"></div>
+            <div class="fg"><label class="fl">Périodes</label><select class="fs" id="psg-nb"><option value="3">3 trimestres</option><option value="2">2 semestres</option></select></div>
+          </div>
+          <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-top:6px"><input type="checkbox" id="psg-affectations" checked> Reconduire les affectations des enseignants (même matière, même classe)</label>
+          <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-top:8px">Moyenne annuelle minimale pour passer
+            <input class="fi" id="psg-seuil" type="number" min="0" max="20" step="0.5" value="10" style="width:80px" onchange="PagePassage.charger()"> /20
+            <span style="color:var(--g400)">(la décision du conseil de classe prime quand elle existe)</span></label>
+        </div>
+      </div>
+      <div class="carte" style="margin-bottom:14px"><div class="cb" style="font-weight:600" id="psg-resume"></div></div>
+      <div id="psg-classes"></div>
     </div>
 
     <!-- ═══ PAGE SÉCURITÉ ═══ -->

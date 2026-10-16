@@ -101,14 +101,24 @@ router.post('/annees-scolaires', auth, isoler, perm('config.annee_scolaire'),
   async (req, res, next) => {
     const db = getDB();
     try {
-      await db.transaction(async trx => {
+      // Changer d'année sans passage laisserait tous les élèves inscrits dans l'année précédente (les listes ne
+      // lisent que l'année courante) : le passage d'année s'en charge (admis, redoublants, sorties, classes).
+      const inscrits = await db('inscriptions as i')
+        .join('annees_scolaires as a', 'a.id', 'i.annee_scolaire_id')
+        .where({ 'a.etablissement_id': req.etablissement_id, 'a.est_courante': true, 'i.statut': 'actif' })
+        .first('i.id');
+      if (inscrits) {
+        throw new ApiError(409, 'Des élèves sont inscrits dans l\'année en cours : utilisez le passage d\'année (POST /annees-scolaires/passage)', 'PASSAGE_REQUIS');
+      }
+
+      const annee = await db.transaction(async trx => {
         // Désactiver l'ancienne année courante
         await trx('annees_scolaires')
           .where({ etablissement_id: req.etablissement_id, est_courante: true })
           .update({ est_courante: false });
 
         // Créer la nouvelle année
-        const [annee] = await trx('annees_scolaires')
+        const [nouvelle] = await trx('annees_scolaires')
           .insert({
             id:               uuid(),
             etablissement_id: req.etablissement_id,
@@ -125,14 +135,17 @@ router.post('/annees-scolaires', auth, isoler, perm('config.annee_scolaire'),
           await trx('periodes').insert(
             req.body.periodes.map(p => ({
               id:               uuid(),
-              annee_scolaire_id: annee.id,
+              annee_scolaire_id: nouvelle.id,
               ...p,
             }))
           );
         }
 
-        return cree(res, annee);
+        return nouvelle;
       });
+
+      // Réponse APRÈS le COMMIT (voir POST /appels)
+      return cree(res, annee);
     } catch (err) { next(err); }
   }
 );
@@ -514,5 +527,8 @@ router.delete('/affectations/:id', auth, isoler, perm('config.modifier'), async 
     return vide(res);
   } catch (err) { next(err); }
 });
+
+// Passage d'année (fin d'année et réinscription)
+router.use(require('./passage-annee.routes'));
 
 module.exports = router;

@@ -3,6 +3,7 @@
 // - Sync descendante : serveur → SQLite local (toutes les X minutes)
 // - Sync montante : SQLite local → serveur (immédiatement si connecté)
 
+import { traiterAnnee } from './changementAnnee';
 import * as Network from 'expo-network';
 import { syncApi } from '../api/client';
 import { getDB, upsertEleves, upsertEvaluations, getOperationsPendantes, marquerOperationSynced } from '../storage/database';
@@ -57,7 +58,12 @@ class SyncService {
       const depuis = row?.derniere_sync || null;
 
       // Télécharger depuis l'API
-      const res: any = await syncApi.telecharger(depuis);
+      let res: any = await syncApi.telecharger(depuis);
+
+      // Nouvelle année scolaire : les données locales sont vidées et tout est retéléchargé (une seule fois)
+      if (await traiterAnnee(db, res.payload?.annee_scolaire_id) === 'purge') {
+        res = await syncApi.telecharger(undefined);
+      }
       const { payload, sync_at } = res;
 
       // Persister selon le rôle

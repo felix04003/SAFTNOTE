@@ -18,6 +18,7 @@ import './pages/parametres';
 import './pages/fiche-eleve';
 import './pages/agenda';
 import './pages/securite';
+import './pages/passage';
 import './pages/plages';
 import './pages/sms';
 import { PAGE_HOOKS } from './router';

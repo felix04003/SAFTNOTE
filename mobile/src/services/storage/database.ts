@@ -42,6 +42,12 @@ export const SCHEMA_SQL = `
       created_at       TEXT DEFAULT (datetime('now'))
     );
 
+    -- Métadonnées de synchronisation (clé / valeur) : année scolaire des données locales
+    CREATE TABLE IF NOT EXISTS meta (
+      cle              TEXT PRIMARY KEY,
+      valeur           TEXT
+    );
+
     -- Élèves / inscriptions
     CREATE TABLE IF NOT EXISTS eleves (
       id               TEXT PRIMARY KEY,

@@ -133,6 +133,7 @@ async function viderBaseLocale() {
     const db = getDB();
     await db.execAsync(`
       DELETE FROM session;
+      DELETE FROM meta;
       DELETE FROM eleves;
       DELETE FROM evaluations;
       DELETE FROM notes;

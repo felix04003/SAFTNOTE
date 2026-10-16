@@ -10,6 +10,7 @@ export const TITRES: Record<string, string> = {
   alertes:     'Alertes',
   'fiche-eleve': 'Fiche élève',
   agenda:      'Agenda',
+  passage:     'Fin d\'année',
   securite:    'Sécurité',
   donnees:     'Mes données',
   parametres:  'Paramètres',
