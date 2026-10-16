@@ -267,9 +267,10 @@ describe('le passage', () => {
 
   test('le passage suivant part de la nouvelle année (une année ne se rejoue pas)', async () => {
     const d = await apercu();
-    expect(d.annee.libelle).toBe('2026-2027');
-    expect(d.proposition_annee.libelle).toBe('2027-2028');
+    // Lequel des deux passages simultanés l'a emporté dépend de la course : on suit le compte rendu, pas un libellé fixe
+    expect(d.annee.libelle).toBe(compteRendu.libelle);
+    expect(d.proposition_annee.libelle).toBe(compteRendu.libelle === '2026-2027' ? '2027-2028' : '2027-2029');
     expect(d.total_eleves).toBe(4);
-    await avec('post', '/annees-scolaires/passage', tokenDir).send({ ...NOUVELLE, decisions: decisionsPropositions(d) }).expect(422);   // « 2026-2027 » est l'année en cours : doit commencer après
+    await avec('post', '/annees-scolaires/passage', tokenDir).send({ ...NOUVELLE, decisions: decisionsPropositions(d) }).expect(422);   // l'année en cours commence le 2026-10-01 : la suivante doit commencer après
   });
 });
