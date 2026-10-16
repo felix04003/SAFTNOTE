@@ -30,6 +30,7 @@ const securiteRouter    = require('./domains/05-securite/securite.routes');
 const syncRouter           = require('./domains/sync.routes');
 const notificationsRouter  = require('./domains/notifications.routes');
 const rgpdRouter           = require('./domains/02-acteurs/auth/rgpd.routes');
+const exportsRouter        = require('./domains/exports/exports.routes');
 const { initPurgeWorker, stopPurgeWorker } = require('./workers/purge.worker');
 const { initQueues } = require('./infrastructure/queue/bullmq');
 
@@ -238,6 +239,7 @@ app.use(PREFIX, securiteRouter);
 app.use(PREFIX, syncRouter);
 app.use(PREFIX, notificationsRouter);
 app.use(PREFIX, rgpdRouter);
+app.use(PREFIX, exportsRouter);
 
 // ── Gestion des erreurs ─────────────────────────────────────────
 app.use(notFound);

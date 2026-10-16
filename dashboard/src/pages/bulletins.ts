@@ -1,5 +1,5 @@
 import { Api } from '../api';
-import { escapeHtml, cn, toast, openModal, closeModal } from '../ui';
+import { escapeHtml, cn, toast, openModal, closeModal, exporterCsv } from '../ui';
 import { PAGE_HOOKS } from '../router';
 
 export const PageBulletins: any = {
@@ -33,6 +33,11 @@ export const PageBulletins: any = {
       }).join('');
       sel.value = this._periodeId;
     }
+  },
+
+  exporter() {
+    if (!this._periodeId) return toast('Choisissez une période', 'w');
+    return exporterCsv('/exports/moyennes.csv', { periode_id: this._periodeId });
   },
 
   async changerPeriode(id: string) {

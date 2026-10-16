@@ -1,5 +1,5 @@
 import { Api } from '../api';
-import { escapeHtml, toast, openModal, closeModal } from '../ui';
+import { escapeHtml, toast, openModal, closeModal, exporterCsv } from '../ui';
 import { PAGE_HOOKS } from '../router';
 
 export const PageAbsences: any = {
@@ -91,6 +91,8 @@ export const PageAbsences: any = {
       if (btn) { btn.disabled = false; btn.textContent = 'Enregistrer'; }
     }
   },
+
+  exporter: function() { return exporterCsv('/exports/absences.csv'); },
 
   init: function() {
     this.charger();

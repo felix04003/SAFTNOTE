@@ -1,3 +1,4 @@
+import { Api } from './api';
 /**
  * Texte destiné à être passé EN ARGUMENT d'un gestionnaire dans un attribut HTML (onclick="f(<ici>)").
  * escapeHtml seul ne suffit pas : le navigateur décode les entités (&#039; redevient ') AVANT d'exécuter le
@@ -89,7 +90,23 @@ export function sparkline(canvasId: string, data: number[], color: string) {
   ctx.stroke();
 }
 
+/** Exporte un CSV du serveur et le fait enregistrer par le navigateur ; le message d'erreur du serveur est affiché tel quel */
+export async function exporterCsv(chemin: string, params?: Record<string, any>) {
+  try {
+    const { nom, contenu } = await Api.telecharger(chemin, params);
+    const url = URL.createObjectURL(contenu);
+    const lien = document.createElement('a');
+    lien.href = url; lien.download = nom;
+    document.body.appendChild(lien); lien.click(); lien.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast('Export téléchargé : ' + nom, 's');
+  } catch (e: any) {
+    toast(e.message || 'Export impossible', 'e');
+  }
+}
+
 (window as any).escapeHtml = escapeHtml;
+(window as any).exporterCsv = exporterCsv;
 (window as any).cn = cn;
 (window as any).parCn = parCn;
 (window as any)._parCn = parCn;

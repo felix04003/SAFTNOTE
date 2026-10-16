@@ -959,3 +959,44 @@ test('21. après la fin d\'année, le parent retrouve les bulletins de l\'année
   await expect(page.locator('#par-bulletins-liste')).toContainText('Mathématiques');   // détail des matières de l'ancienne année
   await page.evaluate(() => { sessionStorage.clear(); localStorage.clear(); });
 });
+
+// ── 22. Exports CSV de la direction ─────────────────────────────────────────
+
+test('22. le directeur télécharge les listes en CSV (élèves, moyennes, absences, sanctions)', async ({ page }) => {
+  await seConnecterEnDirecteur(page);
+
+  /** Clique sur le bouton, attend le fichier et renvoie son nom et son texte */
+  async function telecharger(boutonTexte) {
+    const [telechargement] = await Promise.all([
+      page.waitForEvent('download', { timeout: 10000 }),
+      page.locator(`.page.active button:has-text("${boutonTexte}")`).first().click(),
+    ]);
+    const chemin = await telechargement.path();
+    return { nom: telechargement.suggestedFilename(), texte: require('fs').readFileSync(chemin, 'utf8') };
+  }
+
+  await aller(page, 'eleves');
+  const eleves = await telecharger('Exporter');
+  expect(eleves.nom).toMatch(/^eleves-\d{4}-\d{4}\.csv$/);
+  expect(eleves.texte.startsWith('﻿Matricule;Nom;Prénom')).toBe(true);
+  for (const e of ['Fatou', 'Moussa', 'Awa']) expect(eleves.texte).toContain(e);
+  expect(eleves.texte).not.toContain('Cheikh');                                      // transféré à l'étape 18 : pas dans « inscrits »
+  expect(eleves.texte).toContain('Papa Ndiaye');
+
+  await aller(page, 'bulletins');
+  await expect(page.locator('#bull-periode option').first()).toBeAttached({ timeout: 8000 });
+  const moyennes = await telecharger('Moyennes');
+  expect(moyennes.nom).toMatch(/^moyennes-.*\.csv$/);
+  expect(moyennes.texte).toContain('Moyenne générale');
+
+  await aller(page, 'absences');
+  const absences = await telecharger('Exporter');
+  expect(absences.nom).toMatch(/^absences-/);
+  expect(absences.texte).toContain('Date;Classe;Matricule');
+
+  await aller(page, 'discipline');
+  const sanctions = await telecharger('Exporter');
+  expect(sanctions.nom).toMatch(/^sanctions-/);
+  expect(sanctions.texte).toContain('Retenue');
+  expect(sanctions.texte).toContain('Bavardages répétés, deuxième fois');
+});

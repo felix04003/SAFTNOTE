@@ -5,7 +5,7 @@
 const supertest = require('supertest');
 const { getTestDB, closeTestDB, truncateData, seedTestData, createIntegrationApp, creerSession } = require('./helpers');
 
-let db, request, seed, tokenDir, tokenP1, tokenP2, tokenP3, tokenAutre;
+let db, request, seed, tokenDir, tokenP1, tokenP2, tokenP3;
 let ancienneAnnee, nouvelleAnnee, autreAnnee;
 const avec = (chemin, token) => request.get(`/api/v1${chemin}`).set('Authorization', `Bearer ${token}`);
 const bulletins = (enfant, token, requete = '') => avec(`/parents/moi/enfants/${enfant.user.id}/bulletins${requete}`, token);

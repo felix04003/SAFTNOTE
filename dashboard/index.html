@@ -139,6 +139,7 @@
             <option value="">Inscrits</option>
             <option value="retires">Retirés</option>
           </select>
+          <button class="btn btn-l" title="Télécharger la liste (Excel)" onclick="PageEleves.exporter()">📥 Exporter</button>
           <button class="btn btn-p" onclick="PageEleves.ouvrirModal()">+ Inscrire</button>
         </div>
       </div>
@@ -178,10 +179,9 @@
     <!-- ═══ PAGE ABSENCES ═══ -->
     <div class="page" id="page-absences">
       <div class="ph">
-        <div><div class="ph-titre">Absences & Présences</div><div class="ph-sous">Semaine du 24 au 28 février 2025</div></div>
+        <div><div class="ph-titre">Absences & Présences</div><div class="ph-sous" id="ph-sous-absences">Année scolaire en cours</div></div>
         <div style="display:flex;gap:9px">
-          <div class="ft"><div class="ftab actif" onclick="ftSwitch(this)">Cette semaine</div><div class="ftab" onclick="ftSwitch(this)">Ce mois</div><div class="ftab" onclick="ftSwitch(this)">T2</div></div>
-          <button class="btn btn-l">📥 Exporter</button>
+          <button class="btn btn-l" title="Télécharger les absences et retards de l'année (Excel)" onclick="PageAbsences.exporter()">📥 Exporter</button>
         </div>
       </div>
       <div class="sg" style="margin-bottom:18px">
@@ -226,6 +226,7 @@
         <div><div class="ph-titre">Bulletins scolaires</div><div class="ph-sous" id="ph-sous-bulletins"></div></div>
         <div style="display:flex;gap:9px">
           <select class="fs" id="bull-periode" style="width:170px" onchange="PageBulletins.changerPeriode(this.value)"></select>
+          <button class="btn btn-l" title="Télécharger les moyennes de la période (Excel)" onclick="PageBulletins.exporter()">📥 Moyennes</button>
           <button class="btn btn-o" onclick="PageBulletins.genererTous()">⚡ Générer tous</button>
         </div>
       </div>
@@ -265,6 +266,7 @@
             <option value="">Tous les types</option><option value="avertissement_oral">Avertissement oral</option><option value="avertissement_ecrit">Avertissement écrit</option>
             <option value="retenue">Retenue</option><option value="renvoi_temporaire">Renvoi temporaire</option><option value="conseil_discipline">Conseil de discipline</option><option value="exclusion_definitive">Exclusion définitive</option>
           </select>
+          <button class="btn btn-l" title="Télécharger les sanctions (Excel)" onclick="PageDiscipline.exporter()">📥 Exporter</button>
           <button class="btn btn-p" onclick="PageDiscipline.ouvrir()">+ Prononcer une sanction</button>
         </div>
       </div>
