@@ -13,6 +13,7 @@
 | [Backend](architecture/backend.md) | Domaines API, middlewares, patterns |
 | [Dashboard](architecture/dashboard.md) | 3 portails, routing hash, conventions JS |
 | [Base de données](architecture/database.md) | Schéma SQL, migrations, conventions |
+| [Validation hors dépôt](VALIDATION_HORS_DEPOT.md) | Ce qu'une personne doit vérifier avant la mise en production (SMS réels, mobile, Render, PDF, sauvegardes, fin d'année) |
 
 ---
 
