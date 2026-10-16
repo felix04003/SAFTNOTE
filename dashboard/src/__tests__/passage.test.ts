@@ -24,7 +24,7 @@ function apercu() {
 }
 
 const PAGE = '<div id="tc"></div><b id="psg-annee-courante"></b><input id="psg-libelle"><input id="psg-debut" type="date"><input id="psg-fin" type="date">' +
-  '<select id="psg-nb"><option value="3">3</option><option value="2">2</option></select><input id="psg-affectations" type="checkbox" checked>' +
+  '<select id="psg-nb"><option value="3">3</option><option value="2">2</option></select><input id="psg-affectations" type="checkbox" checked><input id="psg-edt" type="checkbox" checked>' +
   '<input id="psg-seuil" value="10"><div id="psg-resume"></div><div id="psg-classes"></div><button id="psg-confirmer"></button><div class="page" id="page-dashboard"></div>';
 
 beforeEach(() => { document.body.innerHTML = PAGE; PagePassage._donnees = null; PagePassage._choix = {}; PagePassage._envoi = false; });
@@ -139,7 +139,7 @@ describe('page', () => {
       await PagePassage.confirmer();
       expect(String((window.confirm as any).mock.calls[0][0])).toContain('ne peut pas être annulée');
       expect(post).toHaveBeenCalledWith('/annees-scolaires/passage', {
-        libelle: '2026-2027', date_debut: '2026-10-01', date_fin: '2027-07-15', nb_periodes: 2, copier_affectations: false,
+        libelle: '2026-2027', date_debut: '2026-10-01', date_fin: '2027-07-15', nb_periodes: 2, copier_affectations: false, copier_edt: false,
         decisions: [
           { inscription_id: 'i1', decision: 'admis', classe_cible: { niveau_id: 'n2', nom: 'B' } },
           { inscription_id: 'i2', decision: 'redouble' },
@@ -148,6 +148,27 @@ describe('page', () => {
       });
       expect(document.body.textContent).toContain('2 élève(s) réinscrit(s)');
       expect(document.getElementById('page-dashboard')!.classList.contains('active')).toBe(true);
+    });
+
+    it('emploi du temps : reconduit avec les affectations, jamais sans elles', () => {
+      for (const [aff, edt, attendu] of [[true, true, true], [true, false, false], [false, true, false]] as const) {
+        document.body.innerHTML = PAGE;
+        (document.getElementById('psg-libelle') as HTMLInputElement).value = '2026-2027';
+        (document.getElementById('psg-debut') as HTMLInputElement).value = '2026-10-01';
+        (document.getElementById('psg-fin') as HTMLInputElement).value = '2027-07-15';
+        (document.getElementById('psg-affectations') as HTMLInputElement).checked = aff;
+        (document.getElementById('psg-edt') as HTMLInputElement).checked = edt;
+        expect(PagePassage.lireAnnee()).toMatchObject({ copier_affectations: aff, copier_edt: attendu });
+      }
+    });
+
+    it('décocher les affectations désactive et décoche l\'emploi du temps', () => {
+      const aff = document.getElementById('psg-affectations') as HTMLInputElement;
+      const edt = document.getElementById('psg-edt') as HTMLInputElement;
+      aff.checked = false; PagePassage.majOptions();
+      expect(edt.disabled).toBe(true); expect(edt.checked).toBe(false);
+      aff.checked = true; PagePassage.majOptions();
+      expect(edt.disabled).toBe(false);
     });
 
     it('échec du serveur : message affiché, rien n\'est perdu, le bouton redevient actif', async () => {

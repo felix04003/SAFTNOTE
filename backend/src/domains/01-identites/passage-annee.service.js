@@ -190,7 +190,7 @@ async function apercu(db, etablissementId, { seuil = SEUIL_DEFAUT } = {}) {
 
 /**
  * Exécute le passage dans la transaction `trx`. `params` : { libelle, date_debut, date_fin, nb_periodes?, periodes?,
- * copier_affectations?, decisions: [{ inscription_id, decision, classe_cible?: { niveau_id, nom } }] }.
+ * copier_affectations?, copier_edt?, decisions: [{ inscription_id, decision, classe_cible?: { niveau_id, nom } }] }.
  * Retourne un compte rendu ; toute erreur annule l'ensemble.
  */
 async function effectuerPassage(trx, { etablissementId, utilisateurId, params }) {
@@ -325,6 +325,7 @@ async function effectuerPassage(trx, { etablissementId, utilisateurId, params })
 
   // 7. Affectations des enseignants (facultatif) : mêmes enseignant, matière et classe dans la nouvelle année
   let affectationsCopiees = 0;
+  let creneauxCopies = 0;
   if (params.copier_affectations) {
     const anciennes = await trx('affectations_enseignants as ae')
       .join('matieres as m', 'm.id', 'ae.matiere_id')
@@ -332,24 +333,43 @@ async function effectuerPassage(trx, { etablissementId, utilisateurId, params })
       .join('utilisateurs as u', 'u.id', 'en.utilisateur_id')
       .where({ 'ae.annee_scolaire_id': ancienne.id, 'm.actif': true, 'u.actif': true })
       .whereNull('ae.date_fin')
-      .select('ae.enseignant_id', 'ae.matiere_id', 'ae.classe_id', 'ae.est_titulaire');
-    const lignes = anciennes.filter((x) => correspondance.has(x.classe_id)).map((x) => ({
-      id: uuid(), enseignant_id: x.enseignant_id, matiere_id: x.matiere_id,
-      classe_id: correspondance.get(x.classe_id), annee_scolaire_id: nouvelle.id, est_titulaire: x.est_titulaire,
-    }));
+      .select('ae.id', 'ae.enseignant_id', 'ae.matiere_id', 'ae.classe_id', 'ae.est_titulaire');
+    const nouvelleAffectation = new Map();                   // ancienne affectation -> nouvelle
+    const lignes = anciennes.filter((x) => correspondance.has(x.classe_id)).map((x) => {
+      const id = uuid();
+      nouvelleAffectation.set(x.id, id);
+      return { id, enseignant_id: x.enseignant_id, matiere_id: x.matiere_id,
+        classe_id: correspondance.get(x.classe_id), annee_scolaire_id: nouvelle.id, est_titulaire: x.est_titulaire };
+    });
     if (lignes.length) await trx.batchInsert('affectations_enseignants', lignes, 200);
     affectationsCopiees = lignes.length;
+
+    // 8. Emploi du temps (facultatif, suppose les affectations) : la grille hebdomadaire de référence, valable toute
+    // l'année. Les créneaux déjà terminés (date de fin renseignée) ne sont pas reconduits.
+    if (params.copier_edt && nouvelleAffectation.size) {
+      const creneaux = await trx('emplois_du_temps')
+        .whereIn('affectation_id', [...nouvelleAffectation.keys()])
+        .where({ actif: true })
+        .whereNull('date_fin_validite')
+        .select('classe_id', 'affectation_id', 'plage_id', 'jour_semaine', 'salle');
+      const copies = creneaux.filter((c) => correspondance.has(c.classe_id)).map((c) => ({
+        id: uuid(), classe_id: correspondance.get(c.classe_id), affectation_id: nouvelleAffectation.get(c.affectation_id),
+        plage_id: c.plage_id, jour_semaine: c.jour_semaine, salle: c.salle, actif: true,
+      }));
+      if (copies.length) await trx.batchInsert('emplois_du_temps', copies, 200);
+      creneauxCopies = copies.length;
+    }
   }
 
   await trx('journal_audit').insert({
     etablissement_id: etablissementId, utilisateur_id: utilisateurId,
     action: 'annee.passage', resultat: 'succes', table_cible: 'annees_scolaires', enregistrement_id: nouvelle.id,
-    details: JSON.stringify({ de: ancienne.libelle, vers: nouvelle.libelle, ...bilan, affectations_copiees: affectationsCopiees }),
+    details: JSON.stringify({ de: ancienne.libelle, vers: nouvelle.libelle, ...bilan, affectations_copiees: affectationsCopiees, creneaux_copies: creneauxCopies }),
   });
 
   return {
     annee_id: nouvelle.id, libelle: nouvelle.libelle, ancienne_annee: ancienne.libelle,
-    classes_creees: aCreer.size, reinscrits: nouvelles.length, ...bilan, affectations_copiees: affectationsCopiees,
+    classes_creees: aCreer.size, reinscrits: nouvelles.length, ...bilan, affectations_copiees: affectationsCopiees, creneaux_copies: creneauxCopies,
   };
 }
 
