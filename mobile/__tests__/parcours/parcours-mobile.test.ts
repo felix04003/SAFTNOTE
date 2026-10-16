@@ -551,6 +551,52 @@ describe('Parcours mobile : synchronisation incrémentale côté parent', () => 
   });
 });
 
+// ══════════════════════════════════════════════════════════════════
+// Fin d'année : le téléphone repart de zéro sur la nouvelle année
+// ══════════════════════════════════════════════════════════════════
+
+describe('Parcours mobile : fin d\'année', () => {
+  test('M15. le directeur passe l\'année : le téléphone de l\'enseignante ne garde rien de l\'ancienne et reçoit ses nouvelles classes', async () => {
+    const ba = enseignant('Ba');
+    await nouvelAppareil();
+    await useAuthStore.getState().connexionMDP({
+      identifiant: ba.telephone, mot_de_passe: etat.nouveauMdp, etablissement_code: etat.codeEtablissement,
+    });
+    expect((await syncService.syncDescendante()).succes).toBe(true);
+    expect(await nomsLocaux()).toEqual(['Fatou Ndiaye', 'Awa Traoré'].sort((a, b) => a.split(' ')[1].localeCompare(b.split(' ')[1])));
+    const anciennesEvaluations = await lignes('SELECT id FROM evaluations');
+    expect(anciennesEvaluations.length).toBeGreaterThan(0);
+    const anciennePeriode = (await lignes('SELECT id FROM periodes'))[0].id;
+
+    // Le directeur clôture l'année : Fatou passe en 5ème A, Awa redouble (reste en 6ème A), les autres suivent la proposition
+    const apercu = await dir('GET', '/annees-scolaires/passage/apercu');
+    const decisions = apercu.classes.flatMap((c: any) => c.eleves).map((e: any) => ({
+      inscription_id: e.inscription_id,
+      decision: e.prenom === 'Awa' ? 'redouble' : e.prenom === 'Fatou' ? 'admis' : e.proposition,
+    }));
+    const compteRendu = await dir('POST', '/annees-scolaires/passage', {
+      libelle: apercu.proposition_annee.libelle, date_debut: apercu.proposition_annee.date_debut,
+      date_fin: apercu.proposition_annee.date_fin, copier_affectations: true, decisions,
+    });
+    expect(compteRendu.reinscrits, 'tous les élèves sont réinscrits').toBe(apercu.total_eleves);
+
+    // Synchronisation suivante : l'année a changé, tout est retéléchargé
+    expect((await syncService.syncDescendante()).succes).toBe(true);
+    expect(await nomsLocaux(), 'seule Awa est encore dans une classe de Mme Ba (Fatou est en 5ème A)').toEqual(['Awa Traoré']);
+    expect((await lignes('SELECT classe FROM eleves')).map((e) => e.classe)).toEqual(['6ème A']);
+    expect(await lignes('SELECT id FROM evaluations'), 'les évaluations de l\'ancienne année ont disparu').toEqual([]);
+    expect(await lignes('SELECT id FROM notes')).toEqual([]);
+    const periodes = await lignes('SELECT id FROM periodes');
+    expect(periodes).toHaveLength(3);
+    expect(periodes.map((p) => p.id), 'les périodes sont celles de la nouvelle année').not.toContain(anciennePeriode);
+    expect((await lignes('SELECT matiere, classe FROM affectations')).map((a) => `${a.classe} | ${a.matiere}`)).toEqual(['6ème A | Français']);
+
+    // Une synchronisation de plus ne change plus rien (l'année est mémorisée)
+    expect((await syncService.syncDescendante()).succes).toBe(true);
+    expect(await nomsLocaux()).toEqual(['Awa Traoré']);
+  });
+});
+
 function test_skip_sans_psql() {
   if (!psqlDisponible) throw new Error('psql est nécessaire pour fixer le code SMS (variables POSTGRES_* de la base de test)');
 }

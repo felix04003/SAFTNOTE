@@ -31,6 +31,11 @@ router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) =>
 
     let payload = {};
 
+    // Année courante : le mobile compare avec celle qu'il a mémorisée et repart de zéro quand elle change
+    // (fin d'année) au lieu de garder les élèves, évaluations et notes de l'année précédente
+    const anneeRow = await db('annees_scolaires').where({ etablissement_id: req.etablissement_id, est_courante: true }).first('id');
+    const anneeId = anneeRow ? anneeRow.id : null;
+
     if (isEnseignant) {
       // affectations_enseignants.enseignant_id référence enseignants.id, pas
       // utilisateurs.id (ce sont deux UUID distincts) — on résout une fois.
@@ -68,7 +73,9 @@ router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) =>
           .join('matieres as m', 'm.id', 'ae.matiere_id')
           .join('classes as c', 'c.id', 'ae.classe_id')
           .join('niveaux as nv', 'nv.id', 'c.niveau_id')
-          .where({ 'ae.enseignant_id': enseignantId })
+          .join('annees_scolaires as a', 'a.id', 'ae.annee_scolaire_id')
+          // année courante seulement : les évaluations des années clôturées restent sur le serveur
+          .where({ 'ae.enseignant_id': enseignantId, 'a.est_courante': true })
           .where('ev.updated_at', '>', syncDepuis)
           .select('ev.id', 'ev.type', 'ev.numero', 'ev.titre', 'ev.date_evaluation', 'ev.note_max', 'ev.notes_publiees', 'ev.affectation_id', 'm.nom as matiere',
             db.raw("CONCAT(nv.nom, ' ', c.nom) as classe")),
@@ -78,7 +85,8 @@ router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) =>
           .join('evaluations as ev', 'ev.id', 'n.evaluation_id')
           .join('affectations_enseignants as ae', 'ae.id', 'ev.affectation_id')
           .join('eleves as el', 'el.id', 'n.eleve_id')
-          .where({ 'ae.enseignant_id': enseignantId })
+          .join('annees_scolaires as a', 'a.id', 'ae.annee_scolaire_id')
+          .where({ 'ae.enseignant_id': enseignantId, 'a.est_courante': true })
           .where('n.saisie_at', '>', syncDepuis)
           // eleve_id : utilisateurs.id, comme dans la liste « eleves » ci-dessus et dans la base locale du mobile
           .select('n.id', 'n.evaluation_id', 'el.utilisateur_id as eleve_id', 'n.inscription_id', 'n.valeur', 'n.est_absent', 'n.absence_justifiee'),
@@ -90,9 +98,10 @@ router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) =>
           .join('matieres as m', 'm.id', 'ae.matiere_id')
           .join('classes as c', 'c.id', 'ae.classe_id')
           .join('niveaux as n', 'n.id', 'c.niveau_id')
-          // Toujours l'emploi du temps COMPLET (petit) : le mobile le remplace en bloc, un envoi partiel
-          // effacerait les créneaux inchangés
-          .where({ 'ae.enseignant_id': enseignantId })
+          .join('annees_scolaires as a', 'a.id', 'ae.annee_scolaire_id')
+          // Toujours l'emploi du temps COMPLET (petit) de l'année courante : le mobile le remplace en bloc, un envoi
+          // partiel effacerait les créneaux inchangés
+          .where({ 'ae.enseignant_id': enseignantId, 'a.est_courante': true })
           .select('edt.id', 'edt.jour_semaine', 'edt.salle', 'ph.heure_debut', 'ph.heure_fin', 'm.nom as matiere', 'ae.classe_id', db.raw("CONCAT(n.nom, ' ', c.nom) as classe")),
 
         // Ses affectations de l'année : le mobile en a besoin pour créer une évaluation (matière × classe)
@@ -113,7 +122,7 @@ router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) =>
           .select('p.id', 'p.numero', 'p.libelle', 'p.date_debut', 'p.date_fin'),
       ]);
 
-      payload = { classes, eleves, evaluations, notes, edt, affectations, periodes };
+      payload = { annee_scolaire_id: anneeId, classes, eleves, evaluations, notes, edt, affectations, periodes };
 
     } else if (isParent) {
       // Payload parent : enfants + notes publiées + absences + bulletins + EDT
@@ -202,7 +211,7 @@ router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) =>
         }))
       );
 
-      payload = { enfants, notes, absences, bulletins: bulletinsAvecUrl, edt };
+      payload = { annee_scolaire_id: anneeId, enfants, notes, absences, bulletins: bulletinsAvecUrl, edt };
     }
 
     return ok(res, { sync_at: syncAt, payload });

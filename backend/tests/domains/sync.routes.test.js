@@ -77,6 +77,8 @@ describe('Sync Routes', () => {
       const session = JSON.stringify({ roles: ['enseignant'], utilisateur_id: IDS.enseignant, etablissement_id: IDS.etablissement });
 
       // 1. Résolution enseignant_id depuis utilisateur_id
+      // 0. Année courante (annoncée au mobile pour qu'il repartisse de zéro quand elle change)
+      db.mockReturnValueOnce(mockQuery({ id: 'annee-courante-1' }));
       db.mockReturnValueOnce(mockQuery({ id: IDS.enseignant }));
       // 2-6. Promise.all : classes, eleves, evaluations, notes, edt
       const classesChain     = mockQuery([{ id: IDS.classe, libelle: 'Terminale S1', effectif_max: 45 }]);
@@ -107,6 +109,7 @@ describe('Sync Routes', () => {
       expect(res.body.data.payload.edt).toHaveLength(1);
       expect(res.body.data.payload.affectations).toHaveLength(1);
       expect(res.body.data.payload.periodes).toHaveLength(1);
+      expect(res.body.data.payload.annee_scolaire_id).toBe('annee-courante-1');
 
       // Le delta est bien filtré par la date `depuis` fournie (compte OU inscription modifié depuis)
       const datesEleves = datesDeFiltre(db, 'GREATEST(u.updated_at, i.updated_at)');
@@ -117,6 +120,8 @@ describe('Sync Routes', () => {
     test('enseignant : sans paramètre depuis, utilise une date epoch (renvoie tout l\'historique)', async () => {
       const session = JSON.stringify({ roles: ['enseignant'], utilisateur_id: IDS.enseignant, etablissement_id: IDS.etablissement });
 
+      // 0. Année courante (annoncée au mobile pour qu'il repartisse de zéro quand elle change)
+      db.mockReturnValueOnce(mockQuery({ id: 'annee-courante-1' }));
       db.mockReturnValueOnce(mockQuery({ id: IDS.enseignant }));
       const elevesChain = mockQuery([]);
       db.mockReturnValueOnce(mockQuery([]))
@@ -145,6 +150,7 @@ describe('Sync Routes', () => {
       // par défaut — on l'ajoute manuellement sur la chaîne "absences".
       const absencesChain = mockQuery([]);
 
+      db.mockReturnValueOnce(mockQuery({ id: 'annee-courante-1' }));   // année courante
       db.mockReturnValueOnce(mockQuery([{ id: IDS.eleve, nom: 'Ba', prenom: 'Mariama' }]))
         .mockReturnValueOnce(mockQuery([]))
         .mockReturnValueOnce(absencesChain)
