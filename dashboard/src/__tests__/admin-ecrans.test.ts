@@ -238,6 +238,21 @@ describe('données personnelles (RGPD)', () => {
     vi.useRealTimers();
   });
 
+  it('seul directeur : le refus du serveur est affiché et la session n\'est PAS vidée', async () => {
+    sessionStorage.setItem('em_token', 't');
+    localStorage.setItem('em_user', JSON.stringify({ role: 'directeur' }));
+    document.body.innerHTML = '<div id="tc"></div><input id="donnees-confirmation" value="SUPPRIMER">';
+    window.confirm = vi.fn().mockReturnValue(true);
+    vi.spyOn(Api, 'del').mockRejectedValue(new Error('Vous êtes le seul directeur de cet établissement'));
+    const quitter = vi.fn();
+    PageDonnees.quitter = quitter;
+    await PageDonnees.supprimer();
+    expect(document.body.textContent).toContain('seul directeur');
+    expect(sessionStorage.getItem('em_token')).toBe('t');
+    expect(localStorage.getItem('em_user')).not.toBeNull();
+    expect(quitter).not.toHaveBeenCalled();
+  });
+
   it('suppression sans le mot de confirmation : rien n\'est envoyé', async () => {
     document.body.innerHTML = '<div id="tc"></div><input id="donnees-confirmation" value="oui">';
     const del = vi.spyOn(Api, 'del');

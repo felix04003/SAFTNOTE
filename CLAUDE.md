@@ -439,6 +439,7 @@ META_WA_TOKEN         → WhatsApp Business API
 16. **Tests manuels** : `npm run test:integration` crée puis SUPPRIME la base `ecole_manager_test` ; utiliser un autre nom de base pour des essais à la main, et lancer `redis-server --dir /tmp` (jamais depuis le dépôt : `dump.rdb`)
 17. **Workers en production** : SMS de notification, calcul des moyennes après publication et PDF de bulletins passent par des files BullMQ (Redis) et ne s'exécutent QUE si un worker tourne : Render = service `ecolemanager-workers` (payant, Docker, `lanceur.js`) + `ecolemanager-redis` ; VPS = `worker-notif`, `worker-moyennes`, `worker-bulletins` de `docker-compose.prod.yml`. Un nouveau worker : un fichier `src/workers/*.worker.js` démarré seulement si `require.main === module`, une entrée dans `lanceur.js` ET dans les deux fichiers de déploiement. Le calcul des moyennes n'existe qu'une fois (`calcul-moyennes.service.js`) : ne jamais le recopier dans un worker
 18. **Données médicales** : `GET /eleves/:id` ne renvoie allergies, conditions, groupe sanguin et médecin que si la session a la permission `eleves.medicale` (direction) ; sinon `medical_masque: true`. Toute nouvelle route qui expose une fiche élève doit faire de même (`utilisateurAPermission`). Avant, tout porteur de `eleves.voir`, enseignants compris, les recevait déchiffrées
+19. **Dernier directeur** : on ne ferme ni ne bloque jamais le dernier directeur actif d'un établissement (`utils/dernier-directeur.js`, 409 `DERNIER_DIRECTEUR`) : `DELETE /utilisateurs/moi` (droit à l'effacement) et `POST /securite/blocage/:userId` (bloquer, pas débloquer). Toute nouvelle route qui désactive ou anonymise un compte doit appeler `estDernierDirecteurActif`
 
 ---
 
@@ -475,7 +476,7 @@ META_WA_TOKEN         → WhatsApp Business API
 | 27 | Notifications SMS réparées sur base réelle (le worker ne trouvait jamais le parent : aucun SMS n'avait pu partir), publication des notes → un SMS par parent, contrôle d'établissement sur la publication, report horaire BullMQ 5, plafond mensuel de SMS par établissement avec alertes (migration 023) | ✅ |
 
 > Les compteurs de tests ci-dessus sont historiques (au moment de chaque étape). Compteurs
-> actuels (vérifiés le 2026-10-07) : backend 379 tests (40 suites Jest) + 215 tests d'intégration sur base réelle (29 suites, `npm run test:integration`), dashboard 168 tests (Vitest) + 51 tests E2E Playwright (voir dashboard/tests/README.md), mobile 119 tests (Jest) + 18 étapes de parcours contre un vrai backend (`cd mobile && npm run test:parcours`, job CI `mobile-parcours`, voir `mobile/__tests__/parcours/parcours-mobile.test.ts`).
+> actuels (vérifiés le 2026-10-07) : backend 379 tests (40 suites Jest) + 220 tests d'intégration sur base réelle (30 suites, `npm run test:integration`), dashboard 169 tests (Vitest) + 51 tests E2E Playwright (voir dashboard/tests/README.md), mobile 119 tests (Jest) + 18 étapes de parcours contre un vrai backend (`cd mobile && npm run test:parcours`, job CI `mobile-parcours`, voir `mobile/__tests__/parcours/parcours-mobile.test.ts`).
 
 ---
 

@@ -10,6 +10,7 @@ const { valider }    = require('../../middleware/validate.middleware');
 const { ok, liste, paginee, getPagination, vide } = require('../../utils/reponse');
 const ApiError       = require('../../utils/ApiError');
 const logger         = require('../../utils/logger');
+const { estDernierDirecteurActif, erreurDernierDirecteur } = require('../../utils/dernier-directeur');
 
 const router = express.Router();
 const auth   = authentifier;
@@ -156,6 +157,11 @@ router.post('/securite/blocage/:userId', auth, isoler, perm('admin.utilisateurs'
 
       // Basculer le statut actif
       const nouveauStatut = !utilisateur.actif;
+
+      // Bloquer (et non débloquer) le dernier directeur actif : l'école n'aurait plus personne pour la gérer
+      if (!nouveauStatut && await estDernierDirecteurActif(db, req.params.userId, req.etablissement_id)) {
+        throw erreurDernierDirecteur('Ce compte est le seul directeur actif de l\'établissement : il ne peut pas être bloqué.');
+      }
 
       await db.transaction(async trx => {
         // Mettre à jour le statut
