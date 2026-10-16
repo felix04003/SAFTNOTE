@@ -7,10 +7,17 @@ const { getDB }      = require('../../infrastructure/database/pool');
 const { authentifier } = require('../../middleware/auth.middleware');
 const { exigerPermission, isolerEtablissement } = require('../../middleware/permission.middleware');
 const { valider }    = require('../../middleware/validate.middleware');
-const { ok, liste, paginee, getPagination, vide } = require('../../utils/reponse');
+const { ok, cree, liste, paginee, getPagination, vide } = require('../../utils/reponse');
 const ApiError       = require('../../utils/ApiError');
 const logger         = require('../../utils/logger');
 const { estDernierDirecteurActif, erreurDernierDirecteur } = require('../../utils/dernier-directeur');
+const bcrypt   = require('bcryptjs');
+const rateLimit = require('express-rate-limit');
+const { v4: uuid } = require('uuid');
+const { envoyerMotDePasseProvisoire } = require('../../infrastructure/notifications/sms.service');
+const { paysIso, telephoneOuErreur, variantesTelephone } = require('../../utils/telephone');
+const { emailPrisParPersonnel } = require('../../utils/email-personnel');
+const { exigerMotDePasseConforme, genererMotDePasseTemporaire } = require('../../utils/mot-de-passe');
 
 const router = express.Router();
 const auth   = authentifier;
@@ -199,6 +206,111 @@ router.post('/securite/blocage/:userId', auth, isoler, perm('admin.utilisateurs'
       return ok(res, {
         message: `Compte ${utilisateur.prenom} ${utilisateur.nom} ${nouveauStatut ? 'débloqué' : 'bloqué'}`,
         actif: nouveauStatut,
+      });
+    } catch (err) { next(err); }
+  }
+);
+
+// ═════════════════════════════════════════════════════════════════
+// POST /securite/directeurs — Créer un second directeur (succession, remplaçant)
+// Réservé à un DIRECTEUR en exercice : c'est la porte de sortie du garde-fou
+// « dernier directeur » (un directeur ne peut partir que s'il y en a un autre).
+// Mot de passe provisoire aléatoire envoyé par SMS, changement obligatoire.
+// ═════════════════════════════════════════════════════════════════
+const limiterCreationDirecteur = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max:      parseInt(process.env.RATE_LIMIT_DIRECTEUR_MAX) || 5,
+  message:  { succes: false, erreur: 'Trop de comptes directeur créés — réessayez dans 1 heure', code: 'RATE_LIMIT' },
+  standardHeaders: true,
+  legacyHeaders:   false,
+});
+
+router.post('/securite/directeurs', auth, isoler, perm('admin.utilisateurs'), limiterCreationDirecteur,
+  valider(z.object({
+    nom:       z.string().min(2).max(100),
+    prenom:    z.string().min(2).max(100),
+    telephone: z.string().min(6, 'Numéro invalide').max(25, 'Numéro invalide'),
+    email:     z.string().email().optional().or(z.literal('')),
+    genre:     z.enum(['M', 'F']).optional(),
+  })),
+  async (req, res, next) => {
+    try {
+      const db = getDB();
+
+      // Seul un directeur en exercice nomme un directeur (pas un simple porteur de la permission)
+      const estDirecteur = await db('utilisateur_roles as ur')
+        .join('roles as r', 'r.id', 'ur.role_id')
+        .where({ 'ur.utilisateur_id': req.session.utilisateur_id, 'ur.etablissement_id': req.etablissement_id, 'ur.actif': true, 'r.code': 'directeur' })
+        .first('ur.id');
+      if (!estDirecteur) throw ApiError.interdit('Seul un directeur peut nommer un autre directeur');
+
+      const etab      = await db('etablissements').where({ id: req.etablissement_id }).first('nom', 'pays');
+      const pays      = paysIso(etab && etab.pays);
+      const telephone = telephoneOuErreur(req.body.telephone, pays);
+
+      const doublon = await db('utilisateurs')
+        .where({ etablissement_id: req.etablissement_id })
+        .whereIn('telephone', variantesTelephone(req.body.telephone, pays))
+        .first('id');
+      if (doublon) throw ApiError.validationEchouee('Un utilisateur avec ce numéro existe déjà dans votre établissement');
+
+      const email = req.body.email || null;
+      if (email) {
+        const pris = await db('utilisateurs').where({ etablissement_id: req.etablissement_id, email }).first('id');
+        if (pris) throw ApiError.validationEchouee('Un utilisateur avec cet email existe déjà dans votre établissement');
+        if (await emailPrisParPersonnel(db, email)) {
+          throw ApiError.validationEchouee('Cet email est déjà utilisé par un membre du personnel d\'un autre établissement');
+        }
+      }
+
+      const mdpBrut = genererMotDePasseTemporaire();
+      const politique = await db('politique_securite').where({ etablissement_id: req.etablissement_id }).first('mdp_longueur_min');
+      exigerMotDePasseConforme(mdpBrut, politique, { ...req.body, telephone });
+      const mdpHash = await bcrypt.hash(mdpBrut, 10);
+
+      const utilisateurId = uuid();
+      await db.transaction(async trx => {
+        const roleRow = await trx('roles').where({ code: 'directeur' }).first('id');
+        if (!roleRow) throw new Error('Rôle "directeur" introuvable — vérifiez les données de référence');
+
+        await trx('utilisateurs').insert({
+          id: utilisateurId, etablissement_id: req.etablissement_id,
+          nom: req.body.nom, prenom: req.body.prenom, telephone, email, genre: req.body.genre,
+          mot_de_passe_hash: mdpHash, mdp_a_changer: true, actif: true,
+        });
+        await trx('utilisateur_roles').insert({
+          id: uuid(), utilisateur_id: utilisateurId, role_id: roleRow.id, etablissement_id: req.etablissement_id,
+        });
+        await trx('journal_audit').insert({
+          etablissement_id: req.etablissement_id,
+          utilisateur_id:   req.session.utilisateur_id,
+          action:           'utilisateurs.creer_directeur',
+          resultat:         'succes',
+          table_cible:      'utilisateurs',
+          enregistrement_id: utilisateurId,
+          details:          JSON.stringify({ nom: req.body.nom, prenom: req.body.prenom }),
+        });
+      });
+
+      logger.info('Directeur créé', { utilisateur_id: utilisateurId, cree_par: req.session.utilisateur_id, etablissement_id: req.etablissement_id });
+
+      // SMS : le mot de passe n'est renvoyé que si le SMS n'a pas pu partir
+      let smsEnvoye = false;
+      if (process.env.AT_API_KEY) {
+        try {
+          await envoyerMotDePasseProvisoire(telephone, { etablissementNom: etab && etab.nom, motDePasse: mdpBrut });
+          smsEnvoye = true;
+        } catch (err) {
+          logger.warn('SMS du mot de passe provisoire non envoyé', { error: String(err.message).slice(0, 120) });
+        }
+      }
+
+      return cree(res, {
+        utilisateur_id: utilisateurId,
+        sms_envoye: smsEnvoye,
+        message: smsEnvoye
+          ? `Directeur créé. Un SMS contenant le mot de passe provisoire a été envoyé au ${telephone}.`
+          : `Directeur créé, mais le SMS n'a pas pu être envoyé. Mot de passe provisoire : ${mdpBrut}`,
       });
     } catch (err) { next(err); }
   }

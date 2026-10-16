@@ -156,6 +156,33 @@ describe('sécurité — affichage', () => {
     expect(vi.mocked(Api.get).mock.calls.map((c) => c[0]).sort()).toEqual(['/securite/audit', '/securite/comptes-bloques', '/securite/sessions']);
   });
 
+  it('nommer un directeur : champs incomplets non envoyés ; sinon POST, formulaire vidé, mot de passe montré si pas de SMS', async () => {
+    document.body.innerHTML = '<div id="tc"></div><button id="dir-creer"></button><input id="dir-prenom"><input id="dir-nom"><input id="dir-tel"><input id="dir-email"><table><tbody id="tb-audit"></tbody></table>';
+    const champ = (id: string, v: string) => ((document.getElementById(id) as HTMLInputElement).value = v);
+    const post = vi.spyOn(Api, 'post').mockResolvedValue({ data: { sms_envoye: false, message: 'Mot de passe provisoire : Abc12345' } } as any);
+    vi.spyOn(Api, 'get').mockResolvedValue({ data: [], meta: { total: 0 } } as any);
+    window.confirm = vi.fn().mockReturnValue(true);
+    window.alert = vi.fn();
+
+    await PageSecurite.nommerDirecteur();                       // tout est vide
+    expect(post).not.toHaveBeenCalled();
+
+    champ('dir-prenom', 'Mariama'); champ('dir-nom', 'Ndiaye'); champ('dir-tel', '77 000 05 01');
+    await PageSecurite.nommerDirecteur();
+    expect(post).toHaveBeenCalledWith('/securite/directeurs', { prenom: 'Mariama', nom: 'Ndiaye', telephone: '77 000 05 01' });
+    expect((document.getElementById('dir-nom') as HTMLInputElement).value).toBe('');
+    expect(window.alert).toHaveBeenCalledWith('Mot de passe provisoire : Abc12345');
+    expect((document.getElementById('dir-creer') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('nommer un directeur : refus de la confirmation = aucun envoi', async () => {
+    document.body.innerHTML = '<div id="tc"></div><input id="dir-prenom" value="Mariama"><input id="dir-nom" value="Ndiaye"><input id="dir-tel" value="770000501">';
+    const post = vi.spyOn(Api, 'post');
+    window.confirm = vi.fn().mockReturnValue(false);
+    await PageSecurite.nommerDirecteur();
+    expect(post).not.toHaveBeenCalled();
+  });
+
   it('pas de bouton « Bloquer » sur sa propre session', async () => {
     document.body.innerHTML = '<table><tbody id="tb-sessions"></tbody></table>';
     PageSecurite._moi = 'moi';

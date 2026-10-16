@@ -274,12 +274,22 @@
         <div class="ch"><span>🚫</span><span class="ct">Comptes bloqués</span></div>
         <div class="tw"><table><thead><tr><th>Nom</th><th>Rôle</th><th>Bloqué depuis</th><th></th></tr></thead><tbody id="tb-bloques"></tbody></table></div>
       </div>
+      <div class="carte" style="margin-bottom:18px">
+        <div class="ch"><span>👤</span><span class="ct">Nommer un second directeur</span></div>
+        <div class="cb">
+          <p style="font-size:12px;color:var(--g500);margin-bottom:10px">Succession ou remplaçant : le nouveau directeur a tous les droits de direction. Un mot de passe provisoire lui est envoyé par SMS. Réservé aux directeurs.</p>
+          <div class="fr"><div class="fg"><label class="fl">Prénom</label><input class="fi" id="dir-prenom"></div><div class="fg"><label class="fl">Nom</label><input class="fi" id="dir-nom"></div></div>
+          <div class="fr"><div class="fg"><label class="fl">Téléphone</label><input class="fi" id="dir-tel" placeholder="77 000 00 00"></div><div class="fg"><label class="fl">Email (facultatif)</label><input class="fi" id="dir-email" type="email"></div></div>
+          <button class="btn btn-p" id="dir-creer" onclick="PageSecurite.nommerDirecteur()">Nommer le directeur</button>
+        </div>
+      </div>
       <div class="carte">
         <div class="ch"><span>🗒️</span><span class="ct">Journal d'audit</span>
           <select class="fs" id="audit-filtre" style="width:200px;margin-left:auto" onchange="PageSecurite.filtrerAudit(this.value)">
             <option value="">Toutes les actions</option>
             <option value="utilisateurs.bloquer">Comptes bloqués</option>
             <option value="utilisateurs.debloquer">Comptes débloqués</option>
+            <option value="utilisateurs.creer_directeur">Directeurs nommés</option>
             <option value="securite.politique">Politique de sécurité</option>
           </select>
         </div>

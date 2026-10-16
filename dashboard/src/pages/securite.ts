@@ -4,6 +4,7 @@ import { PAGE_HOOKS } from '../router';
 
 const LIBELLES_ACTION: Record<string, string> = {
   'utilisateurs.bloquer':   'Compte bloqué',
+  'utilisateurs.creer_directeur': 'Directeur nommé',
   'utilisateurs.debloquer': 'Compte débloqué',
   'securite.politique':     'Politique de sécurité modifiée',
   'connexion':              'Connexion',
@@ -145,6 +146,32 @@ export const PageSecurite: any = {
       await this.charger();
     } catch (e: any) {
       toast(e.message || 'Opération impossible', 'e');
+    }
+  },
+
+  // ── Nomination d'un second directeur ──
+  async nommerDirecteur() {
+    const val = (id: string) => ((document.getElementById(id) as HTMLInputElement | null)?.value || '').trim();
+    const corps: Record<string, string> = { prenom: val('dir-prenom'), nom: val('dir-nom'), telephone: val('dir-tel') };
+    if (val('dir-email')) corps.email = val('dir-email');
+    if (corps.prenom.length < 2 || corps.nom.length < 2 || corps.telephone.length < 6) {
+      return toast('Prénom, nom et téléphone sont obligatoires', 'w');
+    }
+    if (!confirm('Nommer ' + corps.prenom + ' ' + corps.nom + ' directeur ? Cette personne aura tous les droits de direction.')) return;
+    const bouton = document.getElementById('dir-creer') as HTMLButtonElement | null;
+    if (bouton) bouton.disabled = true;
+    try {
+      const res = await Api.post('/securite/directeurs', corps);
+      ['dir-prenom', 'dir-nom', 'dir-tel', 'dir-email'].forEach((id) => { const e = document.getElementById(id) as HTMLInputElement | null; if (e) e.value = ''; });
+      const sms = res.data && res.data.sms_envoye;
+      // Sans SMS, le mot de passe provisoire est dans le message : il faut le montrer entièrement
+      if (sms) toast('Directeur nommé ✓ Mot de passe provisoire envoyé par SMS', 's');
+      else alert((res.data && res.data.message) || 'Directeur nommé');
+      await this.chargerAudit();
+    } catch (e: any) {
+      toast(e.message || 'Nomination impossible', 'e');
+    } finally {
+      if (bouton) bouton.disabled = false;
     }
   },
 
