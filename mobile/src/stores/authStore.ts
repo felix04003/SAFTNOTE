@@ -12,26 +12,43 @@ export interface Session {
   nom_complet:       string;
   role:              Role;
   etablissement_nom: string;
+  // Mot de passe provisoire : changement obligatoire avant tout usage
+  doit_changer_mdp?: boolean;
 }
+
+export interface EtablissementParent { code: string; nom: string; courant?: boolean }
+
+// Résultat d'une validation de code SMS : session ouverte, ou choix d'école à faire
+export type ResultatOTP =
+  | { choixRequis: false }
+  | { choixRequis: true; ticket: string; etablissements: EtablissementParent[] };
 
 interface AuthState {
   session:        Session | null;
   token:          string | null;
   chargement:     boolean;
+  // Message à montrer une fois sur l'écran de connexion (ex. session fermée : trop d'appareils)
+  messageConnexion: string | null;
+  definirMessageConnexion: (message: string | null) => void;
   estConnecte:    boolean;
   estParent:      () => boolean;
   estDirecteur:   () => boolean;
   estEnseignant:  () => boolean;
   chargerSession: () => Promise<void>;
   connexionMDP:   (data: { identifiant: string; mot_de_passe: string; etablissement_code: string }) => Promise<void>;
-  connexionOTP:   (data: { telephone: string; code: string; etablissement_code: string }) => Promise<void>;
+  connexionOTP:   (data: { telephone: string; code: string; etablissement_code?: string }) => Promise<ResultatOTP>;
+  choisirEtablissement: (ticket: string, etablissement_code: string) => Promise<void>;
+  changerEtablissement: (etablissement_code: string) => Promise<void>;
   deconnexion:    () => Promise<void>;
+  mdpChange:      () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   session:       null,
   token:         null,
   chargement:    true,
+  messageConnexion: null,
+  definirMessageConnexion: (message) => set({ messageConnexion: message }),
   estConnecte:   false,
   estParent:     () => get().session?.role === 'parent',
   estDirecteur:  () => ['directeur', 'censeur'].includes(get().session?.role ?? ''),
@@ -63,8 +80,36 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   // Connexion OTP (parents)
   connexionOTP: async (data) => {
-    const res = await authApi.validerOTP(data);
+    const res: any = await authApi.validerOTP(data);
+    if (res.choix_requis) {
+      return { choixRequis: true, ticket: res.ticket, etablissements: res.etablissements };
+    }
     await persisterSession(res, set);
+    return { choixRequis: false };
+  },
+
+  // Après un code valide pour un numéro présent dans plusieurs écoles
+  choisirEtablissement: async (ticket, etablissement_code) => {
+    const res = await authApi.choisirEtablissement({ ticket, etablissement_code });
+    await persisterSession(res, set);
+  },
+
+  // Parent : passer dans une autre de ses écoles. Nouvelle session + base locale
+  // vidée (les données d'une école ne sont jamais mélangées avec celles d'une autre) ;
+  // l'ancienne session reste valable côté serveur.
+  changerEtablissement: async (etablissement_code) => {
+    const res = await authApi.changerEtablissement({ etablissement_code });
+    await viderBaseLocale();
+    await persisterSession(res, set);
+  },
+
+  // Le mot de passe provisoire vient d'être remplacé : lever l'obligation
+  mdpChange: async () => {
+    const session = get().session;
+    if (!session) return;
+    const maj = { ...session, doit_changer_mdp: false };
+    try { await SecureStore.setItemAsync('session', JSON.stringify(maj)); } catch { /* mémoire seulement */ }
+    set({ session: maj });
   },
 
   // Déconnexion
@@ -77,25 +122,31 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await SecureStore.deleteItemAsync('jwt_token');
       await SecureStore.deleteItemAsync('refresh_token');
       await SecureStore.deleteItemAsync('session');
-      // Vider la BD locale
-      try {
-        const db = getDB();
-        await db.execAsync(`
-          DELETE FROM session;
-          DELETE FROM eleves;
-          DELETE FROM evaluations;
-          DELETE FROM notes;
-          DELETE FROM appels;
-          DELETE FROM presences;
-          DELETE FROM absences;
-          DELETE FROM notes_parent;
-          DELETE FROM bulletins;
-        `);
-      } catch {}
+      await viderBaseLocale();
       set({ session: null, token: null, estConnecte: false });
     }
   },
 }));
+
+async function viderBaseLocale() {
+  try {
+    const db = getDB();
+    await db.execAsync(`
+      DELETE FROM session;
+      DELETE FROM eleves;
+      DELETE FROM evaluations;
+      DELETE FROM notes;
+      DELETE FROM appels;
+      DELETE FROM presences;
+      DELETE FROM absences;
+      DELETE FROM notes_parent;
+      DELETE FROM bulletins;
+      DELETE FROM edt;
+      DELETE FROM affectations;
+      DELETE FROM periodes;
+    `);
+  } catch {}
+}
 
 async function persisterSession(res: any, set: any) {
   const { token, refresh_token, utilisateur } = res;
@@ -105,6 +156,7 @@ async function persisterSession(res: any, set: any) {
     nom_complet:      `${utilisateur.prenom} ${utilisateur.nom}`,
     role:             utilisateur.role || 'enseignant',
     etablissement_nom: utilisateur.etablissement_nom,
+    doit_changer_mdp: !!utilisateur.doit_changer_mdp,
   };
 
   api.setToken(token);
@@ -114,6 +166,16 @@ async function persisterSession(res: any, set: any) {
   await SecureStore.setItemAsync('session', JSON.stringify(session));
   set({ token, session, estConnecte: true });
 }
+
+// Le serveur a refusé une requête (403 MDP_CHANGEMENT_REQUIS) : marquer la
+// session, l'écran du groupe (app) redirige vers le changement de mot de passe.
+authEventEmitter.on('mdp_a_changer', async () => {
+  const session = useAuthStore.getState().session;
+  if (!session || session.doit_changer_mdp) return;
+  const maj = { ...session, doit_changer_mdp: true };
+  try { await SecureStore.setItemAsync('session', JSON.stringify(maj)); } catch { /* mémoire seulement */ }
+  useAuthStore.setState({ session: maj });
+});
 
 // Persiste le nouveau couple token/refresh_token émis par ApiClient après
 // un rafraîchissement réussi (voir client.ts → tenterRafraichissement).

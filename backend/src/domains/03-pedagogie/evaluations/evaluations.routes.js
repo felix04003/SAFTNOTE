@@ -12,6 +12,7 @@ const { autoriserAccesEleve } = require('../../../middleware/acces-eleve.middlew
 const { ok, cree, liste } = require('../../../utils/reponse');
 const ApiError           = require('../../../utils/ApiError');
 const logger             = require('../../../utils/logger');
+const { affectationAccessible } = require('../../../utils/affectation-acces');
 
 const router = express.Router();
 const auth   = authentifier;
@@ -64,6 +65,8 @@ router.get('/evaluations', auth, isoler, perm('notes.voir_classe'), async (req, 
 // ── POST /evaluations ────────────────────────────────────────────
 router.post('/evaluations', auth, isoler, perm('evaluations.creer'),
   valider(z.object({
+    // Identifiant fourni par le mobile : l'évaluation créée hors ligne garde le même id côté serveur et côté téléphone
+    id:              z.string().uuid().optional(),
     affectation_id:  z.string().uuid(),
     periode_id:      z.string().uuid(),
     type:            z.enum(['devoir', 'composition', 'interrogation', 'tp', 'expose', 'oral', 'projet']),
@@ -74,10 +77,21 @@ router.post('/evaluations', auth, isoler, perm('evaluations.creer'),
   })),
   async (req, res, next) => {
     try {
-      const [evaluation] = await getDB()('evaluations')
+      const db = getDB();
+      if (!(await affectationAccessible(db, req.session, req.etablissement_id, req.body.affectation_id))) {
+        throw ApiError.nonTrouve('Affectation introuvable');
+      }
+      if (req.body.id) {                                 // rejeu d'une création déjà reçue : idempotent
+        const existante = await db('evaluations').where({ id: req.body.id }).first();
+        if (existante) {
+          if (existante.affectation_id !== req.body.affectation_id) throw ApiError.conflit('Identifiant déjà utilisé');
+          return ok(res, existante);
+        }
+      }
+      const [evaluation] = await db('evaluations')
         .insert({
-          id: uuid(),
           ...req.body,
+          id: req.body.id || uuid(),
           notes_publiees: false,
         })
         .returning('*');
@@ -263,30 +277,58 @@ router.put('/evaluations/:evaluation_id/notes', auth, isoler, perm('notes.saisir
 );
 
 // ── PUT /evaluations/:evaluation_id/publier ──────────────────────
+// Publie les notes puis notifie le parent principal de CHAQUE élève ayant une
+// note : un job `nouvelle_note` par inscription (le worker retrouve le parent à
+// partir de l'inscription — un job sans inscription_id échouait toujours).
 router.put('/evaluations/:evaluation_id/publier', auth, isoler, perm('notes.publier'), async (req, res, next) => {
   try {
     const db = getDB();
-    const [evaluation] = await db('evaluations')
-      .where({ id: req.params.evaluation_id })
-      .update({ notes_publiees: true, updated_at: db.raw('NOW()') })
-      .returning('*');
+
+    // L'évaluation doit appartenir à CET établissement (avant : aucun contrôle,
+    // un utilisateur pouvait publier les notes d'un autre établissement)
+    const evaluation = await db('evaluations as ev')
+      .join('affectations_enseignants as ae', 'ae.id', 'ev.affectation_id')
+      .join('classes as c', 'c.id', 'ae.classe_id')
+      .join('annees_scolaires as a', 'a.id', 'c.annee_scolaire_id')
+      .where({ 'ev.id': req.params.evaluation_id, 'a.etablissement_id': req.etablissement_id })
+      .first('ev.id');
 
     if (!evaluation) throw ApiError.nonTrouve('Évaluation introuvable');
 
-    // Déclencher les notifications aux parents (best-effort — ne pas bloquer si queue absente)
-    try {
-      const { enqueuerNotification } = require('../../../infrastructure/queue/bullmq');
-      await enqueuerNotification({
-        type_notif:       'nouvelle_note',
-        evaluation_id:    evaluation.id,
-        etablissement_id: req.etablissement_id,
-      }, 2);
-    } catch (notifErr) {
-      logger.warn('Notification non envoyée (queue absente)', { error: notifErr.message });
+    // Publication atomique : seul le premier appel notifie les parents
+    // (deux clics ou deux requêtes simultanées ne doivent pas envoyer deux SMS)
+    const publiees = await db('evaluations')
+      .where({ id: evaluation.id, notes_publiees: false })
+      .update({ notes_publiees: true, publie_at: db.raw('NOW()'), updated_at: db.raw('NOW()') });
+
+    if (!publiees) {
+      return ok(res, { message: 'Notes déjà publiées — parents non re-notifiés', deja_publiees: true, parents_notifies: 0 });
     }
 
-    logger.info('Notes publiées', { evaluation_id: evaluation.id });
-    return ok(res, { message: 'Notes publiées — parents notifiés' });
+    // Notifications (best-effort — ne pas bloquer si la queue est absente).
+    // Pas de SMS pour un élève sans valeur (absent justifié, dispensé).
+    let parentsNotifies = 0;
+    try {
+      const { enqueuerNotification } = require('../../../infrastructure/queue/bullmq');
+      const cibles = await db('notes')
+        .where({ evaluation_id: evaluation.id })
+        .whereNotNull('valeur')
+        .select('inscription_id');
+      for (const cible of cibles) {
+        await enqueuerNotification({
+          type_notif:       'nouvelle_note',
+          evaluation_id:    evaluation.id,
+          inscription_id:   cible.inscription_id,
+          etablissement_id: req.etablissement_id,
+        }, 2);
+        parentsNotifies++;
+      }
+    } catch (notifErr) {
+      logger.warn('Notifications de notes non (toutes) mises en file', { error: notifErr.message, mises_en_file: parentsNotifies });
+    }
+
+    logger.info('Notes publiées', { evaluation_id: evaluation.id, parents_notifies: parentsNotifies });
+    return ok(res, { message: `Notes publiées — ${parentsNotifies} parent(s) notifié(s)`, parents_notifies: parentsNotifies });
   } catch (err) { next(err); }
 });
 

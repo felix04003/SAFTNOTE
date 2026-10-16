@@ -405,7 +405,7 @@ describe('Phase 4 — Inscription élèves et parent', () => {
 
 describe('Phase 5 — Appel et absences', () => {
   it('POST /appels crée un appel pour la classe', async () => {
-    if (!edtId) return;
+    expect(edtId).toBeDefined();
 
     const res = await req
       .post('/api/v1/appels')
@@ -422,16 +422,16 @@ describe('Phase 5 — Appel et absences', () => {
   });
 
   it('PUT /appels/:id/presences marque le 2e élève absent', async () => {
-    if (!appel?.appel_id) return;
+    expect(appel?.appel_id).toBeDefined();
 
     const presencesDB = await db('presences')
       .where({ appel_id: appel.appel_id })
-      .select('id', 'eleve_id', 'statut');
+      .select('id', 'inscription_id', 'statut');
 
     expect(presencesDB.length).toBeGreaterThan(0);
 
     const mises_a_jour = presencesDB.map((p, i) => ({
-      presence_id: p.id,
+      inscription_id: p.inscription_id,
       statut: i === 1 ? 'absent' : 'present',
     }));
 
@@ -445,7 +445,7 @@ describe('Phase 5 — Appel et absences', () => {
   });
 
   it('GET /presences/absences retourne les absences de la classe', async () => {
-    if (!classe || !appel) return;
+    expect(classe && appel).toBeTruthy();
 
     const res = await req
       .get('/api/v1/presences/absences')

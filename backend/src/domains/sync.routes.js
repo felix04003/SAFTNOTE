@@ -10,6 +10,7 @@ const { isolerEtablissement } = require('../middleware/permission.middleware');
 const { valider }    = require('../middleware/validate.middleware');
 const { ok }         = require('../utils/reponse');
 const logger         = require('../utils/logger');
+const { affectationAccessible } = require('../utils/affectation-acces');
 const { getUrlSignee, DUREE_URL_SIGNEE_SECONDES } = require('../infrastructure/storage/storage.service');
 
 const router = express.Router();
@@ -37,7 +38,7 @@ router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) =>
       const enseignantId = enseignantRow?.id ?? null;
 
       // Payload enseignant : ses classes + élèves + évaluations + notes + EDT
-      const [classes, eleves, evaluations, notes, edt] = await Promise.all([
+      const [classes, eleves, evaluations, notes, edt, affectations, periodes] = await Promise.all([
         // Classes de l'enseignant
         db('affectations_enseignants as ae')
           .join('classes as c', 'c.id', 'ae.classe_id')
@@ -56,7 +57,8 @@ router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) =>
           .join('annees_scolaires as a', 'a.id', 'i.annee_scolaire_id')
           .join('affectations_enseignants as ae', 'ae.classe_id', 'i.classe_id')
           .where({ 'ae.enseignant_id': enseignantId, 'a.est_courante': true, 'i.statut': 'actif' })
-          .where('u.updated_at', '>', syncDepuis)
+          // un élève change de classe : seule son inscription est modifiée, pas son compte
+          .where(db.raw('GREATEST(u.updated_at, i.updated_at) > ?', [syncDepuis]))
           .select('u.id', 'u.nom', 'u.prenom', 'u.photo_url', 'e.matricule', 'i.id as inscription_id', db.raw("CONCAT(n.nom, ' ', c.nom) as classe"))
           .distinct(),
 
@@ -64,17 +66,22 @@ router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) =>
         db('evaluations as ev')
           .join('affectations_enseignants as ae', 'ae.id', 'ev.affectation_id')
           .join('matieres as m', 'm.id', 'ae.matiere_id')
+          .join('classes as c', 'c.id', 'ae.classe_id')
+          .join('niveaux as nv', 'nv.id', 'c.niveau_id')
           .where({ 'ae.enseignant_id': enseignantId })
           .where('ev.updated_at', '>', syncDepuis)
-          .select('ev.id', 'ev.type', 'ev.numero', 'ev.titre', 'ev.date_evaluation', 'ev.note_max', 'ev.notes_publiees', 'ev.affectation_id', 'm.nom as matiere'),
+          .select('ev.id', 'ev.type', 'ev.numero', 'ev.titre', 'ev.date_evaluation', 'ev.note_max', 'ev.notes_publiees', 'ev.affectation_id', 'm.nom as matiere',
+            db.raw("CONCAT(nv.nom, ' ', c.nom) as classe")),
 
         // Notes modifiées
         db('notes as n')
           .join('evaluations as ev', 'ev.id', 'n.evaluation_id')
           .join('affectations_enseignants as ae', 'ae.id', 'ev.affectation_id')
+          .join('eleves as el', 'el.id', 'n.eleve_id')
           .where({ 'ae.enseignant_id': enseignantId })
           .where('n.saisie_at', '>', syncDepuis)
-          .select('n.id', 'n.evaluation_id', 'n.eleve_id', 'n.valeur', 'n.est_absent', 'n.absence_justifiee'),
+          // eleve_id : utilisateurs.id, comme dans la liste « eleves » ci-dessus et dans la base locale du mobile
+          .select('n.id', 'n.evaluation_id', 'el.utilisateur_id as eleve_id', 'n.inscription_id', 'n.valeur', 'n.est_absent', 'n.absence_justifiee'),
 
         // EDT de l'enseignant
         db('emplois_du_temps as edt')
@@ -83,12 +90,30 @@ router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) =>
           .join('matieres as m', 'm.id', 'ae.matiere_id')
           .join('classes as c', 'c.id', 'ae.classe_id')
           .join('niveaux as n', 'n.id', 'c.niveau_id')
+          // Toujours l'emploi du temps COMPLET (petit) : le mobile le remplace en bloc, un envoi partiel
+          // effacerait les créneaux inchangés
           .where({ 'ae.enseignant_id': enseignantId })
-          .where('edt.updated_at', '>', syncDepuis)
           .select('edt.id', 'edt.jour_semaine', 'edt.salle', 'ph.heure_debut', 'ph.heure_fin', 'm.nom as matiere', 'ae.classe_id', db.raw("CONCAT(n.nom, ' ', c.nom) as classe")),
+
+        // Ses affectations de l'année : le mobile en a besoin pour créer une évaluation (matière × classe)
+        db('affectations_enseignants as ae')
+          .join('matieres as m', 'm.id', 'ae.matiere_id')
+          .join('classes as c', 'c.id', 'ae.classe_id')
+          .join('niveaux as nv', 'nv.id', 'c.niveau_id')
+          .join('annees_scolaires as a', 'a.id', 'ae.annee_scolaire_id')
+          .where({ 'ae.enseignant_id': enseignantId, 'a.est_courante': true })
+          .whereNull('ae.date_fin')
+          .select('ae.id', 'ae.classe_id', 'm.nom as matiere', db.raw("CONCAT(nv.nom, ' ', c.nom) as classe")),
+
+        // Périodes de l'année courante (une évaluation appartient à une période)
+        db('periodes as p')
+          .join('annees_scolaires as a', 'a.id', 'p.annee_scolaire_id')
+          .where({ 'a.etablissement_id': req.etablissement_id, 'a.est_courante': true })
+          .orderBy('p.numero')
+          .select('p.id', 'p.numero', 'p.libelle', 'p.date_debut', 'p.date_fin'),
       ]);
 
-      payload = { classes, eleves, evaluations, notes, edt };
+      payload = { classes, eleves, evaluations, notes, edt, affectations, periodes };
 
     } else if (isParent) {
       // Payload parent : enfants + notes publiées + absences + bulletins + EDT
@@ -111,33 +136,41 @@ router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) =>
           .join('affectations_enseignants as ae', 'ae.id', 'ev.affectation_id')
           .join('matieres as m', 'm.id', 'ae.matiere_id')
           .join('parents_eleves as pe', 'pe.eleve_id', 'n.eleve_id')
+          .join('eleves as el', 'el.id', 'n.eleve_id')
+          .join('periodes as p', 'p.id', 'ev.periode_id')
           .where({ 'pe.parent_id': utilisateur_id, 'ev.notes_publiees': true })
-          .where('n.saisie_at', '>', syncDepuis)
-          .select('n.eleve_id', 'm.nom as matiere', 'ev.type', 'ev.date_evaluation', 'n.valeur'),
+          // une note saisie AVANT la dernière synchro mais publiée APRÈS doit arriver : on compte aussi la date de publication
+          .where(db.raw('GREATEST(n.saisie_at, ev.updated_at) > ?', [syncDepuis]))
+          // eleve_id : utilisateurs.id, comme `enfants` ci-dessus (le mobile filtre ses écrans sur cet identifiant)
+          .select('n.id', 'el.utilisateur_id as eleve_id', 'm.nom as matiere', 'ev.type', 'ev.date_evaluation', 'n.valeur', 'p.numero as trimestre'),
 
         // Absences depuis la dernière sync
         db('presences as pr')
           .join('inscriptions as i', 'i.id', 'pr.inscription_id')
           .join('parents_eleves as pe', 'pe.eleve_id', 'i.eleve_id')
+          .join('eleves as el', 'el.id', 'i.eleve_id')
           .join('appels as a', 'a.id', 'pr.appel_id')
           .join('emplois_du_temps as edt', 'edt.id', 'a.emploi_du_temps_id')
           .join('affectations_enseignants as ae', 'ae.id', 'edt.affectation_id')
           .join('matieres as m', 'm.id', 'ae.matiere_id')
           .where({ 'pe.parent_id': utilisateur_id })
-          .whereNot({ 'pr.statut': 'present' })
+          // Seulement les vraies absences : un appel ouvert mais pas encore saisi ('non_saisi') ou une dispense
+          // n'est pas une absence à montrer aux parents
+          .whereIn('pr.statut', ['absent', 'retard', 'sorti_avant'])
           // presences n'a pas de colonne updated_at — saisie_at (création) +
           // modifie_at (nullable, mis à jour seulement si modifié après coup)
           .where(db.raw('COALESCE(pr.modifie_at, pr.saisie_at) > ?', [syncDepuis]))
-          .select('i.eleve_id', 'pr.statut', 'pr.est_justifie', 'a.date_cours', 'm.nom as matiere'),
+          .select('pr.id', 'el.utilisateur_id as eleve_id', 'pr.statut', 'pr.est_justifie', 'a.date_cours', 'm.nom as matiere'),
 
         // Bulletins disponibles
         db('moyennes_generales as mg')
           .join('inscriptions as i', 'i.id', 'mg.inscription_id')
           .join('parents_eleves as pe', 'pe.eleve_id', 'i.eleve_id')
+          .join('eleves as el', 'el.id', 'i.eleve_id')
           .join('periodes as p', 'p.id', 'mg.periode_id')
           .where({ 'pe.parent_id': utilisateur_id, 'mg.bulletin_genere': true })
           .where('mg.updated_at', '>', syncDepuis)
-          .select('i.eleve_id', 'mg.moyenne_generale', 'mg.rang', 'mg.rang_sur', 'mg.mention', 'mg.bulletin_key', 'p.numero as trimestre'),
+          .select('mg.id', 'el.utilisateur_id as eleve_id', 'mg.moyenne_generale', 'mg.rang', 'mg.rang_sur', 'mg.mention', 'mg.bulletin_key', 'p.numero as trimestre'),
 
         // EDT classes des enfants
         db('emplois_du_temps as edt')
@@ -177,6 +210,87 @@ router.get('/sync', authentifier, isolerEtablissement, async (req, res, next) =>
   } catch (err) { next(err); }
 });
 
+const schemaEvaluationMobile = z.object({
+  id:              z.string().uuid(),
+  affectation_id:  z.string().uuid(),
+  periode_id:      z.string().uuid(),
+  type:            z.enum(['devoir', 'composition', 'interrogation', 'tp', 'expose', 'oral', 'projet']),
+  numero:          z.number().int().min(1).max(5),
+  titre:           z.string().nullish().transform((t) => t ?? undefined),
+  note_max:        z.number().min(0).max(20).default(20),
+  date_evaluation: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+});
+
+// Enregistre UNE note envoyée par le mobile (opération 'notes.saisir', ou une ligne d'un lot 'notes.saisir_batch').
+// Retourne null si tout est bon, sinon le code d'erreur de l'opération.
+async function enregistrerNote(db, req, payload) {
+  const { evaluation_id, eleve_id, inscription_id, valeur, est_absent, absence_justifiee } = payload;
+
+  // Audit 2026-09 (lot J -> correctif) : POST /sync/operations traite
+  // un batch hétérogène d'opérations, chacune avec ses propres
+  // identifiants dans payload — isolerEtablissement (qui ne
+  // connaît que req.params) ne peut pas les couvrir. On vérifie donc
+  // ici, par opération, que l'évaluation référencée appartient bien
+  // à l'établissement de la session AVANT toute écriture (même
+  // garde que isolerEtablissement pour le paramètre evaluation_id,
+  // et que PUT /evaluations/:evaluation_id/notes du domaine
+  // pédagogie). Sans ce garde, un enseignant authentifié pouvait
+  // saisir une note dans un établissement qui n'est pas le sien en
+  // devinant/obtenant un evaluation_id/eleve_id/inscription_id
+  // valide d'un autre établissement.
+  const evaluationRow = await db('evaluations as ev')
+    .join('affectations_enseignants as ae', 'ae.id', 'ev.affectation_id')
+    .join('classes as c', 'c.id', 'ae.classe_id')
+    .join('annees_scolaires as a', 'a.id', 'c.annee_scolaire_id')
+    .where({ 'ev.id': evaluation_id, 'a.etablissement_id': req.etablissement_id })
+    .first('ev.id', 'ae.classe_id');
+
+  if (!evaluationRow) {
+    // 404 déguisé en échec d'opération plutôt qu'un 403 : on ne
+    // confirme pas l'existence d'une évaluation d'un autre
+    // établissement (cohérent avec isolerEtablissement).
+    return 'RESSOURCE_INTROUVABLE';
+  }
+
+  // notes.eleve_id référence eleves.id, mais le payload mobile suit
+  // la même convention que le reste de l'API (utilisateurs.id — voir
+  // GET /sync ci-dessus, section "eleves" pour l'enseignant, qui
+  // renvoie u.id). Sans résolution, violation de la contrainte FK
+  // notes_eleve_id_fkey sur CHAQUE note saisie hors-ligne pour un
+  // élève pas déjà présent dans la table notes (reproduit en
+  // direct : "insert or update on table notes violates foreign
+  // key constraint notes_eleve_id_fkey"). On accepte les deux
+  // formats pour ne pas casser un éventuel appel qui enverrait
+  // déjà eleves.id (ex: re-sync d'une note déjà reçue via GET /sync).
+  const eleveRow = await db('eleves')
+    .where({ utilisateur_id: eleve_id })
+    .orWhere({ id: eleve_id })
+    .first('id');
+
+  if (!eleveRow) {
+    return 'ELEVE_INTROUVABLE';
+  }
+
+  // Vérifier que l'inscription référencée appartient bien à CET
+  // élève ET à la classe de l'évaluation (donc au même
+  // établissement, déjà vérifié ci-dessus) — empêche de combiner un
+  // evaluation_id valide de l'établissement A avec un eleve_id/
+  // inscription_id forgé d'un établissement B.
+  const inscriptionRow = await db('inscriptions')
+    .where({ id: inscription_id, eleve_id: eleveRow.id, classe_id: evaluationRow.classe_id })
+    .first('id');
+
+  if (!inscriptionRow) {
+    return 'RESSOURCE_INTROUVABLE';
+  }
+
+  await db('notes')
+    .insert({ id: uuid(), evaluation_id, eleve_id: eleveRow.id, inscription_id, valeur, est_absent, absence_justifiee, saisie_par: req.session.utilisateur_id })
+    .onConflict(['evaluation_id', 'eleve_id'])
+    .merge(['valeur', 'est_absent', 'absence_justifiee', 'saisie_par', 'saisie_at']);
+  return null;
+}
+
 // ── POST /sync/operations — Envoi montant (mobile → serveur) ────
 router.post('/sync/operations', authentifier, isolerEtablissement,
   valider(z.object({
@@ -196,73 +310,60 @@ router.post('/sync/operations', authentifier, isolerEtablissement,
         switch (op.type) {
 
           case 'notes.saisir': {
-            const { evaluation_id, eleve_id, inscription_id, valeur, est_absent, absence_justifiee } = op.payload;
+            const code = await enregistrerNote(db, req, op.payload);
+            resultats.push(code ? { op_id: op.id, statut: 'erreur', code } : { op_id: op.id, statut: 'ok' });
+            break;
+          }
 
-            // Audit 2026-09 (lot J -> correctif) : POST /sync/operations traite
-            // un batch hétérogène d'opérations, chacune avec ses propres
-            // identifiants dans op.payload — isolerEtablissement (qui ne
-            // connaît que req.params) ne peut pas les couvrir. On vérifie donc
-            // ici, par opération, que l'évaluation référencée appartient bien
-            // à l'établissement de la session AVANT toute écriture (même
-            // garde que isolerEtablissement pour le paramètre evaluation_id,
-            // et que PUT /evaluations/:evaluation_id/notes du domaine
-            // pédagogie). Sans ce garde, un enseignant authentifié pouvait
-            // saisir une note dans un établissement qui n'est pas le sien en
-            // devinant/obtenant un evaluation_id/eleve_id/inscription_id
-            // valide d'un autre établissement.
-            const evaluationRow = await db('evaluations as ev')
-              .join('affectations_enseignants as ae', 'ae.id', 'ev.affectation_id')
-              .join('classes as c', 'c.id', 'ae.classe_id')
-              .join('annees_scolaires as a', 'a.id', 'c.annee_scolaire_id')
-              .where({ 'ev.id': evaluation_id, 'a.etablissement_id': req.etablissement_id })
-              .first('ev.id', 'ae.classe_id');
+          // Lot de notes d'une évaluation, tel que l'écran de saisie du mobile le met en file hors ligne
+          // (mobile/app/(app)/enseignant/notes-saisie.tsx) : { evaluation_id, notes: [{ eleve_id, inscription_id, valeur, … }] }
+          case 'notes.saisir_batch': {
+            const { evaluation_id, notes } = op.payload;
+            if (!evaluation_id || !Array.isArray(notes) || notes.length === 0) {
+              resultats.push({ op_id: op.id, statut: 'erreur', code: 'PAYLOAD_INVALIDE' });
+              break;
+            }
+            let echec = null;
+            for (const note of notes) {
+              // eslint-disable-next-line no-await-in-loop
+              echec = await enregistrerNote(db, req, { ...note, evaluation_id });
+              if (echec) break;
+            }
+            resultats.push(echec ? { op_id: op.id, statut: 'erreur', code: echec } : { op_id: op.id, statut: 'ok' });
+            break;
+          }
 
-            if (!evaluationRow) {
-              // 404 déguisé en échec d'opération plutôt qu'un 403 : on ne
-              // confirme pas l'existence d'une évaluation d'un autre
-              // établissement (cohérent avec isolerEtablissement).
+          // Évaluation créée hors ligne (mobile/app/(app)/enseignant/evaluations.tsx) : l'id est choisi par le téléphone
+          case 'evaluations.creer': {
+            const donnees = schemaEvaluationMobile.safeParse(op.payload);
+            if (!donnees.success) {
+              resultats.push({ op_id: op.id, statut: 'erreur', code: 'PAYLOAD_INVALIDE', detail: donnees.error.issues[0]?.message });
+              break;
+            }
+            const e = donnees.data;
+            if (!(await affectationAccessible(db, req.session, req.etablissement_id, e.affectation_id))) {
               resultats.push({ op_id: op.id, statut: 'erreur', code: 'RESSOURCE_INTROUVABLE' });
               break;
             }
-
-            // notes.eleve_id référence eleves.id, mais le payload mobile suit
-            // la même convention que le reste de l'API (utilisateurs.id — voir
-            // GET /sync ci-dessus, section "eleves" pour l'enseignant, qui
-            // renvoie u.id). Sans résolution, violation de la contrainte FK
-            // notes_eleve_id_fkey sur CHAQUE note saisie hors-ligne pour un
-            // élève pas déjà présent dans la table notes (reproduit en
-            // direct : "insert or update on table notes violates foreign
-            // key constraint notes_eleve_id_fkey"). On accepte les deux
-            // formats pour ne pas casser un éventuel appel qui enverrait
-            // déjà eleves.id (ex: re-sync d'une note déjà reçue via GET /sync).
-            const eleveRow = await db('eleves')
-              .where({ utilisateur_id: eleve_id })
-              .orWhere({ id: eleve_id })
-              .first('id');
-
-            if (!eleveRow) {
-              resultats.push({ op_id: op.id, statut: 'erreur', code: 'ELEVE_INTROUVABLE' });
+            // Idempotent : rejouer la même opération ne crée pas de doublon
+            const existante = await db('evaluations').where({ id: e.id }).first('id', 'affectation_id');
+            if (existante && existante.affectation_id !== e.affectation_id) {
+              resultats.push({ op_id: op.id, statut: 'erreur', code: 'ID_DEJA_UTILISE' });
               break;
             }
-
-            // Vérifier que l'inscription référencée appartient bien à CET
-            // élève ET à la classe de l'évaluation (donc au même
-            // établissement, déjà vérifié ci-dessus) — empêche de combiner un
-            // evaluation_id valide de l'établissement A avec un eleve_id/
-            // inscription_id forgé d'un établissement B.
-            const inscriptionRow = await db('inscriptions')
-              .where({ id: inscription_id, eleve_id: eleveRow.id, classe_id: evaluationRow.classe_id })
-              .first('id');
-
-            if (!inscriptionRow) {
-              resultats.push({ op_id: op.id, statut: 'erreur', code: 'RESSOURCE_INTROUVABLE' });
-              break;
+            if (!existante) {
+              try {
+                await db('evaluations').insert({ ...e, notes_publiees: false });
+              } catch (errInsert) {
+                // Même (affectation, type, numéro, période) déjà pris : on le dit au lieu d'un échec muet
+                if (errInsert.code === '23505') {
+                  resultats.push({ op_id: op.id, statut: 'erreur', code: 'EVALUATION_EXISTANTE',
+                    detail: 'Une évaluation de ce type et de ce numéro existe déjà pour cette période' });
+                  break;
+                }
+                throw errInsert;
+              }
             }
-
-            await db('notes')
-              .insert({ id: uuid(), evaluation_id, eleve_id: eleveRow.id, inscription_id, valeur, est_absent, absence_justifiee, saisie_par: req.session.utilisateur_id })
-              .onConflict(['evaluation_id', 'eleve_id'])
-              .merge(['valeur', 'est_absent', 'absence_justifiee', 'saisie_par', 'saisie_at']);
             resultats.push({ op_id: op.id, statut: 'ok' });
             break;
           }

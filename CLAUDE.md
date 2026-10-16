@@ -21,7 +21,7 @@ d'Afrique de l'Ouest francophone (Sénégal, Côte d'Ivoire, Mali, Burkina Faso�
 - Mobile : React Native 0.76 + Expo SDK 52 + SQLite (offline-first)
 - Dashboard : Vite + TypeScript + Vitest (compilé en `dashboard/dist/`, plus « zéro dépendance NPM » depuis la migration vers l'outillage Vite)
 - Infra : Docker Compose (dev) ; déploiement cible **Render** (API + Postgres + Redis managés via `render.yaml`) ; Nginx/Docker Compose prod (`docker-compose.prod.yml`) documenté comme alternative auto-hébergée (VPS), voir `docs/DEPLOY_VPS.md`
-- Migrations : dossier unique `migrations/` à la racine (000→018), appliqué par `backend/src/utils/migrate.js` (table de suivi `_migrations`) ; seeds de test séparés dans `backend/tests/seeds/`, jamais appliqués en production (`TRUST_PROXY_HOPS` documenté dans `.env.example` pour le comptage IP réel derrière Nginx/Render)
+- Migrations : dossier unique `migrations/` à la racine (000→027), appliqué par `backend/src/utils/migrate.js` (table de suivi `_migrations`) ; seeds de test séparés dans `backend/tests/seeds/`, jamais appliqués en production (`TRUST_PROXY_HOPS` documenté dans `.env.example` pour le comptage IP réel derrière Nginx/Render)
 
 ---
 
@@ -69,9 +69,9 @@ ecolemanager/
 │   │   │   ├── notifications/      ✅ SMS (Africa's Talking) + WhatsApp
 │   │   │   └── storage/            ✅ Cloudflare R2 / S3
 │   │   ├── middleware/             ✅ auth JWT, erreurs, rate-limit, validation
-│   │   ├── workers/                ✅ notification.worker.js
+│   │   ├── workers/                ✅ notification.worker.js (câblage BullMQ) + notification.processor.js (traitement, testé sur base réelle) ; calcul-moyennes.worker.js (délègue à moyennes/calcul-moyennes.service.js, partagé avec POST /moyennes/calculer) ; generation-bulletins.worker.js (PDF, Chromium) ; lanceur.js (les trois dans un seul service : `npm run workers`)
 │   │   └── utils/                  ✅ helpers divers
-│   ├── tests/                     ✅ 172 tests unitaires/intégration (22 suites Jest)
+│   ├── tests/                     ✅ 379 tests unitaires (40 suites Jest) + tests d'intégration
 │   │   ├── helpers/               ✅ mockKnex, testApp, fixtures
 │   │   ├── seeds/                 ✅ seeds de test SQL (jamais appliqués en prod)
 │   │   └── domains/               ✅ fichiers de test par domaine
@@ -122,6 +122,18 @@ ecolemanager/
 │   ├── 013_fix_presences_statut_non_saisi.sql      ✅ statuts appels/presences
 │   ├── 014_fix_notes_voir_eleve_permissions.sql    ✅ permission notes.voir_eleve (staff)
 │   ├── 015_fix_discipline_enseignant_permissions.sql ✅ permissions discipline (enseignant)
+│   ├── 016_parent_retirer_bulletins_voir.sql       ✅ retrait bulletins.voir du rôle parent (IDOR)
+│   ├── 017_eleve_retirer_bulletins_voir.sql        ✅ retrait bulletins.voir du rôle élève
+│   ├── 018_bulletin_key.sql                        ✅ clé de stockage S3/R2 des bulletins
+│   ├── 019_rls_reel_phase1.sql                     ✅ RLS PostgreSQL réel, phase 1 pilote (rôle dédié + 2 tables)
+│   ├── 020_mdp_a_changer.sql                       ✅ utilisateurs.mdp_a_changer (changement de mot de passe obligatoire)
+│   ├── 021_politique_securite_defaut.sql           ✅ trigger : chaque établissement reçoit sa politique_securite + rattrapage
+│   ├── 022_est_compte_bloque_par_etablissement.sql ✅ blocage force brute selon la politique de l'établissement (défauts stricts 5/15 sinon)
+│   ├── 023_plafond_sms.sql                         ✅ plafond mensuel de SMS par établissement + segments dans journal_notifications
+│   ├── 024_telephone_unique_par_etablissement.sql  ✅ UNIQUE (etablissement_id, telephone) au lieu de UNIQUE (telephone) : parent multi-écoles
+│   ├── 025_evaluations_types_oral_projet.sql      ✅ CHECK evaluations.type aligné sur les 7 types de l'API (oral et projet étaient refusés)
+│   ├── 026_plages_horaires_defaut.sql             ✅ trigger : chaque établissement reçoit ses plages horaires par défaut (+ rattrapage) ; routes POST/PUT/DELETE /plages-horaires
+│   ├── 027_moyenne_matiere_config_defaut.sql      ✅ calculer_moyenne_matiere : valeurs de l'établissement quand aucune config matière × niveau (la composition était ignorée)
 │   └── run_all_migrations.sql      ⚠️  Legacy psql (\i + schema_migrations) —
 │                                       préférer `cd backend && npm run migrate`
 │
@@ -130,12 +142,14 @@ ecolemanager/
 │
 └── dashboard/              ← Dashboard admin (Vite + TypeScript + Vitest, compilé en dist/)
     ├── index.html          ✅ Structure HTML (scripts compilés par Vite, plus de js/ legacy)
-    ├── login.html          ✅ Page de connexion (identifiant, mdp, code établissement)
-    ├── inscription.html    ✅ Page de création d'un nouvel établissement (formulaire setup)
+    ├── login.html          ✅ Page de connexion uniquement (identifiant, mdp, code établissement) + lien vers inscription.html
+    ├── changer-mot-de-passe.html ✅ Changement de mot de passe (obligatoire si mot de passe provisoire)
+    ├── inscription.html    ✅ Wizard de création d'établissement + directeur (seul point d'entrée, POST /inscription)
+    ├── (index.html : pages Fiche élève (identité, parents, résultats, notes, absences, discipline, santé), Agenda, Sécurité (audit, appareils, comptes bloqués), Mes données (RGPD) ; Paramètres : plages horaires, plafond SMS ; enseignant.html et parent.html : Mes données)
     ├── css/
     │   └── style.css       ✅ Toute la feuille de style
     ├── src/                ✅ Sources TypeScript (remplace l'ancien dashboard/js/, supprimé — lot K)
-    ├── tests/              ✅ 65 tests Vitest
+    ├── tests/              ✅ 114 tests Vitest
     ├── vite.config.ts / vitest.config.ts / tsconfig.json
     └── dist/               ← build de production (généré, non versionné)
 ```
@@ -161,7 +175,7 @@ Tous les 9 domaines sont **implémentés et testés** (60/60 tests passent).
 
 > Note : ce tableau reflète l'implémentation initiale des 9 domaines. Depuis, la campagne de
 > correction de l'audit 2026-09 (lots A→J) a ajouté des domaines, migrations et tests
-> supplémentaires. **Total actuel backend : 172 tests (22 suites Jest)**, voir `npm test` dans
+> supplémentaires. **Total actuel backend : 379 tests (40 suites Jest)**, voir `npm test` dans
 > `backend/`.
 
 ### 📖 Documentation API
@@ -175,9 +189,10 @@ Tous les 9 domaines sont **implémentés et testés** (60/60 tests passent).
 - **Workflow** : `.github/workflows/ci.yml`
 - **Déclenché sur** : push `main`/`develop` + pull requests vers `main`
 - **Jobs** :
-  1. `backend-lint-test` — ESLint + Jest (172 tests, couverture)
+  1. `backend-lint-test` — ESLint + Jest (379 tests, couverture, services Postgres/Redis réels)
   2. `backend-docker` — Build image Docker (après tests)
   3. `mobile-typecheck` — TypeScript `tsc --noEmit`
+  4. `dashboard-test` — Vitest + build Vite ; `dashboard-e2e` — Playwright (`dashboard/tests/`) contre un vrai backend (PostgreSQL 16 + Redis 7 éphémères, dashboard servi par `dashboard/tests/serve-e2e.js` qui relaie `/api` : la CSP n'autorise que la même origine). Variables du relais : `E2E_PORT` / `E2E_API_PORT` (jamais `PORT`, réservé au backend)
 - **ESLint** : `backend/.eslintrc.js` — 0 erreurs, <60 warnings
 
 ### 🖥️ Dashboard — Architecture
@@ -186,7 +201,7 @@ Tous les 9 domaines sont **implémentés et testés** (60/60 tests passent).
   vanilla non compilé a été supprimé au lot K, hygiène dépôt — il n'était plus référencé par aucun HTML)
 - **Auth** : JWT stocké dans `sessionStorage` (migré depuis `localStorage` au lot H), redirect vers `login.html` si 401
 - **Routing** : Hash-based (`#eleves`, `#notes`, etc.)
-- **Tests** : 65 tests Vitest (`dashboard/tests/`)
+- **Tests** : 72 tests Vitest (`dashboard/src/__tests__/`)
 - **Serveur dev** : `npm run dev` dans `dashboard/` (Vite) ; build prod : `npm run build`
 
 ### 🔜 Travail restant
@@ -195,8 +210,10 @@ Tous les 9 domaines sont **implémentés et testés** (60/60 tests passent).
 - [x] Dashboard : extraction monolithe → fichiers modulaires
 - [x] Dashboard : authentification + login page
 - [x] Dashboard : connexion 10 pages aux endpoints API (avec fallback mock)
-- [x] Backend : domaine setup — création établissement + directeur (POST /setup, POST /inscription, GET /setup/status, GET /dashboard)
-- [x] Dashboard : page inscription.html — formulaire de création d'établissement
+- [x] Backend : domaine setup — création établissement + directeur (`POST /setup` = bootstrap interne, jamais appelé par l'UI ; `POST /inscription` = parcours public rate-limité, génère code établissement, année scolaire et niveaux ; `GET /setup/status`, `GET /dashboard`)
+- [x] Dashboard : page inscription.html — wizard de création d'établissement (point d'entrée unique, remplace l'onglet de login.html)
+- [x] RLS PostgreSQL réel — phase 1 pilote (migration 019, 2 tables, `GET /configs/matieres`)
+- [ ] RLS PostgreSQL — phases suivantes (autres tables, bascule de l'API sur le rôle dédié)
 - [x] Dashboard : retrait des données fictives (data-mock.js) — pages branchées sur API réelle
 - [x] Déploiement Render (API + Postgres + Redis managés, `render.yaml`) ; alternative VPS/Docker+Nginx documentée dans `docs/DEPLOY_VPS.md`
 - [ ] Build mobile EAS + publication stores
@@ -405,8 +422,24 @@ META_WA_TOKEN         → WhatsApp Business API
 1. **Multi-tenant strict** : chaque requête SQL doit filtrer par `etablissement_id = $1`
 2. **JWT** : vérification dans `middleware/auth.js` — ne pas dupliquer la logique
 3. **Rôles** : `directeur > censeur > enseignant > parent` — utiliser `requireRole()`
-4. **Rate limiting** : déjà configuré dans `middleware/rateLimiter.js`
+4. **Rate limiting** : déjà configuré dans `middleware/rateLimiter.js` ; `POST /inscription` a son propre limiteur (`RATE_LIMIT_REGISTER_MAX`, défaut 5/heure)
 5. **Données sensibles** : ne jamais logger de mots de passe, tokens ou numéros de CB
+6. **Téléphones** : toujours stockés en E.164 (`+221771234567`) via `utils/telephone.js` (`telephoneOuErreur`, pays par défaut = celui de l'établissement). Les recherches (connexion, OTP, doublons) passent par `variantesTelephone` pour retrouver aussi les comptes antérieurs ; reprise des données existantes : `cd backend && npm run normaliser:telephones` (simulation) puis `-- --appliquer`
+7. **Mots de passe** : une seule politique pour tous les profils qui en ont un (directeur, enseignant, réinitialisation), définie dans `utils/mot-de-passe.js` : 8 caractères min., minuscule + majuscule + chiffre, 72 octets max, ne reprend pas téléphone/email/nom. `politique_securite` de l'établissement (créée automatiquement par le trigger de la migration 021 à chaque nouvel établissement) ne peut que durcir la longueur. Enseignant créé sans mot de passe → mot de passe provisoire aléatoire généré (jamais le téléphone), **envoyé par SMS** à l'enseignant (`envoyerMotDePasseProvisoire`) : la réponse de l'API ne le contient que si le SMS n'a pas pu partir (`sms_envoye: false`). Renvoi : `POST /enseignants/:id/mot-de-passe-provisoire`. Audit des comptes à mot de passe prévisible : `cd backend && npm run auditer:mots-de-passe` (simulation) puis `-- --appliquer` Parents/élèves : pas de mot de passe (OTP SMS). Ne jamais redéfinir une règle ailleurs : importer `schemaMotDePasse` / `exigerMotDePasseConforme`
+8. **Mot de passe provisoire** : un enseignant créé par le directeur a `utilisateurs.mdp_a_changer = TRUE`. Tant que le drapeau est levé, `middleware/auth.middleware.js` refuse toute route protégée en `403 MDP_CHANGEMENT_REQUIS` sauf `POST /auth/changer-mot-de-passe`, `GET /auth/profil` et `POST /auth/deconnexion` (liste `ROUTES_AUTORISEES_MDP_A_CHANGER`). Les réponses de connexion et `/auth/profil` exposent `doit_changer_mdp` ; le dashboard (`changer-mot-de-passe.html`) et le mobile (`app/auth/changer-mot-de-passe.tsx`) ouvrent l'écran de changement. Tout nouveau client doit gérer ce code
+9. **Doublons** : le téléphone est unique **par établissement** (`UNIQUE (etablissement_id, telephone)`, migration 024) : le même numéro peut avoir un compte dans chaque école (parent d'enfants dans plusieurs écoles, enseignant vacataire), jamais deux dans la même. Toute recherche d'un compte par téléphone se limite à l'établissement courant (`where({ etablissement_id })` + `variantesTelephone`). Les routes de création vérifient d'abord et disent précisément où est le conflit ; `error.middleware.js` traduit les violations `utilisateurs_etab_telephone_key` / `utilisateurs_etablissement_id_email_key` (409 `DOUBLON` + `champ`)
+9bis. **Email du personnel** : un parent peut partager son email entre écoles ; un directeur, un enseignant (tout membre du personnel : `super_admin`, `directeur`, `censeur`, `admin`, `enseignant`) **jamais**. La base ne sait imposer que `UNIQUE (etablissement_id, email)` : la règle « selon le rôle » est contrôlée par `utils/email-personnel.js` (`emailPrisParPersonnel`) avant toute création ou changement d'email de personnel (`POST` et `PUT /enseignants`) ; `POST /inscription` garde sa vérification globale, plus stricte. Un nouveau parcours qui crée ou modifie l'email d'un membre du personnel DOIT appeler ce helper
+9ter. **Codes SMS** : un code de connexion ou de réinitialisation appartient à un COMPTE (`otp_verifications.utilisateur_id`), pas à un numéro : émission, invalidation, compteur d'essais et validation filtrent sur `(telephone, utilisateur_id)`. Ne jamais interroger `otp_verifications` par téléphone seul
+10. **Blocage de connexion** : `est_compte_bloque(identifiant, ip, etablissement_id)` lit la politique de CET établissement (défauts 5 tentatives / 15 min). `/auth/connexion` résout l'établissement avant le contrôle. Ne jamais reprendre `MAX()` sur toutes les écoles
+11. **SMS** : tout texte doit tenir dans l'alphabet SMS de base (pas de tiret long « — », pas de « ê », pas d'emoji : l'UCS-2 coûte 2 à 3 segments au lieu d'1). `envoyerSMS` convertit et borne à 3 segments via `utils/sms-texte.js`, mais écrire les gabarits directement conformes ; `tests/workers/sms-gabarits.test.js` garantit 1 segment pour chaque gabarit de `notification.worker.js`. Ne jamais journaliser le contenu d'un SMS ni un mot de passe
+12. **Sessions OTP** : `POST /auth/otp/valider` n'ouvre une session que dans l'établissement auquel le compte appartient (`utilisateur.etablissement_id`). Ne jamais créer de session (`creerSession`) pour un couple utilisateur/établissement sans avoir vérifié cette appartenance. **Parent multi-écoles (3.4)** : `etablissement_code` est facultatif sur `POST /auth/otp/demander` et `/valider` ; sans lui, le numéro est lu comme sénégalais s'il n'a pas d'indicatif, un SMS unique donne un code par compte PARENT, et si le numéro a plusieurs écoles `/valider` répond `{ choix_requis, ticket, etablissements }` (ticket JWT 5 min) puis `POST /auth/otp/choisir` ouvre la session. `POST /auth/changer-etablissement` (parent sans mot de passe seulement) bascule vers une autre école du même numéro ; `GET /auth/mes-etablissements` liste les écoles du parent connecté (sélecteurs de `parent.html` et du profil mobile ; la bascule vide la base SQLite locale ; `parent.html` bascule SANS recharger la page : `ParApp._basculerEcole` remet les pages à leur gabarit d'origine et recharge enfants et notifications ; `Api.nouvelleGeneration()` abandonne les requêtes de l'ancienne école encore en vol : leur réponse n'est jamais livrée, ni rendue, ni source de purge de session). Réglage de la politique : `GET/PUT /securite/politique` (bornes : mot de passe 8-32, tentatives 3-10, blocage 5-120 min, sessions 1-5 ; journalisé)
+13. **Expiration côté dashboard et mobile** : quand `/auth/refresh` échoue, `Api.request` purge `em_token`, `em_refresh_token` et `em_user` AVANT de rediriger (sinon boucle `login.html` ↔ page). Les parents sont renvoyés vers `parent-login.html`. Si `/auth/refresh` répond `SESSION_REVOQUEE` (session fermée : trop d'appareils), le dashboard (`em_flash`) et le mobile (`messageConnexion` du store) affichent « Vous avez été déconnecté : trop d'appareils connectés » sur l'écran de connexion
+14. **Notifications SMS** : le traitement vit dans `workers/notification.processor.js` (testable) ; `notification.worker.js` ne fait que le câblage BullMQ. Un report d'envoi (`statut: 'delayed'`) se fait dans le worker par `job.moveToDelayed(date, jeton)` puis `throw new DelayedError()` (BullMQ 5). Un job `nouvelle_note`/`absence`/`sanction` DOIT porter `inscription_id` (le worker retrouve le parent par l'inscription). Une panne du journal après l'envoi ne doit jamais faire échouer le job (le SMS serait renvoyé et refacturé). Les tests unitaires du worker sont simulés : toute modification de ses requêtes SQL se vérifie avec `tests/integration/notifications-worker.integration.test.js`
+15. **Plafond SMS** : `politique_securite.sms_plafond_mensuel` (0 = illimité, défaut 3000 segments/mois) borne les SMS de NOTIFICATION via `infrastructure/notifications/plafond-sms.js` (80 % → alerte directeur, 100 % → notes/bulletins bloqués, 150 % → tout bloqué). Ne jamais y soumettre le code de connexion ni le mot de passe provisoire. Réglage : `PUT /notifications/sms/plafond`, suivi : `GET /notifications/sms/consommation`
+16. **Tests manuels** : `npm run test:integration` crée puis SUPPRIME la base `ecole_manager_test` ; utiliser un autre nom de base pour des essais à la main, et lancer `redis-server --dir /tmp` (jamais depuis le dépôt : `dump.rdb`)
+17. **Workers en production** : SMS de notification, calcul des moyennes après publication et PDF de bulletins passent par des files BullMQ (Redis) et ne s'exécutent QUE si un worker tourne : Render = service `ecolemanager-workers` (payant, Docker, `lanceur.js`) + `ecolemanager-redis` ; VPS = `worker-notif`, `worker-moyennes`, `worker-bulletins` de `docker-compose.prod.yml`. Un nouveau worker : un fichier `src/workers/*.worker.js` démarré seulement si `require.main === module`, une entrée dans `lanceur.js` ET dans les deux fichiers de déploiement. Le calcul des moyennes n'existe qu'une fois (`calcul-moyennes.service.js`) : ne jamais le recopier dans un worker
+18. **Données médicales** : `GET /eleves/:id` ne renvoie allergies, conditions, groupe sanguin et médecin que si la session a la permission `eleves.medicale` (direction) ; sinon `medical_masque: true`. Toute nouvelle route qui expose une fiche élève doit faire de même (`utilisateurAPermission`). Avant, tout porteur de `eleves.voir`, enseignants compris, les recevait déchiffrées
+19. **Dernier directeur** : on ne ferme ni ne bloque jamais le dernier directeur actif d'un établissement (`utils/dernier-directeur.js`, 409 `DERNIER_DIRECTEUR`) : `DELETE /utilisateurs/moi` (droit à l'effacement) et `POST /securite/blocage/:userId` (bloquer, pas débloquer). Toute nouvelle route qui désactive ou anonymise un compte doit appeler `estDernierDirecteurActif`. Porte de sortie : `POST /securite/directeurs` (dashboard : Sécurité > « Nommer un second directeur ») crée un directeur, réservé à un directeur en exercice (pas à tout porteur de `admin.utilisateurs`), avec mot de passe provisoire aléatoire par SMS, `mdp_a_changer`, mêmes contrôles de doublons que les enseignants et entrée d'audit `utilisateurs.creer_directeur`
 
 ---
 
@@ -434,9 +467,16 @@ META_WA_TOKEN         → WhatsApp Business API
 | 18 | Monitoring `/health/deep` + `/metrics` + alertes SMS | ✅ |
 | 19 | Build mobile EAS + CI verte (108 tests, TypeScript, Docker) | ✅ |
 | 20 | Campagne de correction audit 2026-09 (lots A→K : migrations unifiées, sessions/refresh, IDOR bulletins, stockage S3, OTP prod, infra Render/Nginx, dépendances, sécurité dashboard, hygiène dépôt) | ✅ (voir `docs/CHANGELOG.md`) |
+| 21 | RLS PostgreSQL réel phase 1 (migration 019) + blocage écriture inter-établissements sur `POST /sync/operations` | ✅ |
+| 22 | Fusion des parcours de création d'établissement sur `POST /inscription` (mot de passe fort, rate-limit) ; `POST /etablissements/register` supprimée | ✅ |
+| 23 | Normalisation E.164 des téléphones (enseignants, parents, directeur, connexion, OTP) + politique de mot de passe unique pour tous les profils (corrige la politique d'établissement jamais appliquée à la réinitialisation) | ✅ |
+| 24 | Changement de mot de passe obligatoire pour les comptes à mot de passe provisoire (migration 020, `POST /auth/changer-mot-de-passe`, écrans dashboard + mobile) ; messages de doublons précis ; messages d'erreur du serveur enfin affichés par le dashboard (`erreur`) ; redirection après connexion dashboard | ✅ |
+| 25 | Politique de sécurité créée automatiquement pour chaque établissement (migration 021) ; session OTP limitée à l'établissement du compte ; boucle d'expiration du dashboard corrigée ; plan d'évolution `docs/PLAN-evolutions-comptes-2026-10.md` (mots de passe, parent multi-établissements, web vs mobile) | ✅ (plan : phases 2-5 à exécuter) |
+| 26 | Phase 2 mots de passe : audit des comptes prévisibles, mot de passe provisoire par SMS (+ renvoi), blocage de connexion par établissement (migration 022) | ✅ (2.4 optionnelle ; 2.5 et 2.6 ✅) |
+| 27 | Notifications SMS réparées sur base réelle (le worker ne trouvait jamais le parent : aucun SMS n'avait pu partir), publication des notes → un SMS par parent, contrôle d'établissement sur la publication, report horaire BullMQ 5, plafond mensuel de SMS par établissement avec alertes (migration 023) | ✅ |
 
 > Les compteurs de tests ci-dessus sont historiques (au moment de chaque étape). Compteurs
-> actuels : backend 172 tests (22 suites Jest), dashboard 65 tests (Vitest).
+> actuels (vérifiés le 2026-10-07) : backend 379 tests (40 suites Jest) + 220 tests d'intégration sur base réelle (30 suites, `npm run test:integration`), dashboard 169 tests (Vitest) + 52 tests E2E Playwright (voir dashboard/tests/README.md), mobile 119 tests (Jest) + 18 étapes de parcours contre un vrai backend (`cd mobile && npm run test:parcours`, job CI `mobile-parcours`, voir `mobile/__tests__/parcours/parcours-mobile.test.ts`).
 
 ---
 

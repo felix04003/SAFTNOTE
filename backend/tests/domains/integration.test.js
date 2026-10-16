@@ -396,6 +396,8 @@ describe('Workflow 4 — POST /eleves', () => {
       trx.mockReturnValueOnce(mockQuery({ id: IDS.annee }));
       // 2. trx('utilisateurs').insert()
       trx.mockReturnValueOnce(mockQuery(undefined));
+      // 2bis. trx('eleves').where({ matricule }).first() → matricule généré encore libre
+      trx.mockReturnValueOnce(mockQuery(null));
       // 3. trx('eleves').insert()...returning('id')
       trx.mockReturnValueOnce(mockQuery([{ id: IDS.eleve }]));
       // 4. trx('roles').where({ code: 'eleve' }).first()
@@ -486,6 +488,8 @@ describe('Workflow 4 — POST /eleves', () => {
       trx.mockReturnValueOnce(mockQuery({ id: IDS.annee }));
       // 2. INSERT utilisateurs (élève)
       trx.mockReturnValueOnce(mockQuery(undefined));
+      // 2bis. matricule généré : encore libre
+      trx.mockReturnValueOnce(mockQuery(null));
       // 3. INSERT eleves...returning('id')
       trx.mockReturnValueOnce(mockQuery([{ id: IDS.eleve }]));
       // 4. SELECT role 'eleve'
@@ -544,6 +548,7 @@ describe('Workflow 5 — Notes : POST /evaluations + PUT notes + PUT publier', (
 
   // ── POST /evaluations ──────────────────────────────────────────
   test('POST /evaluations crée une évaluation', async () => {
+    db.mockReturnValueOnce(mockQuery({ id: IDS.affectation, classe_id: IDS.classe }));   // affectation accessible
     db.mockReturnValueOnce(mockQuery([{
       id: IDS.evaluation,
       affectation_id: IDS.affectation,
@@ -649,12 +654,14 @@ describe('Workflow 5 — Notes : POST /evaluations + PUT notes + PUT publier', (
   });
 
   // ── PUT /evaluations/:id/publier ─────────────────────────────
-  test('PUT /evaluations/:id/publier publie les notes', async () => {
-    db.mockReturnValueOnce(mockQuery([{
-      id: IDS.evaluation,
-      notes_publiees: true,
-      updated_at: '2025-01-20T10:00:00Z',
-    }]));
+  // Ordre des accès base : 1) évaluation de l'établissement, 2) UPDATE atomique
+  // (nombre de lignes), 3) élèves ayant une note
+  test('PUT /evaluations/:id/publier publie les notes et met en file un job par élève noté', async () => {
+    const { enqueuerNotification } = require('../../src/infrastructure/queue/bullmq');
+    enqueuerNotification.mockClear();
+    db.mockReturnValueOnce(mockQuery({ id: IDS.evaluation }));
+    db.mockReturnValueOnce(mockQuery(1));
+    db.mockReturnValueOnce(mockQuery([{ inscription_id: IDS.inscription }, { inscription_id: 'insc-2' }]));
 
     const res = await request(evalsApp)
       .put(`/evaluations/${IDS.evaluation}/publier`)
@@ -662,10 +669,28 @@ describe('Workflow 5 — Notes : POST /evaluations + PUT notes + PUT publier', (
 
     expect(res.body.succes).toBe(true);
     expect(res.body.data.message).toMatch(/publiées/i);
+    expect(res.body.data.parents_notifies).toBe(2);
+    expect(enqueuerNotification).toHaveBeenCalledTimes(2);
+    expect(enqueuerNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ type_notif: 'nouvelle_note', evaluation_id: IDS.evaluation, inscription_id: IDS.inscription }), 2);
   });
 
-  test('PUT /evaluations/:id/publier retourne 404 si évaluation inexistante', async () => {
-    db.mockReturnValueOnce(mockQuery([])); // returning([]) = pas de résultat
+  test('PUT /evaluations/:id/publier une seconde fois : aucune nouvelle notification', async () => {
+    const { enqueuerNotification } = require('../../src/infrastructure/queue/bullmq');
+    enqueuerNotification.mockClear();
+    db.mockReturnValueOnce(mockQuery({ id: IDS.evaluation }));
+    db.mockReturnValueOnce(mockQuery(0)); // déjà publiée : aucune ligne mise à jour
+
+    const res = await request(evalsApp)
+      .put(`/evaluations/${IDS.evaluation}/publier`)
+      .expect(200);
+
+    expect(res.body.data).toMatchObject({ deja_publiees: true, parents_notifies: 0 });
+    expect(enqueuerNotification).not.toHaveBeenCalled();
+  });
+
+  test('PUT /evaluations/:id/publier retourne 404 si évaluation inexistante ou d\'un autre établissement', async () => {
+    db.mockReturnValueOnce(mockQuery(null));
 
     const res = await request(evalsApp)
       .put(`/evaluations/${IDS.evaluation}/publier`)

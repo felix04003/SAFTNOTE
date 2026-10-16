@@ -1,4 +1,5 @@
 import { Api } from './api';
+import { verifierMotDePasse } from './password';
 
 let _identifiant = '';
 let _etabCode = '';
@@ -44,6 +45,11 @@ async function reinitialiser(e: Event) {
   }
   if (mdp1 !== mdp2) {
     if (errEl) { errEl.textContent = 'Les mots de passe ne correspondent pas.'; errEl.classList.add('show'); }
+    return;
+  }
+  const errMdp = verifierMotDePasse(mdp1);
+  if (errMdp) {
+    if (errEl) { errEl.textContent = errMdp; errEl.classList.add('show'); }
     return;
   }
 

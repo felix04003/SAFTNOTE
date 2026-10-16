@@ -10,7 +10,8 @@
     "build:android": "eas build --platform android",
     "build:ios": "eas build --platform ios",
     "test": "jest --watchAll",
-    "test:ci": "jest --watchAll=false"
+    "test:ci": "jest --watchAll=false",
+    "test:parcours": "jest --watchAll=false --testPathIgnorePatterns=/node_modules/ --runTestsByPath __tests__/parcours/parcours-mobile.test.ts"
   },
   "dependencies": {
     "@expo/vector-icons": "~14.0.4",
@@ -68,7 +69,8 @@
     "preset": "jest-expo",
     "testPathIgnorePatterns": [
       "/node_modules/",
-      "<rootDir>/__tests__/helpers/"
+      "<rootDir>/__tests__/helpers/",
+      "<rootDir>/__tests__/parcours/"
     ],
     "transformIgnorePatterns": [
       "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg)"

@@ -139,3 +139,46 @@ describe('Auth.login — payload envoyé au backend', () => {
     expect(body).not.toHaveProperty('code_etablissement');
   });
 });
+
+describe('Auth.destination', () => {
+  it('mot de passe provisoire : page de changement, quel que soit le rôle', () => {
+    expect(Auth.destination({ role: 'enseignant', doit_changer_mdp: true })).toBe('changer-mot-de-passe.html');
+    expect(Auth.destination({ role: 'directeur', doit_changer_mdp: true })).toBe('changer-mot-de-passe.html');
+  });
+
+  it('sinon selon le rôle', () => {
+    expect(Auth.destination({ role: 'enseignant' })).toBe('enseignant.html');
+    expect(Auth.destination({ role: 'Parent' })).toBe('parent.html');
+    expect(Auth.destination({ role: 'directeur' })).toBe('index.html');
+    expect(Auth.destination(null)).toBe('index.html');
+  });
+});
+
+describe('Auth.login — ce qui est stocké', () => {
+  beforeEach(() => { localStorage.clear(); sessionStorage.clear(); });
+
+  const reponse = {
+    succes: true,
+    data: {
+      token: 'jwt-secret', refresh_token: 'refresh-secret',
+      utilisateur: { id: 'u1', prenom: 'Mame', nom: 'Cisse', role: 'enseignant', doit_changer_mdp: true },
+    },
+  };
+
+  it('USER_KEY (localStorage) ne contient que le profil, jamais le jeton', async () => {
+    mockFetch(200, true, reponse);
+    await Auth.login('+221779990001', 'x', 'ECOLE');
+    const stocke = localStorage.getItem(CONFIG.USER_KEY) || '';
+    expect(JSON.parse(stocke)).toEqual(reponse.data.utilisateur);
+    expect(stocke).not.toContain('jwt-secret');
+    expect(stocke).not.toContain('refresh-secret');
+    expect(sessionStorage.getItem(CONFIG.TOKEN_KEY)).toBe('jwt-secret');
+  });
+
+  it('Auth.majUser fusionne dans le profil stocké', async () => {
+    mockFetch(200, true, reponse);
+    await Auth.login('+221779990001', 'x', 'ECOLE');
+    Auth.majUser({ doit_changer_mdp: false });
+    expect(Auth.getUser()).toMatchObject({ id: 'u1', role: 'enseignant', doit_changer_mdp: false });
+  });
+});

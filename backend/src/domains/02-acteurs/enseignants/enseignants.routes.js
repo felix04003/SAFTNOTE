@@ -1,6 +1,7 @@
 'use strict';
 
 const express  = require('express');
+const rateLimit = require('express-rate-limit');
 const { z }    = require('zod');
 const bcrypt   = require('bcryptjs');
 const { v4: uuid } = require('uuid');
@@ -13,11 +14,42 @@ const { valider }    = require('../../../middleware/validate.middleware');
 const { ok, cree, liste }  = require('../../../utils/reponse');
 const ApiError       = require('../../../utils/ApiError');
 const logger         = require('../../../utils/logger');
+const { envoyerMotDePasseProvisoire } = require('../../../infrastructure/notifications/sms.service');
+const { paysEtablissement, paysIso, telephoneOuErreur, variantesTelephone } = require('../../../utils/telephone');
+const { emailPrisParPersonnel } = require('../../../utils/email-personnel');
+const {
+  schemaMotDePasse, exigerMotDePasseConforme, genererMotDePasseTemporaire,
+} = require('../../../utils/mot-de-passe');
 
 const router = express.Router();
 const auth   = authentifier;
 const perm   = exigerPermission;
 const isoler = isolerEtablissement;
+
+// ── Helper : envoyer le mot de passe provisoire par SMS ──────────
+// Retourne true si le SMS est parti. Sans clé Africa's Talking (dev/test) ou en
+// cas d'échec, retourne false : l'appelant renvoie alors le mot de passe au
+// directeur (seul chemin de secours, explicite via `sms_envoye: false`) pour
+// ne laisser personne sans moyen de se connecter.
+async function envoyerProvisoireParSms(telephone, etablissementNom, motDePasse) {
+  if (!process.env.AT_API_KEY) return false;
+  try {
+    await envoyerMotDePasseProvisoire(telephone, { etablissementNom, motDePasse });
+    return true;
+  } catch (err) {
+    logger.warn('SMS du mot de passe provisoire non envoyé', { telephone, error: String(err.message).slice(0, 120) });
+    return false;
+  }
+}
+
+// Chaque appel envoie un SMS facturé : borner les renvois
+const limiterMotDePasseProvisoire = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max:      parseInt(process.env.RATE_LIMIT_MDP_PROVISOIRE_MAX) || 20,
+  message:  { succes: false, erreur: 'Trop de mots de passe provisoires demandés — réessayez dans 1 heure', code: 'RATE_LIMIT' },
+  standardHeaders: true,
+  legacyHeaders:   false,
+});
 
 // ── Helper : récupérer le profil enseignant depuis la session ────
 async function getEnseignantConnecte(db, utilisateurId) {
@@ -48,23 +80,58 @@ router.post('/enseignants', auth, isoler, perm('config.modifier'),
   valider(z.object({
     nom:          z.string().min(2),
     prenom:       z.string().min(2),
-    telephone:    z.string().regex(/^\+?[0-9]{8,15}$/, 'Numéro invalide'),
+    telephone:    z.string().min(6, 'Numéro invalide').max(25, 'Numéro invalide'),
     email:        z.string().email().optional().or(z.literal('')),
     genre:        z.enum(['M', 'F']).optional(),
     specialite:   z.string().optional(),
     type_contrat: z.enum(['titulaire', 'vacataire', 'contractuel', 'benevole']).default('titulaire'),
-    mot_de_passe: z.string().min(6).optional(),
+    mot_de_passe: schemaMotDePasse.optional(),
   })),
   async (req, res, next) => {
     const db = getDB();
     try {
-      // Vérifier doublon téléphone dans cet établissement
-      const doublon = await db('utilisateurs')
-        .where({ etablissement_id: req.etablissement_id, telephone: req.body.telephone })
-        .first('id');
-      if (doublon) throw ApiError.validationEchouee('Un utilisateur avec ce numéro existe déjà');
+      // Numéro normalisé (E.164) — c'est aussi l'identifiant de connexion
+      const etab      = await db('etablissements').where({ id: req.etablissement_id }).first('nom', 'pays');
+      const pays      = paysIso(etab && etab.pays);
+      const telephone = telephoneOuErreur(req.body.telephone, pays);
 
-      const mdpBrut = req.body.mot_de_passe || req.body.telephone;
+      // Doublon de téléphone — unique PAR ÉTABLISSEMENT (migration 024) : le même
+      // numéro peut avoir un compte dans une autre école (enseignant vacataire,
+      // parent) sans conflit. On cherche donc seulement dans celle-ci, formes
+      // historiques incluses.
+      const doublon = await db('utilisateurs')
+        .where({ etablissement_id: req.etablissement_id })
+        .whereIn('telephone', variantesTelephone(req.body.telephone, pays))
+        .first('id');
+      if (doublon) {
+        throw ApiError.validationEchouee('Un utilisateur avec ce numéro existe déjà dans votre établissement');
+      }
+
+      // Email : unique dans l'établissement (tous rôles) ET jamais partagé avec un
+      // autre membre du personnel d'un autre établissement (règle du 2026-10-07)
+      if (req.body.email) {
+        const emailPris = await db('utilisateurs')
+          .where({ etablissement_id: req.etablissement_id, email: req.body.email })
+          .first('id');
+        if (emailPris) throw ApiError.validationEchouee('Un utilisateur avec cet email existe déjà dans votre établissement');
+
+        const emailPersonnel = await emailPrisParPersonnel(db, req.body.email);
+        if (emailPersonnel) {
+          throw ApiError.validationEchouee(
+            'Cet email est déjà utilisé par un membre du personnel d\'un autre établissement — l\'email d\'un directeur ou d\'un enseignant ne peut pas être partagé'
+          );
+        }
+      }
+
+      // Même politique que tous les profils. Sans mot de passe fourni, un mot
+      // de passe provisoire aléatoire est généré (plus de « mot de passe =
+      // numéro de téléphone », qui était aussi l'identifiant de connexion).
+      const genere  = !req.body.mot_de_passe;
+      const mdpBrut = req.body.mot_de_passe || genererMotDePasseTemporaire();
+      const politique = await db('politique_securite')
+        .where({ etablissement_id: req.etablissement_id })
+        .first('mdp_longueur_min');
+      exigerMotDePasseConforme(mdpBrut, politique, { ...req.body, telephone });
       const mdpHash = await bcrypt.hash(mdpBrut, 10);
 
       const result = await db.transaction(async trx => {
@@ -75,10 +142,13 @@ router.post('/enseignants', auth, isoler, perm('config.modifier'),
           etablissement_id: req.etablissement_id,
           nom:              req.body.nom,
           prenom:           req.body.prenom,
-          telephone:        req.body.telephone,
+          telephone,
           email:            req.body.email || null,
           genre:            req.body.genre,
           mot_de_passe_hash: mdpHash,
+          // Mot de passe provisoire connu du directeur : changement obligatoire
+          // à la première connexion (middleware d'authentification)
+          mdp_a_changer:    true,
           actif:            true,
         });
 
@@ -110,9 +180,81 @@ router.post('/enseignants', auth, isoler, perm('config.modifier'),
         etablissement_id: req.etablissement_id,
       });
 
+      const smsEnvoye = await envoyerProvisoireParSms(telephone, etab && etab.nom, mdpBrut);
+
       return cree(res, {
         ...result,
-        message: `Compte créé. Mot de passe provisoire : ${mdpBrut}`,
+        mot_de_passe_genere: genere,
+        sms_envoye: smsEnvoye,
+        // Le mot de passe n'est renvoyé que si le SMS n'a pas pu partir
+        message: smsEnvoye
+          ? `Compte créé. Un SMS contenant le mot de passe provisoire a été envoyé au ${telephone}.`
+          : `Compte créé, mais le SMS n'a pas pu être envoyé. Mot de passe provisoire : ${mdpBrut}`,
+      });
+    } catch (err) { next(err); }
+  }
+);
+
+// ═════════════════════════════════════════════════════════════════
+// POST /enseignants/:id/mot-de-passe-provisoire
+// Dépannage : nouveau mot de passe provisoire envoyé PAR SMS à l'enseignant
+// (le directeur n'a pas besoin de le connaître). Lève mdp_a_changer et ferme
+// les sessions ouvertes de l'enseignant.
+// ═════════════════════════════════════════════════════════════════
+router.post('/enseignants/:id/mot-de-passe-provisoire', auth, isoler, perm('config.modifier'),
+  limiterMotDePasseProvisoire,
+  async (req, res, next) => {
+    const db = getDB();
+    try {
+      const cible = await db('enseignants as ens')
+        .join('utilisateurs as u', 'u.id', 'ens.utilisateur_id')
+        .where({ 'ens.id': req.params.id, 'u.etablissement_id': req.etablissement_id, 'u.actif': true })
+        .first('u.id as utilisateur_id', 'u.telephone');
+      if (!cible) throw ApiError.nonTrouve('Enseignant introuvable');
+      if (!cible.telephone) throw ApiError.validationEchouee('Cet enseignant n\'a pas de numéro de téléphone');
+
+      const etab = await db('etablissements').where({ id: req.etablissement_id }).first('nom');
+      const mdpBrut = genererMotDePasseTemporaire();
+      const mdpHash = await bcrypt.hash(mdpBrut, 12);
+
+      const sessions = await db('sessions')
+        .where({ utilisateur_id: cible.utilisateur_id, revoquee: false })
+        .select('id', 'token_hash');
+
+      await db.transaction(async trx => {
+        await trx('utilisateurs')
+          .where({ id: cible.utilisateur_id })
+          .update({ mot_de_passe_hash: mdpHash, mdp_a_changer: true, updated_at: trx.raw('NOW()') });
+
+        if (sessions.length) {
+          await trx('sessions')
+            .whereIn('id', sessions.map(x => x.id))
+            .update({ revoquee: true, motif_revocation: 'mot_de_passe_provisoire' });
+        }
+      });
+
+      // Les sessions fermées restent utilisables jusqu'à 10 min via le cache Redis
+      try {
+        const { getRedis } = require('../../../infrastructure/cache/redis');
+        const redis = getRedis();
+        for (const x of sessions) await redis.del(`sess:${x.token_hash}`);
+        await redis.del(`profil:${cible.utilisateur_id}`);
+      } catch { /* Redis indisponible — pas critique */ }
+
+      const smsEnvoye = await envoyerProvisoireParSms(cible.telephone, etab && etab.nom, mdpBrut);
+
+      // Jamais le mot de passe dans les logs
+      logger.info('Mot de passe provisoire réémis', {
+        enseignant_id: req.params.id, par: req.session.utilisateur_id,
+        sms_envoye: smsEnvoye, sessions_fermees: sessions.length,
+      });
+
+      return ok(res, {
+        sms_envoye: smsEnvoye,
+        sessions_fermees: sessions.length,
+        message: smsEnvoye
+          ? `Un SMS contenant le nouveau mot de passe provisoire a été envoyé au ${cible.telephone}.`
+          : `Le SMS n'a pas pu être envoyé. Mot de passe provisoire : ${mdpBrut}`,
       });
     } catch (err) { next(err); }
   }
@@ -476,6 +618,29 @@ router.put('/enseignants/:id', auth, isoler,
       for (const champ of champsMappingUtilisateur) {
         if (req.body[champ] !== undefined) {
           champsUtilisateur[champ] = req.body[champ];
+        }
+      }
+
+      // Téléphones : toujours stockés en E.164 (le principal sert d'identifiant)
+      if (champsUtilisateur.telephone !== undefined || champsUtilisateur.telephone_2 !== undefined) {
+        const pays = await paysEtablissement(db, req.session.etablissement_id);
+        if (champsUtilisateur.telephone !== undefined) {
+          champsUtilisateur.telephone = telephoneOuErreur(champsUtilisateur.telephone, pays);
+        }
+        if (champsUtilisateur.telephone_2 !== undefined) {
+          champsUtilisateur.telephone_2 = telephoneOuErreur(champsUtilisateur.telephone_2, pays, 'Second numéro');
+        }
+      }
+
+      // Email du personnel : jamais partagé avec un autre membre du personnel
+      // (règle du 2026-10-07) ; l'unicité dans l'établissement reste garantie
+      // par la base (409 DOUBLON avec le champ « email »).
+      if (champsUtilisateur.email) {
+        const emailPersonnel = await emailPrisParPersonnel(db, champsUtilisateur.email, { sauf: enseignant.utilisateur_id });
+        if (emailPersonnel) {
+          throw ApiError.validationEchouee(
+            'Cet email est déjà utilisé par un autre membre du personnel — l\'email d\'un directeur ou d\'un enseignant ne peut pas être partagé'
+          );
         }
       }
 

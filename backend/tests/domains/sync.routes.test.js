@@ -49,6 +49,11 @@ const { getUrlSignee } = require('../../src/infrastructure/storage/storage.servi
 const router = require('../../src/domains/sync.routes');
 const app = createTestApp(router);
 
+/** Dates passées à db.raw('<expression> > ?', [date]) pour l'expression donnée */
+function datesDeFiltre(db, expression) {
+  return db.raw.mock.calls.filter((c) => String(c[0]).includes(expression)).map((c) => c[1][0]);
+}
+
 describe('Sync Routes', () => {
   let db;
 
@@ -84,7 +89,9 @@ describe('Sync Routes', () => {
         .mockReturnValueOnce(elevesChain)
         .mockReturnValueOnce(evaluationsChain)
         .mockReturnValueOnce(notesChain)
-        .mockReturnValueOnce(edtChain);
+        .mockReturnValueOnce(edtChain)
+        .mockReturnValueOnce(mockQuery([{ id: 'aff-1', classe_id: IDS.classe, matiere: 'Maths', classe: 'Terminale S1' }]))
+        .mockReturnValueOnce(mockQuery([{ id: 'per-1', numero: 1, libelle: 'Trimestre 1' }]));
 
       const depuis = '2025-09-01T06:00:00.000Z';
       const res = await request(app)
@@ -98,12 +105,13 @@ describe('Sync Routes', () => {
       expect(res.body.data.payload.evaluations).toHaveLength(1);
       expect(res.body.data.payload.notes).toHaveLength(1);
       expect(res.body.data.payload.edt).toHaveLength(1);
+      expect(res.body.data.payload.affectations).toHaveLength(1);
+      expect(res.body.data.payload.periodes).toHaveLength(1);
 
-      // Le delta est bien filtré par la date `depuis` fournie (updated_at/saisie_at > syncDepuis)
-      const elevesWhereDates = elevesChain.where.mock.calls.filter(c => c[0] === 'u.updated_at');
-      expect(elevesWhereDates).toHaveLength(1);
-      expect(elevesWhereDates[0][1]).toBe('>');
-      expect(new Date(elevesWhereDates[0][2]).toISOString()).toBe(depuis);
+      // Le delta est bien filtré par la date `depuis` fournie (compte OU inscription modifié depuis)
+      const datesEleves = datesDeFiltre(db, 'GREATEST(u.updated_at, i.updated_at)');
+      expect(datesEleves).toHaveLength(1);
+      expect(datesEleves[0].toISOString()).toBe(depuis);
     });
 
     test('enseignant : sans paramètre depuis, utilise une date epoch (renvoie tout l\'historique)', async () => {
@@ -115,6 +123,8 @@ describe('Sync Routes', () => {
         .mockReturnValueOnce(elevesChain)
         .mockReturnValueOnce(mockQuery([]))
         .mockReturnValueOnce(mockQuery([]))
+        .mockReturnValueOnce(mockQuery([]))
+        .mockReturnValueOnce(mockQuery([]))
         .mockReturnValueOnce(mockQuery([]));
 
       await request(app)
@@ -122,9 +132,9 @@ describe('Sync Routes', () => {
         .set('x-test-session', session)
         .expect(200);
 
-      const elevesWhereDates = elevesChain.where.mock.calls.filter(c => c[0] === 'u.updated_at');
-      expect(elevesWhereDates).toHaveLength(1);
-      expect(new Date(elevesWhereDates[0][2]).getTime()).toBe(new Date(0).getTime());
+      const datesEleves = datesDeFiltre(db, 'GREATEST(u.updated_at, i.updated_at)');
+      expect(datesEleves).toHaveLength(1);
+      expect(datesEleves[0].getTime()).toBe(new Date(0).getTime());
     });
 
     test('parent : renvoie enfants/notes/absences/bulletins/edt avec URL signée fraîche pour chaque bulletin', async () => {
@@ -134,7 +144,6 @@ describe('Sync Routes', () => {
       // mockKnex.js n'inclut pas whereNot() dans sa liste de méthodes chaînables
       // par défaut — on l'ajoute manuellement sur la chaîne "absences".
       const absencesChain = mockQuery([]);
-      absencesChain.whereNot = jest.fn().mockReturnValue(absencesChain);
 
       db.mockReturnValueOnce(mockQuery([{ id: IDS.eleve, nom: 'Ba', prenom: 'Mariama' }]))
         .mockReturnValueOnce(mockQuery([]))

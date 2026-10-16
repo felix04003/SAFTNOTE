@@ -22,6 +22,14 @@ export const Notifs = {
     });
   },
 
+  // Changement d'école (parent) : fermer le panneau, vider le badge et les données de l'ancienne école, recharger
+  reinitialiser() {
+    Notifs.fermer();
+    Notifs._data = null;
+    Notifs._updateBadge(0);
+    Notifs._charger();
+  },
+
   _charger() {
     Api.get('/notifications').then((res) => {
       Notifs._data = res.data;

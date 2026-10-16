@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EcoleManager — Changer le mot de passe</title>
+<!-- CSP (revue code-reviewer, lot H) :
+     - Pas de frame-ancestors : cette directive est ignorée par les
+       navigateurs quand la CSP est livrée via une balise <meta> (spec CSP3 —
+       comme report-uri/report-to/sandbox, seul un en-tête HTTP la fait
+       respecter). La protection anti-clickjacking réelle vient de l'en-tête
+       X-Frame-Options: DENY (render.yaml, service ecolemanager-dashboard).
+     - connect-src est codé en dur sur l'URL de prod et DOIT être mis à jour
+       manuellement dans les 8 fichiers HTML si VITE_API_BASE change (voir
+       dashboard/.env.example) — sinon tous les fetch() sont bloqués
+       silencieusement par la CSP (erreur réseau opaque, rien dans l'UI).
+     - style-src garde 'unsafe-inline' volontairement, uniquement pour le
+       <link> Google Fonts ci-dessous — sans rapport avec le compromis
+       script-src 'unsafe-inline' des pages index/enseignant/parent.html. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self' https://ecolemanager-api.onrender.com; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; form-action 'self';">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  .info-box {
+    background: var(--vert-lt, #f0f7f4); border: 1px solid var(--vert); color: var(--g700, #374151);
+    border-radius: 10px; padding: 10px 12px; font-size: 12.5px; margin-bottom: 14px; display: none;
+  }
+  .info-box.show { display: block; }
+  .regles { font-size: 11.5px; color: var(--g500); margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<div class="login-wrap">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="sb-mark" style="margin:0 auto 12px;width:52px;height:52px;font-size:22px;border-radius:13px">EM</div>
+      <div style="font-size:20px;font-weight:800;color:var(--g900)">Changer le mot de passe</div>
+      <div style="font-size:12.5px;color:var(--g500);margin-top:4px" id="sous-titre">Choisissez un nouveau mot de passe</div>
+    </div>
+
+    <div class="info-box" id="info-force">
+      Votre mot de passe actuel est <strong>provisoire</strong> : il a été choisi par votre établissement.
+      Vous devez en définir un nouveau, que vous seul connaîtrez, pour continuer.
+    </div>
+    <div class="login-err" id="err-box"></div>
+
+    <form id="form-changer">
+      <div class="fg">
+        <label class="fl">Mot de passe actuel</label>
+        <input class="fi" id="mdp-actuel" type="password" required autocomplete="current-password">
+      </div>
+      <div class="fg">
+        <label class="fl">Nouveau mot de passe</label>
+        <input class="fi" id="mdp-nouveau" type="password" required autocomplete="new-password">
+        <div class="regles">8 caractères minimum, avec une majuscule, une minuscule et un chiffre.</div>
+      </div>
+      <div class="fg">
+        <label class="fl">Confirmer le nouveau mot de passe</label>
+        <input class="fi" id="mdp-confirm" type="password" required autocomplete="new-password">
+      </div>
+      <button class="btn btn-p btn-full" type="submit" id="btn-changer" style="margin-top:8px">
+        Enregistrer le mot de passe
+      </button>
+    </form>
+
+    <div style="text-align:center;margin-top:18px;padding-top:18px;border-top:1px solid var(--g200)">
+      <a href="#" id="lien-deconnexion" style="font-size:12px;color:var(--g400);text-decoration:none">Se déconnecter</a>
+    </div>
+  </div>
+</div>
+
+<div class="tc" id="tc"></div>
+
+<script type="module" src="src/changer-mot-de-passe.ts"></script>
+</body>
+</html>

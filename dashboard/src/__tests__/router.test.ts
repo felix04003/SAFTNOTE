@@ -35,9 +35,22 @@ describe('goto', () => {
     expect(page.style.display).toBe('');
   });
 
+  it('la page cible porte .active (sans elle le CSS la garde masquée), les autres la perdent', () => {
+    document.getElementById('page-dashboard')!.classList.add('active');
+    goto('eleves');
+    expect(document.getElementById('page-eleves')!.classList.contains('active')).toBe(true);
+    expect(document.getElementById('page-dashboard')!.classList.contains('active')).toBe(false);
+  });
+
   it('met à jour location.hash', () => {
     goto('notes');
     expect(location.hash).toBe('notes');
+  });
+
+  it('met à jour #tb-titre (id réel de la barre du haut) avec TITRES[id]', () => {
+    document.body.insertAdjacentHTML('afterbegin', '<span id="tb-titre">Tableau de bord</span>');
+    goto('eleves');
+    expect(document.getElementById('tb-titre')!.textContent).toBe('Élèves');
   });
 
   it('met à jour le titre avec TITRES[id]', () => {
@@ -77,5 +90,15 @@ describe('PAGE_HOOKS enregistrement', () => {
     const fn = vi.fn();
     PAGE_HOOKS['notes'] = fn;
     expect(PAGE_HOOKS['notes']).toBe(fn);
+  });
+});
+
+describe('routeurs enseignant et parent : même règle .active', () => {
+  it.each([['../ens-router', 'ens-classes'], ['../par-router', 'absences']])('%s', async (module, id) => {
+    const { goto: aller } = await import(/* @vite-ignore */ module);
+    document.body.innerHTML = `<div id="page-titre"></div><div id="page-${id}" class="page" style="display:none"></div><div id="page-autre" class="page active"></div>`;
+    aller(id);
+    expect(document.getElementById('page-' + id)!.classList.contains('active')).toBe(true);
+    expect(document.getElementById('page-autre')!.classList.contains('active')).toBe(false);
   });
 });

@@ -98,6 +98,8 @@ BEGIN
     INSERT INTO plages_horaires (id, etablissement_id, numero, libelle, heure_debut, heure_fin)
     VALUES (v_plage_id, v_etab_id, 1, '8h-9h', '08:00', '09:00')
     ON CONFLICT (etablissement_id, numero) DO NOTHING;
+    -- Depuis la migration 026, chaque établissement reçoit des plages par défaut : on réutilise la n°1
+    SELECT id INTO v_plage_id FROM plages_horaires WHERE etablissement_id = v_etab_id AND numero = 1;
 
     -- ── 4. Affectation enseignant → classe A, Mathématiques ──
     IF v_matiere_id IS NOT NULL THEN

@@ -44,6 +44,10 @@ class ApiError extends Error {
     return new ApiError(401, message, 'OTP_INVALIDE');
   }
 
+  static mdpChangementRequis(message = 'Vous devez changer votre mot de passe provisoire avant de continuer') {
+    return new ApiError(403, message, 'MDP_CHANGEMENT_REQUIS');
+  }
+
   static erreurServeur(message = 'Erreur interne du serveur') {
     return new ApiError(500, message, 'ERREUR_SERVEUR');
   }

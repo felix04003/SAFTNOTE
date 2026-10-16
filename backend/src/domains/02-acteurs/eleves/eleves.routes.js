@@ -6,13 +6,14 @@ const { v4: uuid } = require('uuid');
 
 const { getDB }      = require('../../../infrastructure/database/pool');
 const { authentifier } = require('../../../middleware/auth.middleware');
-const { exigerPermission, isolerEtablissement } = require('../../../middleware/permission.middleware');
+const { exigerPermission, isolerEtablissement, utilisateurAPermission } = require('../../../middleware/permission.middleware');
 const { valider }    = require('../../../middleware/validate.middleware');
 const { ok, cree, liste, paginee, getPagination } = require('../../../utils/reponse');
 const ApiError       = require('../../../utils/ApiError');
 const { invalidatePattern } = require('../../../infrastructure/cache/redis');
 const { preparerDonneesMediacles, selecteursMedicaux } = require('../../../utils/medical-crypto');
 const { autoriserAccesEleve } = require('../../../middleware/acces-eleve.middleware');
+const { paysEtablissement, telephoneOuErreur, variantesTelephone } = require('../../../utils/telephone');
 
 const router = express.Router();
 const auth   = authentifier;
@@ -117,6 +118,14 @@ router.post('/eleves', auth, isoler, perm('eleves.creer'),
   async (req, res, next) => {
     const db = getDB();
     try {
+      // Numéros normalisés (E.164) : indispensables pour que le parent puisse
+      // se connecter par OTP SMS et recevoir les notifications.
+      const pays = await paysEtablissement(db, req.etablissement_id);
+      const telEleve  = req.body.telephone
+        ? telephoneOuErreur(req.body.telephone, pays, 'Téléphone de l\'élève') : undefined;
+      const telParent = req.body.parent
+        ? telephoneOuErreur(req.body.parent.telephone, pays, 'Téléphone du parent') : undefined;
+
       const result = await db.transaction(async trx => {
         // Récupérer l'année courante
         const annee = await trx('annees_scolaires')
@@ -133,7 +142,7 @@ router.post('/eleves', auth, isoler, perm('eleves.creer'),
           prenom:           req.body.prenom,
           date_naissance:   req.body.date_naissance,
           genre:            req.body.genre,
-          telephone:        req.body.telephone,
+          telephone:        telEleve,
           adresse:          req.body.adresse,
           actif:            true,
         });
@@ -145,9 +154,10 @@ router.post('/eleves', auth, isoler, perm('eleves.creer'),
           groupe_sanguin:       req.body.groupe_sanguin,
           medecin_urgence:      req.body.medecin_urgence,
         });
+        const matricule = req.body.matricule || await genMatriculeUnique(trx);
         const [eleveRecord] = await trx('eleves').insert({
           utilisateur_id:   utilisateurId,
-          matricule:        req.body.matricule || genMatricule(req.etablissement_id),
+          matricule,
           date_inscription: trx.raw('NOW()'),
           ...colonnesMedicales,
         }).returning('id');
@@ -172,27 +182,29 @@ router.post('/eleves', auth, isoler, perm('eleves.creer'),
         });
 
         // Créer le parent si fourni — ou réutiliser un parent existant.
-        // utilisateurs.telephone est UNIQUE au niveau BASE (pas juste par
-        // établissement) : un même numéro sert à un parent pour TOUS ses
-        // enfants, y compris plusieurs enfants dans le MÊME établissement
-        // (cas très courant — fratrie). Sans ce contrôle, l'inscription
-        // du 2e enfant plantait sur la contrainte unique avec une erreur
-        // générique "DOUBLON" (reproduit en direct : 2 POST /eleves avec
-        // le même parent.telephone → 201 puis 409 sur le 2e).
+        // utilisateurs.telephone est unique PAR ÉTABLISSEMENT (migration 024) :
+        // un même numéro sert à un parent pour tous ses enfants d'un même
+        // établissement (fratrie — sans ce contrôle, l'inscription du 2e enfant
+        // plantait sur la contrainte unique avec un « DOUBLON »). La recherche
+        // se limite à CET établissement : le même numéro dans une autre école
+        // est un autre compte (parent d'enfants dans plusieurs écoles), jamais
+        // un compte à rattacher ou à refuser.
         if (req.body.parent) {
           const parentExistant = await trx('utilisateurs')
-            .where({ telephone: req.body.parent.telephone })
-            .first('id', 'etablissement_id');
+            .where({ etablissement_id: req.etablissement_id })
+            .whereIn('telephone', variantesTelephone(req.body.parent.telephone, pays))
+            .first('id');
 
           let parentId;
 
           if (parentExistant) {
-            if (parentExistant.etablissement_id !== req.etablissement_id) {
-              throw ApiError.validationEchouee(
-                'Ce numéro de téléphone est déjà utilisé par un compte dans un autre établissement'
-              );
-            }
             parentId = parentExistant.id;
+
+            // Un compte réutilisé (ex. un enseignant qui est aussi parent)
+            // peut ne pas avoir de préférences de notification
+            await trx('notifications_preferences')
+              .insert({ id: uuid(), utilisateur_id: parentId, canal_prefere: 'sms' })
+              .onConflict('utilisateur_id').ignore();
 
             const aDejaRoleParent = await trx('utilisateur_roles as ur')
               .join('roles as r', 'r.id', 'ur.role_id')
@@ -215,7 +227,7 @@ router.post('/eleves', auth, isoler, perm('eleves.creer'),
               etablissement_id: req.etablissement_id,
               nom:              req.body.parent.nom,
               prenom:           req.body.parent.prenom,
-              telephone:        req.body.parent.telephone,
+              telephone:        telParent,
               actif:            true,
             });
 
@@ -227,9 +239,9 @@ router.post('/eleves', auth, isoler, perm('eleves.creer'),
               etablissement_id: req.etablissement_id,
             });
 
-            // Initialiser les préférences de notification (une seule fois
-            // par utilisateur — notifications_preferences.utilisateur_id
-            // est UNIQUE, donc jamais réinsérée pour un parent existant)
+            // Initialiser les préférences de notification d'un NOUVEAU parent
+            // (notifications_preferences.utilisateur_id est UNIQUE ; pour un
+            // compte réutilisé, voir l'insertion « onConflict ignore » ci-dessus)
             await trx('notifications_preferences').insert({
               id:             uuid(),
               utilisateur_id: parentId,
@@ -262,19 +274,49 @@ router.post('/eleves', auth, isoler, perm('eleves.creer'),
 router.get('/eleves/:eleve_id', auth, isoler, perm('eleves.voir'), async (req, res, next) => {
   try {
     const db = getDB();
+    // Données médicales : réservées à 'eleves.medicale' (direction). Avant, tout porteur de 'eleves.voir',
+    // enseignants compris, les recevait déchiffrées.
+    const voitMedical = await utilisateurAPermission(req.session, 'eleves.medicale');
+
     const eleve = await db('utilisateurs as u')
       .join('eleves as e', 'e.utilisateur_id', 'u.id')
       .where({ 'u.id': req.params.eleve_id, 'u.etablissement_id': req.etablissement_id })
       .select(
         'u.id', 'u.nom', 'u.prenom', 'u.date_naissance', 'u.genre',
         'u.telephone', 'u.adresse', 'u.photo_url',
-        'e.matricule', 'e.date_inscription',
-        ...selecteursMedicaux(db, 'e')
+        'e.id as eleve_pk', 'e.matricule', 'e.date_inscription',
+        ...(voitMedical ? selecteursMedicaux(db, 'e') : [])
       )
       .first();
 
     if (!eleve) throw ApiError.nonTrouve('Élève introuvable');
-    return ok(res, eleve);
+
+    // Classe de l'année courante
+    const inscription = await db('inscriptions as i')
+      .join('classes as c', 'c.id', 'i.classe_id')
+      .join('niveaux as n', 'n.id', 'c.niveau_id')
+      .join('annees_scolaires as a', 'a.id', 'i.annee_scolaire_id')
+      .where({ 'i.eleve_id': eleve.eleve_pk, 'a.etablissement_id': req.etablissement_id, 'a.est_courante': true, 'i.statut': 'actif' })
+      .first('c.id as classe_id', db.raw("CONCAT(n.nom, ' ', c.nom) as classe"), 'n.nom as niveau', 'a.libelle as annee');
+
+    // Parents / tuteurs (contact principal en premier)
+    const parents = await db('parents_eleves as pe')
+      .join('utilisateurs as up', 'up.id', 'pe.parent_id')
+      .where({ 'pe.eleve_id': eleve.eleve_pk })
+      .orderBy([{ column: 'pe.est_contact_principal', order: 'desc' }, 'up.nom'])
+      .select('up.id', 'up.nom', 'up.prenom', 'up.telephone', 'pe.lien', 'pe.est_contact_principal');
+
+    // eslint-disable-next-line no-unused-vars -- identifiant interne, retiré de la réponse
+    const { eleve_pk, ...identite } = eleve;
+    return ok(res, {
+      ...identite,
+      classe: inscription ? inscription.classe : null,
+      classe_id: inscription ? inscription.classe_id : null,
+      niveau: inscription ? inscription.niveau : null,
+      annee: inscription ? inscription.annee : null,
+      parents,
+      medical_masque: !voitMedical,
+    });
   } catch (err) { next(err); }
 });
 
@@ -419,10 +461,17 @@ router.get('/eleves/:eleve_id/absences', auth, isoler, autoriserAccesEleve('abse
 });
 
 // ── Helpers ──────────────────────────────────────────────────────
-function genMatricule(_etablissementId) {
+// Le matricule est unique pour toute la plateforme (eleves.matricule UNIQUE, toutes écoles confondues).
+// Avec 4 chiffres au hasard seulement, une collision devenait probable après une centaine d'élèves
+// (HTTP 500 « eleves_matricule_key » à l'inscription) : 6 chiffres, et on vérifie avant d'insérer.
+async function genMatriculeUnique(db) {
   const annee = new Date().getFullYear().toString().slice(2);
-  const rand  = Math.floor(1000 + Math.random() * 9000);
-  return `E${annee}${rand}`;
+  for (let essai = 0; essai < 10; essai++) {
+    const matricule = `E${annee}${Math.floor(100000 + Math.random() * 900000)}`;
+    // eslint-disable-next-line no-await-in-loop
+    if (!(await db('eleves').where({ matricule }).first('id'))) return matricule;
+  }
+  throw new Error('Impossible de générer un matricule unique');
 }
 
 module.exports = router;

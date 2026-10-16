@@ -1,6 +1,7 @@
 'use strict';
 
 const logger = require('../../utils/logger');
+const { preparerTexteSms } = require('../../utils/sms-texte');
 
 /**
  * Service SMS via Africa's Talking API.
@@ -21,10 +22,9 @@ const AT_BASE_URL = process.env.AT_ENV === 'production'
 async function envoyerSMS(telephones, message) {
   const numeros = Array.isArray(telephones) ? telephones.join(',') : telephones;
 
-  // Tronquer le message à 459 chars (3 SMS max)
-  const messageTronque = message.length > 459
-    ? message.slice(0, 456) + '...'
-    : message;
+  // Tout message est ramené à l'alphabet SMS de base (sinon UCS-2 : 2 à 3 fois
+  // plus de segments facturés) puis borné à 3 segments.
+  const { texte: messageTronque, segments, encodage } = preparerTexteSms(message, 3);
 
   const body = new URLSearchParams({
     username: process.env.AT_USERNAME,
@@ -33,7 +33,7 @@ async function envoyerSMS(telephones, message) {
     ...(process.env.AT_SENDER_ID && { from: process.env.AT_SENDER_ID }),
   }).toString();
 
-  logger.debug('Envoi SMS AT', { to: numeros, chars: messageTronque.length });
+  logger.debug('Envoi SMS AT', { to: numeros, chars: messageTronque.length, segments, encodage });
 
   try {
     const response = await fetch(`${AT_BASE_URL}/messaging`, {
@@ -65,11 +65,13 @@ async function envoyerSMS(telephones, message) {
       to: numeros,
       succes: succes.length,
       echecs: echecs.length,
+      segments,
     });
 
     return {
       succes: true,
       messageIds: succes.map(r => r.messageId),
+      segments,
       recipients: data?.SMSMessageData?.Recipients,
     };
 
@@ -90,4 +92,32 @@ async function envoyerOTP(telephone, code, etablissementNom = 'EcoleManager') {
   return envoyerSMS(telephone, message);
 }
 
-module.exports = { envoyerSMS, envoyerOTP };
+/** Retire les accents et les caractères hors alphabet SMS de base (GSM-7). */
+function versAscii(texte) {
+  return String(texte)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[—–]/g, '-').replace(/[’‘]/g, "'").replace(/[«»“”]/g, '"')
+    .replace(/[^\x20-\x7E]/g, '');
+}
+
+/**
+ * Envoie à un nouvel enseignant son identifiant et son mot de passe provisoire.
+ *
+ * Le texte est volontairement en ASCII : un seul caractère hors de l'alphabet
+ * SMS de base (un tiret long, un accent comme « ê ») fait passer le message en
+ * UCS-2, soit 70 caractères par segment au lieu de 160 — donc 2 à 3 SMS
+ * facturés. Le mot de passe n'est jamais journalisé (envoyerSMS ne journalise
+ * que le numéro et la longueur).
+ *
+ * @param {string} telephone       - Numéro E.164 du destinataire (aussi son identifiant)
+ * @param {object} p
+ * @param {string} p.etablissementNom
+ * @param {string} p.motDePasse
+ */
+async function envoyerMotDePasseProvisoire(telephone, { etablissementNom = 'EcoleManager', motDePasse }) {
+  const ecole = versAscii(etablissementNom).slice(0, 30);
+  const message = `[${ecole}] Compte cree. Identifiant: ${telephone} Mot de passe provisoire: ${motDePasse} A changer a la 1ere connexion.`;
+  return envoyerSMS(telephone, message);
+}
+
+module.exports = { envoyerSMS, envoyerOTP, envoyerMotDePasseProvisoire, versAscii };

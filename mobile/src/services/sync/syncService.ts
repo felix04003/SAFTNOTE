@@ -41,6 +41,14 @@ class SyncService {
     const db = getDB();
 
     try {
+      // La ligne de session locale porte la date de la dernière synchro. Rien ne la créait : l'UPDATE ci-dessous
+      // ne touchait aucune ligne, `depuis` restait vide et chaque synchro retéléchargeait tout.
+      await db.runAsync(
+        `INSERT OR IGNORE INTO session (id, utilisateur_id, etablissement_id, nom_complet, role, token, etablissement_nom)
+         VALUES (?, ?, ?, ?, ?, '', ?)`,
+        [session.utilisateur_id, session.utilisateur_id, session.etablissement_id, session.nom_complet,
+         session.role, session.etablissement_nom ?? null]);
+
       // Récupérer la date de la dernière sync
       const row: any = await db.getFirstAsync(
         `SELECT derniere_sync FROM session WHERE utilisateur_id = ?`,
@@ -94,7 +102,7 @@ class SyncService {
       try {
         const ops = batch.flatMap(op => {
           try {
-            return [{ id: op.id, type: op.type, payload: JSON.parse(op.payload), cree_at_local: op.created_at_local }];
+            return [{ id: op.id, type: op.type, payload: JSON.parse(op.payload), cree_at_local: versIso(op.created_at_local) }];
           } catch {
             console.warn('[Sync] Payload corrompu ignoré', op.id);
             return [];
@@ -108,6 +116,7 @@ class SyncService {
         for (const r of resultats) {
           if (r.statut === 'ok') {
             await marquerOperationSynced(r.op_id);
+            await marquerDonneesEnvoyees(db, batch.find(op => op.id === r.op_id));
             envoyees++;
           } else {
             await db.runAsync(
@@ -146,8 +155,32 @@ async function persisterDonneesEnseignant(db: any, payload: any) {
   if (payload.eleves?.length) await upsertEleves(payload.eleves);
   if (payload.evaluations?.length) await upsertEvaluations(payload.evaluations);
 
+  // Affectations et périodes : remplacées en bloc (petites listes, toujours envoyées en entier)
+  if (Array.isArray(payload.affectations)) {
+    await db.runAsync('DELETE FROM affectations');
+    for (const a of payload.affectations) {
+      await db.runAsync('INSERT OR REPLACE INTO affectations (id, classe_id, classe, matiere) VALUES (?, ?, ?, ?)',
+        [a.id, a.classe_id, a.classe, a.matiere]);
+    }
+  }
+  if (Array.isArray(payload.periodes)) {
+    await db.runAsync('DELETE FROM periodes');
+    for (const p of payload.periodes) {
+      await db.runAsync('INSERT OR REPLACE INTO periodes (id, numero, libelle, date_debut, date_fin) VALUES (?, ?, ?, ?, ?)',
+        [p.id, p.numero, p.libelle, p.date_debut, p.date_fin]);
+    }
+  }
+
   if (payload.notes?.length) {
     for (const n of payload.notes) {
+      // La note saisie sur le téléphone a un id local ; le serveur en a un autre. Sans ce nettoyage, la même note
+      // existerait deux fois et l'élève apparaîtrait en double dans l'écran de saisie.
+      const locale: any = await db.getFirstAsync(
+        'SELECT id, synced FROM notes WHERE evaluation_id = ? AND eleve_id = ?', [n.evaluation_id, n.eleve_id]);
+      if (locale && locale.id !== n.id) {
+        if (!locale.synced) continue;                  // modification locale pas encore envoyée : elle prime
+        await db.runAsync('DELETE FROM notes WHERE id = ?', [locale.id]);
+      }
       await db.runAsync(
         `INSERT INTO notes (id, evaluation_id, eleve_id, inscription_id, valeur, est_absent, absence_justifiee, synced)
          VALUES (?, ?, ?, ?, ?, ?, ?, 1)
@@ -217,6 +250,34 @@ async function persisterDonneesParent(db: any, payload: any) {
       );
     }
   }
+}
+
+// Une opération acceptée par le serveur : les lignes locales qu'elle portait ne sont plus « en attente »
+// (sinon le compteur de notes à envoyer ne redescend jamais)
+async function marquerDonneesEnvoyees(db: any, op: any) {
+  if (!op) return;
+  try {
+    const payload = JSON.parse(op.payload);
+    if (op.type === 'notes.saisir_batch' && Array.isArray(payload.notes)) {
+      for (const n of payload.notes) {
+        await db.runAsync('UPDATE notes SET synced = 1 WHERE evaluation_id = ? AND eleve_id = ?',
+          [payload.evaluation_id, n.eleve_id]);
+      }
+    } else if (op.type === 'notes.saisir') {
+      await db.runAsync('UPDATE notes SET synced = 1 WHERE evaluation_id = ? AND eleve_id = ?',
+        [payload.evaluation_id, payload.eleve_id]);
+    } else if (op.type === 'presences.saisir') {
+      await db.runAsync('UPDATE presences SET synced = 1 WHERE appel_id = ? AND inscription_id = ?',
+        [payload.appel_id, payload.inscription_id]);
+    }
+  } catch { /* payload illisible : l'opération est déjà marquée envoyée, on ne bloque pas la synchro */ }
+}
+
+// SQLite écrit datetime('now') sous la forme « 2026-10-15 13:16:35 » (UTC, sans « T » ni fuseau) ;
+// le serveur n'accepte que de l'ISO 8601 et rejetait donc toute la file d'attente.
+export function versIso(local: string | null | undefined): string {
+  const date = new Date(local && !/[zZ]|[+-]\d\d:?\d\d$/.test(local) ? `${local.replace(' ', 'T')}Z` : (local ?? ''));
+  return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
 }
 
 async function estConnecte(): Promise<boolean> {

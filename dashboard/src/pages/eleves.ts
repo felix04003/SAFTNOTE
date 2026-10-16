@@ -114,7 +114,7 @@ export const PageEleves: any = {
         '<td>' + (moy != null ? '<span style="font-weight:700;color:' + cn(moy) + '">' + moy + '/20</span>' : '<span class="badge bn">—</span>') + '</td>' +
         '<td><span style="font-weight:600;color:' + (abs >= 10 ? 'var(--rouge)' : abs >= 5 ? 'var(--warning)' : 'var(--g700)') + '">' + abs + 'j</span></td>' +
         '<td style="font-size:12px;color:var(--g500)">' + escapeHtml(e.parent_nom || '—') + '</td>' +
-        '<td><button class="btn btn-l btn-sm" onclick="PageEleves.voirFiche(\'' + escapeHtml(e.id) + '\')">Voir</button></td>' +
+        '<td><button class="btn btn-l btn-sm" onclick="PageEleves.voirFiche(\'' + escapeHtml(e.id) + '\')">Fiche</button></td>' +
       '</tr>';
     }).join('');
   },
@@ -147,33 +147,8 @@ export const PageEleves: any = {
   },
 
   filtrerClasse: function(classeId: string) { this.classeId = classeId; this.page = 1; this.charger(); },
-  voirFiche: async function(id: string) {
-    try {
-      const res = await Api.get('/eleves/' + id);
-      const e = res.data;
-      // Récupère les infos supplémentaires depuis le cache local (liste)
-      const cache = (PageEleves.data || []).find(function(x: any) { return x.id === id; }) || {};
-
-      const set = function(sel: string, val: string) {
-        const el = document.getElementById(sel) as HTMLElement | null;
-        if (el) el.textContent = val || '—';
-      };
-      const nomComplet = (e.prenom || '') + ' ' + (e.nom || '');
-      const avatarEl = document.getElementById('fiche-avatar') as HTMLElement | null;
-      if (avatarEl) { avatarEl.textContent = init2(nomComplet); }
-      set('fiche-nom',       nomComplet);
-      set('fiche-matricule', e.matricule);
-      set('fiche-ddn',       e.date_naissance || '—');
-      set('fiche-genre',     e.genre === 'M' ? 'Masculin' : e.genre === 'F' ? 'Féminin' : '—');
-      set('fiche-classe',    cache.classe || cache.niveau || '—');
-      set('fiche-parent',    cache.parent_nom || '—');
-      set('fiche-parent-tel', cache.telephone || '—');
-
-      openModal('m-fiche-eleve');
-    } catch (e: any) {
-      toast('Impossible de charger la fiche élève', 'e');
-    }
-  },
+  // Fiche complète (identité, parents, résultats, absences, discipline) : page dédiée, voir fiche-eleve.ts
+  voirFiche: function(id: string) { (window as any).PageFicheEleve.ouvrir(id); },
 
   ouvrirModal: function() {
     this.chargerClasses();

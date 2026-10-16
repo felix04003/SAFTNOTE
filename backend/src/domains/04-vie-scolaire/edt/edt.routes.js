@@ -46,6 +46,73 @@ router.get('/plages-horaires', auth, isoler, perm('edt.voir'), async (req, res, 
 });
 
 // ═════════════════════════════════════════════════════════════════
+// POST / PUT / DELETE /plages-horaires — adapter les horaires de l'établissement
+// (les plages par défaut sont créées avec l'établissement, migration 026)
+// ═════════════════════════════════════════════════════════════════
+const HEURE = /^([01]\d|2[0-3]):[0-5]\d$/;
+const schemaPlage = z.object({
+  numero:      z.number().int().min(1).max(20),
+  libelle:     z.string().max(30).optional(),
+  heure_debut: z.string().regex(HEURE),
+  heure_fin:   z.string().regex(HEURE),
+  est_pause:   z.boolean().default(false),
+}).refine(p => p.heure_fin > p.heure_debut, { message: 'heure_fin doit suivre heure_debut', path: ['heure_fin'] });
+
+const invaliderPlages = async (etablissementId) => {
+  try { await invalidatePattern(`plages_horaires:${etablissementId}`); } catch { /* Redis down, pas critique */ }
+};
+
+router.post('/plages-horaires', auth, isoler, perm('config.modifier'), valider(schemaPlage), async (req, res, next) => {
+  try {
+    const db = getDB();
+    const existante = await db('plages_horaires')
+      .where({ etablissement_id: req.etablissement_id, numero: req.body.numero }).first('id');
+    if (existante) throw ApiError.conflit(`La plage n°${req.body.numero} existe déjà`);
+
+    const [plage] = await db('plages_horaires')
+      .insert({ id: uuid(), etablissement_id: req.etablissement_id, ...req.body })
+      .returning(['id', 'numero', 'libelle', 'heure_debut', 'heure_fin', 'est_pause']);
+    await invaliderPlages(req.etablissement_id);
+    return cree(res, plage);
+  } catch (err) { next(err); }
+});
+
+router.put('/plages-horaires/:id', auth, isoler, perm('config.modifier'), valider(schemaPlage), async (req, res, next) => {
+  try {
+    const db = getDB();
+    const plage = await db('plages_horaires')
+      .where({ id: req.params.id, etablissement_id: req.etablissement_id }).first('id');
+    if (!plage) throw ApiError.nonTrouve('Plage horaire introuvable');
+
+    const autre = await db('plages_horaires')
+      .where({ etablissement_id: req.etablissement_id, numero: req.body.numero }).whereNot({ id: plage.id }).first('id');
+    if (autre) throw ApiError.conflit(`La plage n°${req.body.numero} existe déjà`);
+
+    const [maj] = await db('plages_horaires').where({ id: plage.id })
+      .update(req.body)
+      .returning(['id', 'numero', 'libelle', 'heure_debut', 'heure_fin', 'est_pause']);
+    await invaliderPlages(req.etablissement_id);
+    return ok(res, maj);
+  } catch (err) { next(err); }
+});
+
+router.delete('/plages-horaires/:id', auth, isoler, perm('config.modifier'), async (req, res, next) => {
+  try {
+    const db = getDB();
+    const plage = await db('plages_horaires')
+      .where({ id: req.params.id, etablissement_id: req.etablissement_id }).first('id');
+    if (!plage) throw ApiError.nonTrouve('Plage horaire introuvable');
+
+    const utilisee = await db('emplois_du_temps').where({ plage_id: plage.id }).first('id');
+    if (utilisee) throw ApiError.conflit('Cette plage est utilisée par l\'emploi du temps : supprimez d\'abord les créneaux');
+
+    await db('plages_horaires').where({ id: plage.id }).del();
+    await invaliderPlages(req.etablissement_id);
+    return vide(res);
+  } catch (err) { next(err); }
+});
+
+// ═════════════════════════════════════════════════════════════════
 // GET /edt/classe/:classeId — EDT d'une classe (semaine)
 // ═════════════════════════════════════════════════════════════════
 async function fetchEdtClasse(db, classeId, etablissementId, semaine) {

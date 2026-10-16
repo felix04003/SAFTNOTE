@@ -1,6 +1,8 @@
 import { Api } from '../api';
 import { escapeHtml, toast, openModal, closeModal } from '../ui';
 import { PAGE_HOOKS } from '../router';
+import { PagePlages } from './plages';
+import { PageSms } from './sms';
 
 export const PageParametres: any = {
   async charger() {
@@ -235,7 +237,66 @@ export const PageParametres: any = {
     }
   },
 
-  init: function() { this.charger(); }
+  // ── Politique de sécurité (GET/PUT /securite/politique) ────────────
+
+  CHAMPS_POLITIQUE: [
+    { cle: 'mdp_longueur_min',        id: 'pol-mdp-longueur', min: 8, max: 32,  libelle: 'La longueur du mot de passe' },
+    { cle: 'session_max_simultanees', id: 'pol-sessions',     min: 1, max: 5,   libelle: 'Le nombre d\'appareils' },
+    { cle: 'blocage_nb_tentatives',   id: 'pol-tentatives',   min: 3, max: 10,  libelle: 'Le nombre de tentatives' },
+    { cle: 'blocage_duree_minutes',   id: 'pol-blocage',      min: 5, max: 120, libelle: 'La durée du blocage' },
+  ],
+
+  async chargerPolitique() {
+    try {
+      const res = await Api.get('/securite/politique');
+      const p = res.data || {};
+      this.CHAMPS_POLITIQUE.forEach(function(c: any) {
+        const el = document.getElementById(c.id) as HTMLInputElement | null;
+        if (el && p[c.cle] != null) el.value = String(p[c.cle]);
+      });
+    } catch (e: any) {
+      // Sans la permission config.voir (ou hors ligne) : la carte reste vide et inactive
+      const btn = document.getElementById('btn-politique-save') as HTMLButtonElement | null;
+      if (btn) btn.disabled = true;
+    }
+  },
+
+  // Lit et valide les champs ; renvoie le corps à envoyer ou le message d'erreur
+  lirePolitique(): { corps?: Record<string, number>; erreur?: string } {
+    const corps: Record<string, number> = {};
+    for (const c of this.CHAMPS_POLITIQUE) {
+      const el = document.getElementById(c.id) as HTMLInputElement | null;
+      const brut = el ? el.value.trim() : '';
+      const n = Number(brut);
+      if (brut === '' || !Number.isInteger(n) || n < c.min || n > c.max) {
+        return { erreur: c.libelle + ' doit être un nombre entier entre ' + c.min + ' et ' + c.max + '.' };
+      }
+      corps[c.cle] = n;
+    }
+    return { corps };
+  },
+
+  async sauvegarderPolitique() {
+    const errEl = document.getElementById('politique-err') as HTMLElement | null;
+    if (errEl) errEl.classList.remove('show');
+    const { corps, erreur } = this.lirePolitique();
+    if (erreur || !corps) {
+      if (errEl) { errEl.textContent = erreur || ''; errEl.classList.add('show'); }
+      return;
+    }
+    const btn = document.getElementById('btn-politique-save') as HTMLButtonElement | null;
+    if (btn) { btn.disabled = true; btn.textContent = 'Enregistrement…'; }
+    try {
+      await Api.put('/securite/politique', corps);
+      toast('Politique de sécurité enregistrée ✓', 's');
+    } catch (e: any) {
+      if (errEl) { errEl.textContent = e.message || 'Enregistrement impossible'; errEl.classList.add('show'); }
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Enregistrer'; }
+    }
+  },
+
+  init: function() { this.charger(); this.chargerPolitique(); PagePlages.charger(); PageSms.charger(); }
 };
 
 (window as any).PageParametres = PageParametres;

@@ -73,7 +73,8 @@ describe('POST /auth/refresh (B2)', () => {
   });
 
   test('refresh avec token invalide ou expiré → 401', async () => {
-    db.mockReturnValueOnce(mockQuery(null)); // aucune session trouvée
+    db.mockReturnValueOnce(mockQuery(null)); // aucune session active trouvée
+    db.mockReturnValueOnce(mockQuery(null)); // ni session fermée pour « trop d'appareils »
 
     const res = await request(app)
       .post('/auth/refresh')
@@ -81,6 +82,20 @@ describe('POST /auth/refresh (B2)', () => {
       .expect(401);
 
     expect(res.body.succes).toBe(false);
+    expect(res.body.code).toBe('NON_AUTORISE');
+  });
+
+  test('session fermée car trop d\'appareils → 401 SESSION_REVOQUEE', async () => {
+    db.mockReturnValueOnce(mockQuery(null));               // aucune session active
+    db.mockReturnValueOnce(mockQuery({ id: 'sess-vieille' })); // fermée par session_max_atteint
+
+    const res = await request(app)
+      .post('/auth/refresh')
+      .send({ refresh_token: 'c'.repeat(80) })
+      .expect(401);
+
+    expect(res.body.code).toBe('SESSION_REVOQUEE');
+    expect(res.body.erreur).toMatch(/trop d'appareils/);
   });
 
   test('rejette un body sans refresh_token (422)', async () => {

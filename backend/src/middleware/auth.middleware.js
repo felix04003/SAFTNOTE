@@ -5,6 +5,19 @@ const { getDB } = require('../infrastructure/database/pool');
 const ApiError  = require('../utils/ApiError');
 const logger    = require('../utils/logger');
 
+// Routes accessibles tant que le mot de passe provisoire n'est pas changé :
+// le changement lui-même, le profil (l'app y lit le drapeau) et la déconnexion.
+const ROUTES_AUTORISEES_MDP_A_CHANGER = [
+  '/auth/changer-mot-de-passe',
+  '/auth/profil',
+  '/auth/deconnexion',
+];
+
+function routeAutoriseeAvecMdpAChanger(req) {
+  const chemin = (req.originalUrl || req.url || '').split('?')[0].replace(/\/+$/, '');
+  return ROUTES_AUTORISEES_MDP_A_CHANGER.some(r => chemin.endsWith(r));
+}
+
 /**
  * Middleware d'authentification.
  * Vérifie le JWT, charge la session en base, pose req.session.
@@ -56,7 +69,7 @@ async function authentifier(req, res, next) {
 
       const utilisateur = await db('utilisateurs')
         .where({ id: session.utilisateur_id, actif: true })
-        .first('id', 'nom', 'prenom', 'email', 'telephone');
+        .first('id', 'nom', 'prenom', 'email', 'telephone', 'mdp_a_changer');
 
       if (!utilisateur) {
         throw ApiError.nonAutorise('Utilisateur inactif');
@@ -78,6 +91,7 @@ async function authentifier(req, res, next) {
         roles:            roles.map(r => r.code),
         role:             roles[0]?.code,
         nom_complet:      `${utilisateur.prenom} ${utilisateur.nom}`,
+        mdp_a_changer:    !!utilisateur.mdp_a_changer,
       };
 
       // Mettre en cache Redis (TTL = 10 min)
@@ -95,6 +109,13 @@ async function authentifier(req, res, next) {
 
     // Poser req.session — disponible dans tous les handlers suivants
     req.session = sessionData;
+
+    // Mot de passe provisoire : tout est bloqué sauf le changement de mot de
+    // passe. Appliqué ici (et non dans l'interface) pour qu'aucun client,
+    // web, mobile ou appel direct, ne puisse contourner l'obligation.
+    if (sessionData.mdp_a_changer && !routeAutoriseeAvecMdpAChanger(req)) {
+      throw ApiError.mdpChangementRequis();
+    }
 
     next();
 
@@ -121,4 +142,4 @@ function autoriserRoles(...rolesAutorises) {
   };
 }
 
-module.exports = { authentifier, autoriserRoles };
+module.exports = { authentifier, autoriserRoles, routeAutoriseeAvecMdpAChanger };

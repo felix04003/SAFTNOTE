@@ -17,9 +17,21 @@ export class ApiError extends Error {
 // déclencher qu'un seul appel POST /auth/refresh — sinon chacune consomme
 // une unité du rate limiter dédié à /auth/refresh pour rien, et une requête
 // peut échouer à cause de la rotation déclenchée par une autre.
+export const MESSAGE_SESSION_REVOQUEE = 'Vous avez été déconnecté : trop d\'appareils connectés avec ce compte.';
+
 let rafraichissementEnCours: Promise<boolean> | null = null;
 
+// Génération de session : change à chaque bascule d'établissement (parent). Une requête lancée avant la bascule
+// et terminée après n'est jamais livrée à son appelant (voir request) : sa réponse concerne l'ancienne école et
+// ne doit ni s'afficher dans la page remise à zéro, ni déclencher une purge de session sur un 401.
+let generationSession = 0;
+const jamais = <T>() => new Promise<T>(() => { /* ne se résout ni ne se rejette : l'appelant est abandonné */ });
+
 export const Api = {
+  /** À appeler quand la session change d'école : abandonne toutes les requêtes en vol. */
+  nouvelleGeneration(): number { return ++generationSession; },
+  generation(): number { return generationSession; },
+
   /**
    * Tente un rafraîchissement du token via POST /auth/refresh, en fetch
    * direct (pas Api.request) pour éviter toute récursion. Persiste le
@@ -37,7 +49,17 @@ export const Api = {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ refresh_token: refreshToken }),
           });
-          if (!res.ok) return false;
+          if (!res.ok) {
+            // Fermée parce que trop d'appareils se sont connectés : on garde
+            // le message pour l'expliquer sur la page de connexion.
+            try {
+              const echec = await res.json();
+              if (echec?.code === 'SESSION_REVOQUEE') {
+                sessionStorage.setItem(CONFIG.FLASH_KEY, echec.erreur || MESSAGE_SESSION_REVOQUEE);
+              }
+            } catch { /* corps illisible : échec classique */ }
+            return false;
+          }
 
           const data = await res.json();
           const payload = data.data || data;
@@ -64,6 +86,7 @@ export const Api = {
     params?: Record<string, any>,
     opts: { dejaRafraichi?: boolean } = {}
   ): Promise<T> {
+    const generation = generationSession;
     const token = sessionStorage.getItem(CONFIG.TOKEN_KEY);
     const url = new URL(CONFIG.API_BASE + path);
     if (params) {
@@ -77,6 +100,7 @@ export const Api = {
     if (body != null) fetchOpts.body = JSON.stringify(body);
 
     const res = await fetch(url.toString(), fetchOpts);
+    if (generation !== generationSession) return jamais<T>();   // avant tout : pas de rejeu ni de purge sur une réponse périmée
 
     if (res.status === 401) {
       // Tenter un refresh une seule fois puis rejouer la requête, sinon
@@ -87,15 +111,40 @@ export const Api = {
           return Api.request<T>(method, path, body, params, { dejaRafraichi: true });
         }
       }
+      // Session définitivement perdue : la purger AVANT de rediriger. Sinon
+      // login.html voit un jeton encore présent (mais périmé), croit
+      // l'utilisateur connecté et le renvoie ici : boucle de redirections
+      // et rafale de requêtes 401 jusqu'au rate limit.
+      let ancienRole = '';
+      try { ancienRole = (JSON.parse(localStorage.getItem(CONFIG.USER_KEY) || 'null') || {}).role || ''; } catch { /* profil illisible */ }
+      sessionStorage.removeItem(CONFIG.TOKEN_KEY);
+      sessionStorage.removeItem(CONFIG.REFRESH_TOKEN_KEY);
+      localStorage.removeItem(CONFIG.USER_KEY);
       const isLoginPage = location.pathname.includes('login') || location.pathname.includes('parent-login');
-      if (!isLoginPage) location.href = 'login.html';
+      if (!isLoginPage) location.href = ancienRole.toLowerCase() === 'parent' ? 'parent-login.html' : 'login.html';
       throw new ApiError('Non autorisé', 'UNAUTHORIZED', 401);
     }
 
+    // 204 No Content (DELETE réussi) : pas de corps, `res.json()` lèverait une SyntaxError et l'interface
+    // afficherait une erreur alors que la suppression a réussi
+    if (res.status === 204) return { success: true, data: null } as unknown as T;
+
     const data = await res.json();
+    if (generation !== generationSession) return jamais<T>();
+
+    // Mot de passe provisoire : le serveur refuse tout sauf le changement.
+    if (res.status === 403 && data.code === 'MDP_CHANGEMENT_REQUIS') {
+      if (!location.pathname.includes('changer-mot-de-passe')) {
+        location.href = 'changer-mot-de-passe.html';
+      }
+    }
+
     if (!res.ok) {
       throw new ApiError(
-        data.error || data.message || 'Erreur serveur',
+        // L'API renvoie le message dans `erreur` (français) ; `error`/`message`
+        // gardés en repli. Sans `erreur`, tous les messages précis du serveur
+        // (doublons, politique de mot de passe…) s'affichaient « Erreur serveur ».
+        data.erreur || data.error || data.message || 'Erreur serveur',
         data.code || 'SERVER_ERROR',
         res.status
       );

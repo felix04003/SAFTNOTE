@@ -11,6 +11,8 @@ export const CONFIG = {
   TOKEN_KEY: 'em_token',
   REFRESH_TOKEN_KEY: 'em_refresh_token',
   USER_KEY: 'em_user',
+  // Message à afficher une fois sur la page de connexion (ex. session fermée)
+  FLASH_KEY: 'em_flash',
   SESSION_TIMEOUT: 8 * 60 * 60 * 1000,
 };
 

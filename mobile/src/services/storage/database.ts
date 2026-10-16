@@ -3,6 +3,7 @@
 // Stratégie offline-first : toutes les données critiques sont stockées localement
 
 import * as SQLite from 'expo-sqlite';
+import * as Crypto from 'expo-crypto';
 import { insererOperationPendante, getOperationsPendantesDb, marquerOperationSyncedDb } from './queries';
 
 let db: SQLite.SQLiteDatabase;
@@ -112,6 +113,22 @@ export const SCHEMA_SQL = `
       FOREIGN KEY (appel_id) REFERENCES appels(id)
     );
 
+    -- Affectations de l'enseignant (matière × classe) et périodes de l'année : nécessaires pour créer une évaluation
+    CREATE TABLE IF NOT EXISTS affectations (
+      id               TEXT PRIMARY KEY,
+      classe_id        TEXT,
+      classe           TEXT,
+      matiere          TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS periodes (
+      id               TEXT PRIMARY KEY,
+      numero           INTEGER NOT NULL,
+      libelle          TEXT,
+      date_debut       TEXT NOT NULL,
+      date_fin         TEXT NOT NULL
+    );
+
     -- Emploi du temps
     CREATE TABLE IF NOT EXISTS edt (
       id               TEXT PRIMARY KEY,
@@ -218,7 +235,11 @@ export async function upsertEvaluations(evals: any[]): Promise<void> {
     await db.runAsync(
       `INSERT INTO evaluations (id, affectation_id, type, numero, titre, date_evaluation, note_max, notes_publiees, matiere, classe, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET type=excluded.type, notes_publiees=excluded.notes_publiees, updated_at=excluded.updated_at`,
+       ON CONFLICT(id) DO UPDATE SET
+         type=excluded.type, numero=excluded.numero, titre=excluded.titre, date_evaluation=excluded.date_evaluation,
+         note_max=excluded.note_max, notes_publiees=excluded.notes_publiees,
+         matiere=COALESCE(excluded.matiere, matiere), classe=COALESCE(excluded.classe, classe),
+         updated_at=excluded.updated_at`,
       [ev.id, ev.affectation_id, ev.type, ev.numero, ev.titre, ev.date_evaluation,
        ev.note_max, ev.notes_publiees ? 1 : 0, ev.matiere, ev.classe, ev.updated_at]
     );
@@ -274,8 +295,9 @@ export async function sauvegarderPresenceLocale(p: {
 
 export async function ajouterOperationPendante(type: string, payload: object): Promise<void> {
   const db = getDB();
-  const { v4: uuid } = await import('react-native-uuid' as any).catch(() => ({ v4: () => Date.now().toString() }));
-  await insererOperationPendante(db, uuid() as string, type, JSON.stringify(payload));
+  // Le serveur n'accepte que des UUID (z.string().uuid()) : l'ancien repli sur Date.now() faisait rejeter
+  // toute la file d'attente hors ligne, et `import('react-native-uuid')` n'expose pas `v4` en export nommé.
+  await insererOperationPendante(db, Crypto.randomUUID(), type, JSON.stringify(payload));
 }
 
 export async function getOperationsPendantes(): Promise<any[]> {

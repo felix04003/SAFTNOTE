@@ -5,8 +5,8 @@ import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, TextInput, M
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getDB, ajouterOperationPendante } from '../../../src/services/storage/database';
-import { enseignantApi } from '../../../src/services/api/client';
+import { getDB } from '../../../src/services/storage/database';
+import { creerEvaluationMobile } from '../../../src/services/evaluations/creerEvaluation';
 import { Colors, Typography, Spacing, Radius, Shadow } from '../../../src/utils/theme';
 import Entete from '../../../src/components/ui/Entete';
 import Badge from '../../../src/components/ui/Badge';
@@ -27,13 +27,14 @@ export default function EvaluationsScreen() {
   const router = useRouter();
   const [evaluations, setEvaluations] = useState<any[]>([]);
   const [classes,     setClasses]     = useState<any[]>([]);
+  const [affectations, setAffectations] = useState<any[]>([]);
   const [classeFiltre, setClasseFiltre] = useState<string>('toutes');
   const [modal,       setModal]       = useState(false);
   const [saving,      setSaving]      = useState(false);
 
   // Formulaire création
   const [form, setForm] = useState({
-    classe_id: '', matiere: '', type: 'devoir',
+    classe_id: '', type: 'devoir',
     titre: '', date_evaluation: new Date().toISOString().slice(0, 10),
     note_max: '20', affectation_id: '',
   });
@@ -42,51 +43,38 @@ export default function EvaluationsScreen() {
 
   async function charger() {
     const db = getDB();
-    const [evals, cls] = await Promise.all([
+    const [evals, cls, affs] = await Promise.all([
       db.getAllAsync('SELECT * FROM evaluations ORDER BY date_evaluation DESC'),
-      db.getAllAsync('SELECT DISTINCT classe_id, classe FROM edt WHERE classe IS NOT NULL'),
+      db.getAllAsync('SELECT DISTINCT classe_id, classe FROM affectations WHERE classe IS NOT NULL ORDER BY classe'),
+      db.getAllAsync('SELECT * FROM affectations ORDER BY classe, matiere'),
     ]);
     setEvaluations(evals as any[]);
     setClasses(cls as any[]);
+    setAffectations(affs as any[]);
   }
 
   async function creerEvaluation() {
-    if (!form.matiere.trim() || !form.classe_id) {
-      return Alert.alert('Champs manquants', 'La matière et la classe sont requises.');
+    if (!form.affectation_id) {
+      return Alert.alert('Champs manquants', 'La classe et la matière sont requises.');
     }
     setSaving(true);
     try {
-      const payload = {
-        id:             'eval_' + Date.now(),
-        affectation_id: form.affectation_id || 'local',
-        type:           form.type,
-        titre:          form.titre || null,
+      const { enLigne } = await creerEvaluationMobile({
+        affectation_id:  form.affectation_id,
+        type:            form.type,
+        titre:           form.titre,
         date_evaluation: form.date_evaluation,
         note_max:        parseFloat(form.note_max) || 20,
-        notes_publiees:  0,
-        matiere:         form.matiere.trim(),
-        classe:          classes.find(c => c.classe_id === form.classe_id)?.classe || '',
-        updated_at:      new Date().toISOString(),
-      };
-
-      const db = getDB();
-      await db.runAsync(
-        `INSERT INTO evaluations (id, affectation_id, type, titre, date_evaluation, note_max, notes_publiees, matiere, classe, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
-        [payload.id, payload.affectation_id, payload.type, payload.titre,
-         payload.date_evaluation, payload.note_max, payload.matiere, payload.classe, payload.updated_at]
-      );
-
-      // Tenter API
-      try {
-        await enseignantApi.saisirNotes(payload.id, []);
-      } catch {
-        await ajouterOperationPendante('evaluation.creer', payload);
-      }
+      });
+      const matiere = affectations.find(a => a.id === form.affectation_id)?.matiere ?? '';
 
       setModal(false);
       await charger();
-      Alert.alert('Créée ✓', `L\'évaluation de ${payload.matiere} a été créée.`);
+      Alert.alert('Créée ✓', enLigne
+        ? `L'évaluation de ${matiere} a été créée.`
+        : `L'évaluation de ${matiere} est enregistrée sur ce téléphone et sera envoyée au retour du réseau.`);
+    } catch (e: any) {
+      Alert.alert('Création impossible', e?.message || 'Erreur inconnue');
     } finally { setSaving(false); }
   }
 
@@ -182,16 +170,23 @@ export default function EvaluationsScreen() {
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: Spacing.sm }}>
                 {classes.map(c => (
                   <TouchableOpacity key={c.classe_id} style={[styles.typeBtn, form.classe_id === c.classe_id && styles.typeBtnActif]}
-                    onPress={() => setForm(f => ({ ...f, classe_id: c.classe_id }))}>
+                    onPress={() => setForm(f => ({ ...f, classe_id: c.classe_id, affectation_id: '' }))}>
                     <Text style={[styles.typeBtnLabel, form.classe_id === c.classe_id && { color: Colors.primary }]}>{c.classe}</Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
 
-              {/* Matière */}
+              {/* Matière : seulement celles que l'enseignant donne dans cette classe */}
               <Text style={styles.fieldLabel}>Matière *</Text>
-              <TextInput style={styles.fieldInput} value={form.matiere}
-                onChangeText={v => setForm(f => ({ ...f, matiere: v }))} placeholder="Ex: Mathématiques" />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: Spacing.sm }}>
+                {affectations.filter(a => a.classe_id === form.classe_id).map(a => (
+                  <TouchableOpacity key={a.id} style={[styles.typeBtn, form.affectation_id === a.id && styles.typeBtnActif]}
+                    onPress={() => setForm(f => ({ ...f, affectation_id: a.id }))}>
+                    <Text style={[styles.typeBtnLabel, form.affectation_id === a.id && { color: Colors.primary }]}>{a.matiere}</Text>
+                  </TouchableOpacity>
+                ))}
+                {!form.classe_id && <Text style={styles.empty}>Choisissez d'abord une classe</Text>}
+              </ScrollView>
 
               {/* Titre optionnel */}
               <Text style={styles.fieldLabel}>Titre (optionnel)</Text>

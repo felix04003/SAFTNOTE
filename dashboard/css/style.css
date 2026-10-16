@@ -314,3 +314,7 @@ td.nc{font-weight:600;color:var(--g900)}
 
 /* Focus rings accessibles */
 :focus-visible{outline:2px solid var(--vert);outline-offset:2px;border-radius:4px}
+
+/* Hors connexion (C8) */
+#bandeau-hors-ligne{position:sticky;top:0;z-index:1000;background:#fef3c7;color:#92400e;border-bottom:1px solid #fcd34d;padding:8px 16px;font-size:13px;text-align:center}
+body.hors-ligne [data-requiert-reseau]{opacity:.45;pointer-events:none;cursor:not-allowed}

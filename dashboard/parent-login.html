@@ -59,8 +59,8 @@
           <input class="fi" type="tel" id="inp-telephone" placeholder="+221 77 XXX XX XX" autocomplete="tel" style="width:100%;box-sizing:border-box">
         </div>
         <div class="fg" style="margin-bottom:20px">
-          <label class="fl" style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Code établissement *</label>
-          <input class="fi" type="text" id="inp-etab-code" placeholder="ex : PMS001" autocomplete="off" style="width:100%;box-sizing:border-box;text-transform:uppercase">
+          <label class="fl" style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Code établissement <span style="font-weight:400;color:#6b7280">(facultatif)</span></label>
+          <input class="fi" type="text" id="inp-etab-code" placeholder="laisser vide si vous ne le connaissez pas" autocomplete="off" style="width:100%;box-sizing:border-box;text-transform:uppercase">
         </div>
         <button class="btn-otp" id="btn-demander">📱 Recevoir le code SMS</button>
         <div class="login-link">Personnel de l'école ? <a href="login.html">Connexion normale →</a></div>
@@ -81,6 +81,13 @@
         </div>
         <button class="btn-otp" id="btn-valider">Connexion →</button>
         <div class="resend-wrap"><span id="resend-msg"></span></div>
+      </div>
+
+      <!-- ÉTAPE 3 : le numéro existe dans plusieurs écoles -->
+      <div id="etape3" style="display:none">
+        <div style="font-size:14px;font-weight:700;color:#2d6a4f;margin-bottom:6px;text-align:center">Choisissez l'établissement</div>
+        <div class="login-error" id="err3"></div>
+        <div id="liste-etablissements"></div>
       </div>
 
     </div>

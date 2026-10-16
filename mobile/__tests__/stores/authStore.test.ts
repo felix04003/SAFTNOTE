@@ -29,6 +29,8 @@ const mockApiSetRefreshToken = jest.fn();
 const mockConnexion          = jest.fn();
 const mockValiderOTP         = jest.fn();
 const mockDeconnexion        = jest.fn().mockResolvedValue(undefined);
+const mockChoisir            = jest.fn();
+const mockChangerEtab        = jest.fn();
 
 // Emetteur minimal réutilisé pour simuler 'token_rafraichi' émis par
 // ApiClient après un refresh réussi (voir client.ts).
@@ -53,6 +55,8 @@ jest.mock('../../src/services/api/client', () => ({
     connexion:   (...args: any[]) => mockConnexion(...args),
     validerOTP:  (...args: any[]) => mockValiderOTP(...args),
     deconnexion: () => mockDeconnexion(),
+    choisirEtablissement: (...args: any[]) => mockChoisir(...args),
+    changerEtablissement: (...args: any[]) => mockChangerEtab(...args),
   },
   authEventEmitter: mockAuthEventEmitter,
 }));
@@ -280,5 +284,126 @@ describe('helpers de role', () => {
   it('estParent() retourne false si pas de session', () => {
     useAuthStore.setState({ session: null });
     expect(useAuthStore.getState().estParent()).toBe(false);
+  });
+});
+
+describe('mot de passe provisoire (doit_changer_mdp)', () => {
+  const REPONSE_PROVISOIRE = {
+    ...API_RESPONSE,
+    utilisateur: { ...API_RESPONSE.utilisateur, doit_changer_mdp: true },
+  };
+
+  it('connexionMDP conserve le drapeau dans la session persistée', async () => {
+    mockConnexion.mockResolvedValueOnce(REPONSE_PROVISOIRE);
+    await useAuthStore.getState().connexionMDP({ identifiant: 'x', mot_de_passe: 'y', etablissement_code: 'Z' });
+
+    expect(useAuthStore.getState().session?.doit_changer_mdp).toBe(true);
+    const persiste = mockSetItemAsync.mock.calls.find(([k]: any[]) => k === 'session');
+    expect(JSON.parse(persiste[1]).doit_changer_mdp).toBe(true);
+  });
+
+  it('connexion normale : drapeau à false', async () => {
+    mockConnexion.mockResolvedValueOnce(API_RESPONSE);
+    await useAuthStore.getState().connexionMDP({ identifiant: 'x', mot_de_passe: 'y', etablissement_code: 'Z' });
+    expect(useAuthStore.getState().session?.doit_changer_mdp).toBe(false);
+  });
+
+  it('mdpChange() lève l\'obligation en mémoire et en SecureStore', async () => {
+    useAuthStore.setState({ session: { ...SESSION_FIXTURE, doit_changer_mdp: true }, estConnecte: true });
+    await useAuthStore.getState().mdpChange();
+
+    expect(useAuthStore.getState().session?.doit_changer_mdp).toBe(false);
+    const persiste = mockSetItemAsync.mock.calls.find(([k]: any[]) => k === 'session');
+    expect(JSON.parse(persiste[1]).doit_changer_mdp).toBe(false);
+  });
+
+  it('événement mdp_a_changer (403 du serveur) : marque la session', async () => {
+    useAuthStore.setState({ session: { ...SESSION_FIXTURE }, estConnecte: true });
+    mockAuthEventEmitter.emit('mdp_a_changer');
+    await Promise.resolve(); await Promise.resolve();
+
+    expect(useAuthStore.getState().session?.doit_changer_mdp).toBe(true);
+    const persiste = mockSetItemAsync.mock.calls.find(([k]: any[]) => k === 'session');
+    expect(JSON.parse(persiste[1]).doit_changer_mdp).toBe(true);
+  });
+
+  it('événement mdp_a_changer sans session : sans effet', async () => {
+    mockAuthEventEmitter.emit('mdp_a_changer');
+    await Promise.resolve();
+    expect(useAuthStore.getState().session).toBeNull();
+    expect(mockSetItemAsync).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('parent multi-écoles (3.4)', () => {
+  it('connexionOTP : numéro dans plusieurs écoles → choix requis, aucune session ouverte', async () => {
+    mockValiderOTP.mockResolvedValueOnce({
+      choix_requis: true, ticket: 'ticket-xyz',
+      etablissements: [{ code: 'A', nom: 'Lycée A' }, { code: 'B', nom: 'Collège B' }],
+    });
+
+    const res = await useAuthStore.getState().connexionOTP({ telephone: '+221772220501', code: '123456' });
+
+    expect(res).toEqual({
+      choixRequis: true, ticket: 'ticket-xyz',
+      etablissements: [{ code: 'A', nom: 'Lycée A' }, { code: 'B', nom: 'Collège B' }],
+    });
+    expect(useAuthStore.getState().estConnecte).toBe(false);
+    expect(mockSetItemAsync).not.toHaveBeenCalled();
+  });
+
+  it('connexionOTP : une seule école → session ouverte directement', async () => {
+    mockValiderOTP.mockResolvedValueOnce(API_RESPONSE);
+    const res = await useAuthStore.getState().connexionOTP({ telephone: '+221772220502', code: '654321' });
+    expect(res).toEqual({ choixRequis: false });
+    expect(useAuthStore.getState().estConnecte).toBe(true);
+  });
+
+  it('choisirEtablissement : envoie le ticket et ouvre la session de l\'école choisie', async () => {
+    mockChoisir.mockResolvedValueOnce({ ...API_RESPONSE, utilisateur: { ...API_RESPONSE.utilisateur, role: 'parent', etablissement_id: 'etab-B' } });
+
+    await useAuthStore.getState().choisirEtablissement('ticket-xyz', 'B');
+
+    expect(mockChoisir).toHaveBeenCalledWith({ ticket: 'ticket-xyz', etablissement_code: 'B' });
+    expect(useAuthStore.getState().session?.etablissement_id).toBe('etab-B');
+    expect(mockApiSetToken).toHaveBeenCalledWith(TOKEN_FIXTURE);
+  });
+
+  it('changerEtablissement : base locale vidée AVANT la nouvelle session, jeton remplacé', async () => {
+    useAuthStore.setState({ session: { ...SESSION_FIXTURE, role: 'parent' }, token: 'ancien', estConnecte: true });
+    const ordre: string[] = [];
+    mockExecAsync.mockImplementationOnce(async () => { ordre.push('vidage'); });
+    mockApiSetToken.mockImplementationOnce(() => { ordre.push('nouveau-jeton'); });
+    mockChangerEtab.mockResolvedValueOnce({ ...API_RESPONSE, utilisateur: { ...API_RESPONSE.utilisateur, role: 'parent', etablissement_id: 'etab-B', etablissement_nom: 'Collège B' } });
+
+    await useAuthStore.getState().changerEtablissement('B');
+
+    expect(mockChangerEtab).toHaveBeenCalledWith({ etablissement_code: 'B' });
+    expect(ordre).toEqual(['vidage', 'nouveau-jeton']);
+    expect(useAuthStore.getState().session?.etablissement_nom).toBe('Collège B');
+    expect(mockDeconnexion).not.toHaveBeenCalled();     // l'ancienne session n'est pas révoquée
+  });
+
+  it('changerEtablissement : refus du serveur → session et base locale inchangées', async () => {
+    useAuthStore.setState({ session: { ...SESSION_FIXTURE, role: 'parent' }, token: 'ancien', estConnecte: true });
+    mockChangerEtab.mockRejectedValueOnce(new Error('Aucun compte parent'));
+
+    await expect(useAuthStore.getState().changerEtablissement('C')).rejects.toThrow('Aucun compte parent');
+
+    expect(useAuthStore.getState().token).toBe('ancien');
+    expect(mockExecAsync).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('message de connexion (session fermée)', () => {
+  it('definirMessageConnexion garde le message jusqu\'à ce qu\'il soit effacé, et deconnexion() n\'y touche pas', async () => {
+    useAuthStore.getState().definirMessageConnexion('Vous avez été déconnecté : trop d\'appareils');
+    await useAuthStore.getState().deconnexion();
+    expect(useAuthStore.getState().messageConnexion).toBe('Vous avez été déconnecté : trop d\'appareils');
+
+    useAuthStore.getState().definirMessageConnexion(null);
+    expect(useAuthStore.getState().messageConnexion).toBeNull();
   });
 });

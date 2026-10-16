@@ -18,6 +18,10 @@ class EventEmitter {
 }
 export const authEventEmitter = new EventEmitter();
 
+// Message affiché sur l'écran de connexion quand le serveur a fermé la session
+// parce que trop d'appareils se sont connectés (code SESSION_REVOQUEE)
+export const MESSAGE_SESSION_REVOQUEE = 'Vous avez été déconnecté : trop d\'appareils connectés avec ce compte.';
+
 // ── Classe ApiClient ─────────────────────────────────────────────
 class ApiClient {
   private token: string | null = null;
@@ -25,6 +29,8 @@ class ApiClient {
   // Dédoublonne les rafraîchissements concurrents (plusieurs requêtes en
   // 401 en même temps ne doivent déclencher qu'un seul appel /auth/refresh).
   private rafraichissementEnCours: Promise<boolean> | null = null;
+  // Renseigné quand /auth/refresh répond SESSION_REVOQUEE ; lu au moment d'émettre 'deconnexion'
+  private sessionRevoquee = false;
 
   setToken(t: string | null) { this.token = t; }
   setRefreshToken(t: string | null) { this.refreshToken = t; }
@@ -58,7 +64,13 @@ class ApiClient {
             body: JSON.stringify({ refresh_token: this.refreshToken }),
           });
 
-          if (!response.ok) return false;
+          if (!response.ok) {
+            try {
+              const echec = await response.json();
+              if (echec?.code === 'SESSION_REVOQUEE') this.sessionRevoquee = true;
+            } catch { /* corps illisible : échec classique */ }
+            return false;
+          }
 
           const data = await response.json();
           const payload = data.data ?? data;
@@ -105,11 +117,22 @@ class ApiClient {
               return this.request<T>(method, path, body, { ...opts, _dejaRafraichi: true });
             }
           }
+          if (this.sessionRevoquee) {
+            this.sessionRevoquee = false;
+            authEventEmitter.emit('deconnexion', { motif: 'session_revoquee', message: MESSAGE_SESSION_REVOQUEE });
+            throw new ApiError(401, MESSAGE_SESSION_REVOQUEE, 'SESSION_REVOQUEE');
+          }
           authEventEmitter.emit('deconnexion');
           throw new ApiError(401, 'Session expirée — reconnectez-vous', 'SESSION_EXPIREE');
         }
 
         const data = await response.json();
+
+        // Mot de passe provisoire : le serveur refuse tout sauf le changement
+        // de mot de passe. L'écran de changement est ouvert par authStore.
+        if (response.status === 403 && data.code === 'MDP_CHANGEMENT_REQUIS') {
+          authEventEmitter.emit('mdp_a_changer');
+        }
 
         if (!response.ok) {
           throw new ApiError(response.status, data.erreur || 'Erreur serveur', data.code || 'ERREUR');
@@ -152,14 +175,28 @@ export const authApi = {
   connexion: (data: { identifiant: string; mot_de_passe: string; etablissement_code: string }) =>
     api.post('/auth/connexion', data),
 
-  demanderOTP: (data: { telephone: string; etablissement_code: string }) =>
+  // etablissement_code facultatif pour un parent : le serveur retrouve ses écoles (3.4)
+  demanderOTP: (data: { telephone: string; etablissement_code?: string }) =>
     api.post('/auth/otp/demander', data),
 
-  validerOTP: (data: { telephone: string; code: string; etablissement_code: string }) =>
+  validerOTP: (data: { telephone: string; code: string; etablissement_code?: string }) =>
     api.post('/auth/otp/valider', data),
+
+  // Numéro présent dans plusieurs écoles : choix avec le ticket reçu de validerOTP
+  choisirEtablissement: (data: { ticket: string; etablissement_code: string }) =>
+    api.post('/auth/otp/choisir', data),
+
+  mesEtablissements: () =>
+    api.get('/auth/mes-etablissements'),
+
+  changerEtablissement: (data: { etablissement_code: string }) =>
+    api.post('/auth/changer-etablissement', data),
 
   deconnexion: () =>
     api.post('/auth/deconnexion', {}),
+
+  changerMotDePasse: (data: { mot_de_passe_actuel: string; nouveau_mot_de_passe: string }) =>
+    api.post('/auth/changer-mot-de-passe', data),
 };
 
 // ── Endpoints Enseignant ─────────────────────────────────────────
@@ -177,6 +214,11 @@ export const enseignantApi = {
 
   saisirNotes: (evaluationId: string, notes: any[]) =>
     api.put(`/evaluations/${evaluationId}/notes`, { notes }),
+
+  creerEvaluation: (data: {
+    id: string; affectation_id: string; periode_id: string; type: string; numero: number;
+    titre?: string; note_max: number; date_evaluation: string;
+  }) => api.post('/evaluations', data),
 
   // Appels
   ouvrirAppel: (data: { emploi_du_temps_id: string; date_cours: string }) =>

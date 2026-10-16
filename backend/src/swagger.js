@@ -223,6 +223,44 @@ const options = {
           responses: { 200: { description: 'Deconnecte avec succes' } },
         },
       },
+      '/notifications/sms/consommation': {
+        get: {
+          tags: ['Auth'], summary: 'SMS de notification utilises ce mois-ci et etat du plafond',
+          description: 'Segments SMS envoyes ce mois civil (UTC) par l\'etablissement, plafond mensuel (0 = illimite) et ce qui est bloque : au plafond, les notes et bulletins ne partent plus (les absences, retards, sanctions et convocations continuent) ; a 150 % du plafond plus aucune notification SMS. Les codes de connexion et mots de passe provisoires ne sont jamais bloques. Permission : config.voir',
+          responses: { 200: { description: '{ mois, utilises, plafond, pourcentage, notes_et_bulletins_bloques, urgences_bloquees }' } },
+        },
+      },
+      '/notifications/sms/plafond': {
+        put: {
+          tags: ['Auth'], summary: 'Regler le plafond mensuel de SMS de l\'etablissement',
+          description: 'Permission : config.modifier. Un nouveau plafond remet a zero les alertes 80 % / 100 % envoyees au directeur.',
+          requestBody: { required: true, content: { 'application/json': { schema: {
+            type: 'object', required: ['plafond'],
+            properties: { plafond: { type: 'integer', minimum: 0, maximum: 100000, description: '0 = illimite' } },
+          } } } },
+          responses: { 200: { description: 'Consommation et etat du plafond apres modification' }, 422: { description: 'Plafond invalide' } },
+        },
+      },
+      '/auth/changer-mot-de-passe': {
+        post: {
+          tags: ['Auth'],
+          summary: 'Changer son mot de passe (obligatoire si le mot de passe est provisoire)',
+          description: 'Tant que utilisateur.doit_changer_mdp est vrai (compte enseignant cree par le directeur), toutes les autres routes protegees repondent 403 MDP_CHANGEMENT_REQUIS. Politique : 8 caracteres min., minuscule + majuscule + chiffre, 72 octets max, sans reprendre telephone/email/nom. Les autres sessions de l\'utilisateur sont revoquees.',
+          requestBody: { required: true, content: { 'application/json': { schema: {
+            type: 'object', required: ['mot_de_passe_actuel', 'nouveau_mot_de_passe'],
+            properties: {
+              mot_de_passe_actuel:  { type: 'string' },
+              nouveau_mot_de_passe: { type: 'string', minLength: 8 },
+            },
+          } } } },
+          responses: {
+            200: { description: 'Mot de passe modifie (sessions_fermees = autres sessions revoquees)' },
+            401: { description: 'Mot de passe actuel incorrect' },
+            403: { description: 'Compte sans mot de passe (connexion par code SMS)' },
+            422: { description: 'Nouveau mot de passe non conforme a la politique' },
+          },
+        },
+      },
       '/auth/sessions': {
         get: {
           tags: ['Auth'], summary: 'Sessions actives de l\'utilisateur connecte',

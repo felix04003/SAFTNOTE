@@ -12,3 +12,10 @@ Placer ici les fichiers téléchargés depuis Claude.ai :
 
 Ces documents sont référencés dans `CLAUDE.md` et contiennent les décisions
 d'architecture, le schéma SQL complet, et les spécifications détaillées.
+
+## Web ou mobile : qui fonctionne hors connexion ?
+
+- **Dashboard web** : en ligne uniquement. Sans réseau, un bandeau l'indique et les boutons
+  d'enregistrement (appel, notes, évaluation, sanction) sont désactivés.
+- **Application mobile** : fonctionne hors connexion (appel et notes enregistrés en local), puis
+  synchronise au retour du réseau. C'est le choix à privilégier en zone à connexion intermittente.

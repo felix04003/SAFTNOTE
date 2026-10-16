@@ -14,7 +14,7 @@ jest.mock('expo-network', () => ({
 const mockFetch = jest.fn();
 (global as any).fetch = mockFetch;
 
-import { api, authEventEmitter, ApiError } from '../../src/services/api/client';
+import { api, authEventEmitter, ApiError, MESSAGE_SESSION_REVOQUEE } from '../../src/services/api/client';
 
 function reponseOk(data: any, status = 200) {
   return {
@@ -159,6 +159,42 @@ describe('401 avec refresh token disponible (B5)', () => {
   });
 });
 
+describe('refresh refusé car trop d\'appareils (SESSION_REVOQUEE)', () => {
+  it('déconnexion avec le message explicatif, code SESSION_REVOQUEE', async () => {
+    api.setRefreshToken('ancien.refresh.token');
+    mockFetch
+      .mockResolvedValueOnce(reponseErreur(401, { erreur: 'Token expiré' }))
+      .mockResolvedValueOnce(reponseErreur(401, { code: 'SESSION_REVOQUEE', erreur: 'trop d\'appareils' }));
+
+    const listener = jest.fn();
+    const off = authEventEmitter.on('deconnexion', listener);
+
+    await expect(api.get('/test')).rejects.toMatchObject({ code: 'SESSION_REVOQUEE', statusCode: 401 });
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith({ motif: 'session_revoquee', message: MESSAGE_SESSION_REVOQUEE });
+    off();
+  });
+
+  it('le drapeau ne fuit pas : un refus ordinaire ensuite reste SESSION_EXPIREE sans message', async () => {
+    api.setRefreshToken('r1');
+    mockFetch
+      .mockResolvedValueOnce(reponseErreur(401, {}))
+      .mockResolvedValueOnce(reponseErreur(401, { code: 'SESSION_REVOQUEE' }));
+    await expect(api.get('/a')).rejects.toMatchObject({ code: 'SESSION_REVOQUEE' });
+
+    api.setRefreshToken('r2');
+    mockFetch
+      .mockResolvedValueOnce(reponseErreur(401, {}))
+      .mockResolvedValueOnce(reponseErreur(401, { code: 'NON_AUTORISE' }));
+    const listener = jest.fn();
+    const off = authEventEmitter.on('deconnexion', listener);
+    await expect(api.get('/b')).rejects.toMatchObject({ code: 'SESSION_EXPIREE' });
+    expect(listener).toHaveBeenCalledWith();      // aucun message
+    off();
+  });
+});
+
 describe('déballage data.data ?? data', () => {
   it('renvoie data.data quand le payload est enveloppé', async () => {
     mockFetch.mockResolvedValueOnce(reponseOk({ data: { id: '1', nom: 'Test' }, meta: {} }));
@@ -174,5 +210,36 @@ describe('déballage data.data ?? data', () => {
     const result = await api.get('/test');
 
     expect(result).toEqual({ id: '1', nom: 'Direct' });
+  });
+});
+
+describe('403 MDP_CHANGEMENT_REQUIS (mot de passe provisoire)', () => {
+  it('émet mdp_a_changer et propage l\'erreur, sans retry ni déconnexion', async () => {
+    const surMdp = jest.fn();
+    const surDeconnexion = jest.fn();
+    const off1 = authEventEmitter.on('mdp_a_changer', surMdp);
+    const off2 = authEventEmitter.on('deconnexion', surDeconnexion);
+    mockFetch.mockResolvedValueOnce(
+      reponseErreur(403, { erreur: 'Vous devez changer votre mot de passe provisoire', code: 'MDP_CHANGEMENT_REQUIS' })
+    );
+
+    await expect(api.get('/enseignants/moi/classes')).rejects.toMatchObject({
+      statusCode: 403, code: 'MDP_CHANGEMENT_REQUIS',
+    });
+
+    expect(surMdp).toHaveBeenCalledTimes(1);
+    expect(surDeconnexion).not.toHaveBeenCalled();
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    off1(); off2();
+  });
+
+  it('un autre 403 n\'émet pas l\'événement', async () => {
+    const surMdp = jest.fn();
+    const off = authEventEmitter.on('mdp_a_changer', surMdp);
+    mockFetch.mockResolvedValueOnce(reponseErreur(403, { erreur: 'Permission insuffisante', code: 'INTERDIT' }));
+
+    await expect(api.get('/x')).rejects.toMatchObject({ statusCode: 403 });
+    expect(surMdp).not.toHaveBeenCalled();
+    off();
   });
 });

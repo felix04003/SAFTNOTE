@@ -17,26 +17,29 @@ const { ok }            = require('../../../utils/reponse');
 const logger            = require('../../../utils/logger');
 const { getOrSet } = require('../../../infrastructure/cache/redis');
 
-const router = express.Router();
-const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS) || 12;
+const {
+  normaliserTelephone, variantesTelephone, ressembleATelephone,
+} = require('../../../utils/telephone');
+const { schemaMotDePasse, exigerMotDePasseConforme } = require('../../../utils/mot-de-passe');
 
+const router = express.Router();
 /**
- * Valide un mot de passe selon la politique de sécurité de l'établissement.
- * @param {string} mdp - Le mot de passe à valider
- * @param {object} politique - Objet avec mdp_longueur_min, mdp_necessite_majuscule, mdp_necessite_chiffre
- * @returns {string|null} Message d'erreur ou null si valide
+ * Filtre knex « identifiant » = email, ou téléphone. Un numéro est comparé sous
+ * toutes ses formes connues (E.164, sans « + », national, tel que saisi) pour
+ * retrouver aussi les comptes créés avant la normalisation.
  */
-function validerMotDePasse(mdp, politique) {
-  const min = politique?.mdp_longueur_min || 8;
-  if (mdp.length < min) return `Le mot de passe doit contenir au moins ${min} caractères`;
-  if (politique?.mdp_necessite_majuscule && !/[A-Z]/.test(mdp)) {
-    return 'Le mot de passe doit contenir au moins une lettre majuscule';
-  }
-  if (politique?.mdp_necessite_chiffre && !/[0-9]/.test(mdp)) {
-    return 'Le mot de passe doit contenir au moins un chiffre';
-  }
-  return null;
+function filtreIdentifiant(identifiant, pays) {
+  return function () {
+    this.where('email', identifiant);
+    if (ressembleATelephone(identifiant)) {
+      this.orWhere(function () { this.whereIn('telephone', variantesTelephone(identifiant, pays)); });
+    } else {
+      this.orWhere('telephone', identifiant);
+    }
+  };
 }
+
+const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS) || 12;
 
 /**
  * Envoie un code OTP par SMS, ou le logue en développement/test si Africa's
@@ -112,7 +115,7 @@ const schemaReinitialiserMotDePasse = z.object({
   identifiant:        z.string().min(3),
   etablissement_code: z.string().min(2),
   code:               z.string().length(6).regex(/^\d{6}$/),
-  nouveau_mot_de_passe: z.string().min(8, 'Minimum 8 caractères'),
+  nouveau_mot_de_passe: schemaMotDePasse,
 });
 
 const schemaConnexion = z.object({
@@ -122,13 +125,22 @@ const schemaConnexion = z.object({
 });
 
 const schemaOtpDemander = z.object({
-  telephone:          z.string().regex(/^\+?[0-9]{8,15}$/, 'Numéro invalide'),
-  etablissement_code: z.string().min(2),
+  telephone:          z.string().min(6, 'Numéro invalide').max(25, 'Numéro invalide'),
+  etablissement_code: z.string().min(2).optional(),   // absent : parent multi-écoles (3.4)
 });
 
 const schemaOtpValider = z.object({
-  telephone:          z.string().regex(/^\+?[0-9]{8,15}$/),
+  telephone:          z.string().min(6).max(25),
   code:               z.string().length(6).regex(/^\d{6}$/),
+  etablissement_code: z.string().min(2).optional(),   // absent : parent multi-écoles (3.4)
+});
+
+const schemaOtpChoisir = z.object({
+  ticket:             z.string().min(10),
+  etablissement_code: z.string().min(2),
+});
+
+const schemaChangerEtablissement = z.object({
   etablissement_code: z.string().min(2),
 });
 
@@ -143,19 +155,22 @@ router.post('/auth/connexion', limiterAuth, valider(schemaConnexion), async (req
   const ip = req.ip;
 
   try {
-    // 1. Vérifier blocage force brute
-    const bloque = await db.raw(
-      'SELECT est_compte_bloque(?, ?) AS bloque',
-      [identifiant, ip]
-    );
-    if (bloque.rows[0]?.bloque) {
-      throw ApiError.compteBloque('Trop de tentatives — réessayez dans 15 minutes');
-    }
-
-    // 2. Trouver l'établissement
+    // 1. Trouver l'établissement (avant le contrôle de blocage : la politique
+    //    de blocage est celle de CET établissement)
     const etablissement = await db('etablissements')
       .where({ code_officiel: etablissement_code, actif: true })
-      .first('id', 'nom');
+      .first('id', 'nom', 'pays');
+
+    // 2. Vérifier blocage force brute — politique de l'établissement, ou
+    //    valeurs par défaut strictes si le code est inconnu (un code inconnu
+    //    ne doit pas permettre de tester des mots de passe sans limite)
+    const bloque = await db.raw(
+      'SELECT est_compte_bloque(?, ?, ?) AS bloque',
+      [identifiant, ip, etablissement ? etablissement.id : null]
+    );
+    if (bloque.rows[0]?.bloque) {
+      throw ApiError.compteBloque('Trop de tentatives — réessayez dans quelques minutes');
+    }
 
     if (!etablissement) {
       try {
@@ -170,10 +185,8 @@ router.post('/auth/connexion', limiterAuth, valider(schemaConnexion), async (req
     // 3. Trouver l'utilisateur
     const utilisateur = await db('utilisateurs')
       .where({ etablissement_id: etablissement.id, actif: true })
-      .andWhere(function () {
-        this.where('email', identifiant).orWhere('telephone', identifiant);
-      })
-      .first('id', 'nom', 'prenom', 'mot_de_passe_hash', 'email');
+      .andWhere(filtreIdentifiant(identifiant, etablissement.pays))
+      .first('id', 'nom', 'prenom', 'mot_de_passe_hash', 'email', 'mdp_a_changer');
 
     if (!utilisateur || !utilisateur.mot_de_passe_hash) {
       try {
@@ -225,6 +238,7 @@ router.post('/auth/connexion', limiterAuth, valider(schemaConnexion), async (req
         prenom:          utilisateur.prenom,
         email:           utilisateur.email,
         role:            roleRow?.code || 'utilisateur',
+        doit_changer_mdp: !!utilisateur.mdp_a_changer,
         etablissement_id: etablissement.id,
         etablissement_nom: etablissement.nom,
       },
@@ -235,22 +249,212 @@ router.post('/auth/connexion', limiterAuth, valider(schemaConnexion), async (req
   }
 });
 
+// ── Parents multi-écoles (3.4) ───────────────────────────────────
+// Sans code établissement, le numéro est lu comme sénégalais s'il n'a pas
+// d'indicatif (un numéro en +XXX est interprété correctement partout).
+const PAYS_PAR_DEFAUT = 'SN';
+const MAX_CODES_PAR_HEURE = 5;            // par numéro, en plus du limiteur par IP
+const VALIDITE_TICKET = '5m';
+
+/** Comptes PARENT actifs porteurs de ce numéro, une ligne par établissement. */
+function comptesParentsParTelephone(db, brut) {
+  return db('utilisateurs as u')
+    .join('utilisateur_roles as ur', 'ur.utilisateur_id', 'u.id')
+    .join('roles as r', 'r.id', 'ur.role_id')
+    .join('etablissements as e', 'e.id', 'u.etablissement_id')
+    .whereIn('u.telephone', variantesTelephone(brut, PAYS_PAR_DEFAUT))
+    .where({ 'u.actif': true, 'ur.actif': true, 'r.code': 'parent', 'e.actif': true })
+    .whereRaw('ur.etablissement_id = u.etablissement_id')
+    .select('u.id', 'u.etablissement_id', 'e.nom as etablissement_nom', 'e.code_officiel')
+    .orderBy('e.nom');
+}
+
+/** Ouvre la session d'un compte parent dans son école (appartenance déjà vérifiée par l'appelant). */
+async function ouvrirSessionParent(db, compte, req) {
+  const utilisateur = await db('utilisateurs').where({ id: compte.id, actif: true })
+    .first('id', 'nom', 'prenom', 'telephone', 'mdp_a_changer');
+  const { token, refreshToken } = await creerSession(db, utilisateur.id, compte.etablissement_id, req);
+  return {
+    token,
+    refresh_token: refreshToken,
+    utilisateur: {
+      id: utilisateur.id, nom: utilisateur.nom, prenom: utilisateur.prenom, telephone: utilisateur.telephone,
+      role: 'parent', doit_changer_mdp: !!utilisateur.mdp_a_changer,
+      etablissement_id: compte.etablissement_id, etablissement_nom: compte.etablissement_nom,
+    },
+  };
+}
+
+async function demanderOtpSansEcole(req, res, next) {
+  const db = getDB();
+  try {
+    const telephone = normaliserTelephone(req.body.telephone, PAYS_PAR_DEFAUT);
+    if (!telephone) throw ApiError.validationEchouee('Numéro invalide — format attendu : +221 77 123 45 67');
+
+    const comptes = await comptesParentsParTelephone(db, req.body.telephone);
+    const [{ n }] = await db('otp_verifications')
+      .where({ telephone, objectif: 'connexion' })
+      .where('created_at', '>', db.raw("NOW() - INTERVAL '1 hour'"))
+      .count('id as n');
+
+    // Réponse identique que le numéro existe ou non, ou que la limite soit atteinte (anti-énumération)
+    if (comptes.length === 0 || Number(n) >= MAX_CODES_PAR_HEURE * Math.max(comptes.length, 1)) {
+      await new Promise(r => setTimeout(r, 800));
+      return ok(res, { message: 'Si ce numéro est connu, vous allez recevoir un code' });
+    }
+
+    // Un seul SMS, un code valable pour chacun des comptes du numéro
+    const code = String(crypto.randomInt(100000, 1000000));
+    const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+    await db('otp_verifications')
+      .whereIn('utilisateur_id', comptes.map(c => c.id)).where({ telephone, utilise: false })
+      .update({ utilise: true });
+    await db('otp_verifications').insert(comptes.map(c => ({
+      id: uuid(), telephone, code_hash: codeHash, objectif: 'connexion', utilisateur_id: c.id,
+      expire_at: db.raw("NOW() + INTERVAL '10 minutes'"),
+    })));
+
+    try {
+      await envoyerOuLoggerOTP(telephone, code, comptes.length === 1 ? comptes[0].etablissement_nom : 'EcoleManager');
+    } catch (smsErr) {
+      if (smsErr.isApiError) throw smsErr;
+      logger.error('Échec envoi SMS OTP', { telephone, error: smsErr.message });
+      throw ApiError.erreurServeur('Échec de l\'envoi du SMS — réessayez dans quelques instants.');
+    }
+    logger.info('OTP envoyé (sans code établissement)', { telephone, comptes: comptes.length });
+    return ok(res, { message: 'Code envoyé par SMS. Valable 10 minutes.' });
+  } catch (err) { next(err); }
+}
+
+async function validerOtpSansEcole(req, res, next) {
+  const db = getDB();
+  try {
+    const refus = () => ApiError.otpInvalide('Code invalide, expiré ou trop de tentatives');
+    const telephone = normaliserTelephone(req.body.telephone, PAYS_PAR_DEFAUT);
+    if (!telephone) throw refus();
+    const comptes = await comptesParentsParTelephone(db, req.body.telephone);
+    if (comptes.length === 0) throw refus();
+    const ids = comptes.map(c => c.id);
+
+    await db('otp_verifications')
+      .where({ telephone, utilise: false }).whereIn('utilisateur_id', ids)
+      .where('expire_at', '>', db.raw('NOW()')).where('nb_tentatives', '<', 3)
+      .increment('nb_tentatives', 1);
+
+    const codeHash = crypto.createHash('sha256').update(req.body.code).digest('hex');
+    const valides = await db('otp_verifications')
+      .where({ telephone, code_hash: codeHash, utilise: false }).whereIn('utilisateur_id', ids)
+      .where('expire_at', '>', db.raw('NOW()')).where('nb_tentatives', '<=', 3)
+      .select('id', 'utilisateur_id');
+    if (valides.length === 0) throw refus();
+
+    // Le numéro est vérifié : tous les codes de ce numéro sont consommés
+    await db('otp_verifications').whereIn('id', valides.map(v => v.id)).update({ utilise: true });
+    const comptesVerifies = comptes.filter(c => valides.some(v => v.utilisateur_id === c.id));
+
+    if (comptesVerifies.length === 1) {
+      return ok(res, await ouvrirSessionParent(db, comptesVerifies[0], req));
+    }
+
+    // Plusieurs écoles : le client choisit, avec un ticket qui atteste la vérification (5 min, un usage visé)
+    const ticket = jwt.sign(
+      { objet: 'choix_etablissement', comptes: comptesVerifies.map(c => c.id) },
+      process.env.JWT_SECRET, { expiresIn: VALIDITE_TICKET }
+    );
+    return ok(res, {
+      choix_requis: true,
+      ticket,
+      etablissements: comptesVerifies.map(c => ({ code: c.code_officiel, nom: c.etablissement_nom })),
+    });
+  } catch (err) { next(err); }
+}
+
+// ── POST /auth/otp/choisir — Choisir l'école après vérification du numéro ──
+router.post('/auth/otp/choisir', limiterAuth, valider(schemaOtpChoisir), async (req, res, next) => {
+  const db = getDB();
+  try {
+    let charge;
+    try { charge = jwt.verify(req.body.ticket, process.env.JWT_SECRET); }
+    catch { throw ApiError.nonAutorise('Ticket invalide ou expiré — redemandez un code'); }
+    if (charge.objet !== 'choix_etablissement' || !Array.isArray(charge.comptes)) {
+      throw ApiError.nonAutorise('Ticket invalide ou expiré — redemandez un code');
+    }
+
+    const choisi = await db('utilisateurs as u')
+      .join('etablissements as e', 'e.id', 'u.etablissement_id')
+      .whereIn('u.id', charge.comptes)
+      .where({ 'e.code_officiel': req.body.etablissement_code, 'u.actif': true, 'e.actif': true })
+      .first('u.id', 'u.etablissement_id', 'e.nom as etablissement_nom');
+    if (!choisi) throw ApiError.nonAutorise('Établissement non autorisé pour ce numéro');
+
+    return ok(res, await ouvrirSessionParent(db, choisi, req));
+  } catch (err) { next(err); }
+});
+
+// ── GET /auth/mes-etablissements — Écoles où ce parent a un compte (sélecteur) ──
+router.get('/auth/mes-etablissements', authentifier, async (req, res, next) => {
+  const db = getDB();
+  try {
+    const courant = await db('utilisateurs').where({ id: req.session.utilisateur_id, actif: true })
+      .first('telephone', 'mot_de_passe_hash');
+    if (!courant) throw ApiError.nonAutorise();
+    // Même règle que changer-etablissement : comptes sans mot de passe seulement
+    if (courant.mot_de_passe_hash) return ok(res, []);
+
+    const comptes = await comptesParentsParTelephone(db, courant.telephone);
+    if (!comptes.some(c => c.id === req.session.utilisateur_id)) return ok(res, []);
+    return ok(res, comptes.map(c => ({
+      code: c.code_officiel, nom: c.etablissement_nom, courant: c.id === req.session.utilisateur_id,
+    })));
+  } catch (err) { next(err); }
+});
+
+// ── POST /auth/changer-etablissement — Parent : passer dans une autre de ses écoles ──
+router.post('/auth/changer-etablissement', authentifier, valider(schemaChangerEtablissement), async (req, res, next) => {
+  const db = getDB();
+  try {
+    const courant = await db('utilisateurs').where({ id: req.session.utilisateur_id, actif: true })
+      .first('telephone', 'mot_de_passe_hash');
+    if (!courant) throw ApiError.nonAutorise();
+
+    // Réservé aux comptes sans mot de passe (parents, OTP) : un compte à mot
+    // de passe se reconnecte avec son mot de passe, jamais par simple bascule.
+    if (courant.mot_de_passe_hash) throw ApiError.interdit('Changement d\'établissement réservé aux parents');
+
+    const comptes = await comptesParentsParTelephone(db, courant.telephone);
+    const cible = comptes.find(c => c.code_officiel === req.body.etablissement_code);
+    // Le compte courant doit lui-même être un compte parent de la liste
+    if (!cible || !comptes.some(c => c.id === req.session.utilisateur_id)) {
+      throw ApiError.interdit('Aucun compte parent avec ce numéro dans cet établissement');
+    }
+    return ok(res, await ouvrirSessionParent(db, cible, req));
+  } catch (err) { next(err); }
+});
+
 // ── POST /auth/otp/demander — Demander un OTP SMS (parents) ─────
 router.post('/auth/otp/demander', limiterAuth, valider(schemaOtpDemander), async (req, res, next) => {
-  const { telephone, etablissement_code } = req.body;
+  if (!req.body.etablissement_code) return demanderOtpSansEcole(req, res, next);
+  const { etablissement_code } = req.body;
   const db = getDB();
 
   try {
     // Trouver l'établissement
     const etablissement = await db('etablissements')
       .where({ code_officiel: etablissement_code, actif: true })
-      .first('id', 'nom');
+      .first('id', 'nom', 'pays');
 
     if (!etablissement) throw ApiError.nonAutorise('Établissement inconnu');
 
-    // Vérifier que l'utilisateur existe (parent)
+    // Numéro normalisé (E.164) : c'est celui qui reçoit le SMS et qui sert
+    // de clé à l'OTP, quelle que soit la façon dont il a été saisi.
+    const telephone = normaliserTelephone(req.body.telephone, etablissement.pays);
+    if (!telephone) throw ApiError.validationEchouee('Numéro invalide — format attendu : +221 77 123 45 67');
+
+    // Vérifier que l'utilisateur existe (parent), y compris sous une forme
+    // historique non normalisée
     const utilisateur = await db('utilisateurs')
-      .where({ telephone, etablissement_id: etablissement.id, actif: true })
+      .whereIn('telephone', variantesTelephone(req.body.telephone, etablissement.pays))
+      .where({ etablissement_id: etablissement.id, actif: true })
       .first('id');
 
     // On ne révèle pas si le compte existe (anti-enumération)
@@ -264,9 +468,11 @@ router.post('/auth/otp/demander', limiterAuth, valider(schemaOtpDemander), async
     const code = String(crypto.randomInt(100000, 1000000));
     const codeHash = crypto.createHash('sha256').update(code).digest('hex');
 
-    // Invalider les anciens OTP du même numéro
+    // Invalider les anciens OTP de CE COMPTE (et non de tout le numéro : le même
+    // numéro peut avoir un compte dans plusieurs établissements, et demander un
+    // code pour l'école B ne doit pas annuler celui de l'école A)
     await db('otp_verifications')
-      .where({ telephone, utilise: false })
+      .where({ telephone, utilisateur_id: utilisateur.id, utilise: false })
       .update({ utilise: true });
 
     // Insérer le nouveau OTP
@@ -305,7 +511,8 @@ router.post('/auth/otp/demander', limiterAuth, valider(schemaOtpDemander), async
 
 // ── POST /auth/otp/valider — Valider un OTP et créer session ────
 router.post('/auth/otp/valider', limiterAuth, valider(schemaOtpValider), async (req, res, next) => {
-  const { telephone, code, etablissement_code } = req.body;
+  if (!req.body.etablissement_code) return validerOtpSansEcole(req, res, next);
+  const { code, etablissement_code } = req.body;
   const db = getDB();
 
   try {
@@ -313,13 +520,26 @@ router.post('/auth/otp/valider', limiterAuth, valider(schemaOtpValider), async (
 
     const etablissement = await db('etablissements')
       .where({ code_officiel: etablissement_code, actif: true })
-      .first('id', 'nom');
+      .first('id', 'nom', 'pays');
 
     if (!etablissement) throw ApiError.otpInvalide();
 
+    const telephone = normaliserTelephone(req.body.telephone, etablissement.pays);
+    if (!telephone) throw ApiError.otpInvalide('Code invalide, expiré ou trop de tentatives');
+
+    // Le compte de CET établissement porteur de ce numéro : les codes, leurs
+    // tentatives et leur validation sont propres à ce compte (le même numéro
+    // peut exister dans plusieurs établissements). Même réponse que pour un
+    // code faux : ne pas révéler si le numéro existe ici.
+    const compte = await db('utilisateurs')
+      .whereIn('telephone', variantesTelephone(req.body.telephone, etablissement.pays))
+      .where({ etablissement_id: etablissement.id, actif: true })
+      .first('id');
+    if (!compte) throw ApiError.otpInvalide('Code invalide, expiré ou trop de tentatives');
+
     // Incrémenter les tentatives d'abord
     await db('otp_verifications')
-      .where({ telephone, utilise: false })
+      .where({ telephone, utilisateur_id: compte.id, utilise: false })
       .where('expire_at', '>', db.raw('NOW()'))
       .increment('nb_tentatives', 1);
 
@@ -327,6 +547,7 @@ router.post('/auth/otp/valider', limiterAuth, valider(schemaOtpValider), async (
     const otp = await db('otp_verifications')
       .where({
         telephone,
+        utilisateur_id: compte.id,
         code_hash: codeHash,
         utilise:   false,
       })
@@ -341,7 +562,16 @@ router.post('/auth/otp/valider', limiterAuth, valider(schemaOtpValider), async (
 
     const utilisateur = await db('utilisateurs')
       .where({ id: otp.utilisateur_id, actif: true })
-      .first('id', 'nom', 'prenom', 'telephone');
+      .first('id', 'nom', 'prenom', 'telephone', 'mdp_a_changer', 'etablissement_id');
+
+    // Le compte doit appartenir à l'établissement dont le code est fourni.
+    // Sans ce contrôle, un code demandé pour l'école A pouvait être validé
+    // avec le code de l'école B et ouvrait une session B pour un utilisateur
+    // de A (JWT eid = B, aucun rôle). Même réponse que pour un code faux :
+    // ne pas révéler dans quel établissement le numéro existe.
+    if (!utilisateur || utilisateur.etablissement_id !== etablissement.id) {
+      throw ApiError.otpInvalide('Code invalide, expiré ou trop de tentatives');
+    }
 
     // Récupérer le rôle pour ce couple utilisateur/établissement
     const roleRow = await db('utilisateur_roles as ur')
@@ -360,6 +590,7 @@ router.post('/auth/otp/valider', limiterAuth, valider(schemaOtpValider), async (
         prenom:           utilisateur.prenom,
         telephone:        utilisateur.telephone,
         role:             roleRow ? roleRow.role : 'parent',
+        doit_changer_mdp: !!utilisateur.mdp_a_changer,
         etablissement_id: etablissement.id,
         etablissement_nom: etablissement.nom,
       },
@@ -384,6 +615,7 @@ async function fetchProfil(db, utilisateurId, etablissementId, session) {
     ...utilisateur,
     role:              session.role,
     roles:             session.roles,
+    doit_changer_mdp:  !!session.mdp_a_changer,
     etablissement_id:  etablissement.id,
     etablissement_nom: etablissement.nom,
   };
@@ -402,6 +634,83 @@ router.get('/auth/profil', authentifier, async (req, res, next) => {
     }
 
     return ok(res, profil);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── POST /auth/changer-mot-de-passe — Changer son mot de passe ───
+// Sert à la fois au changement volontaire et au changement OBLIGATOIRE d'un
+// mot de passe provisoire (utilisateurs.mdp_a_changer) : c'est la seule route
+// protégée accessible tant que le drapeau est levé (voir auth.middleware).
+const schemaChangerMotDePasse = z.object({
+  mot_de_passe_actuel:  z.string().min(1, 'Mot de passe actuel requis'),
+  nouveau_mot_de_passe: schemaMotDePasse,
+});
+
+router.post('/auth/changer-mot-de-passe', limiterAuth, authentifier, valider(schemaChangerMotDePasse), async (req, res, next) => {
+  const { mot_de_passe_actuel, nouveau_mot_de_passe } = req.body;
+  const db = getDB();
+
+  try {
+    const utilisateur = await db('utilisateurs')
+      .where({ id: req.session.utilisateur_id, actif: true })
+      .first('id', 'nom', 'prenom', 'email', 'telephone', 'mot_de_passe_hash');
+
+    // Parents/élèves : pas de mot de passe (connexion par code SMS)
+    if (!utilisateur || !utilisateur.mot_de_passe_hash) {
+      throw ApiError.interdit('Ce compte n\'utilise pas de mot de passe (connexion par code SMS)');
+    }
+
+    const actuelValide = await bcrypt.compare(mot_de_passe_actuel, utilisateur.mot_de_passe_hash);
+    if (!actuelValide) throw ApiError.nonAutorise('Mot de passe actuel incorrect');
+
+    if (nouveau_mot_de_passe === mot_de_passe_actuel) {
+      throw ApiError.validationEchouee('Le nouveau mot de passe doit être différent de l\'actuel');
+    }
+
+    const politique = await db('politique_securite')
+      .where({ etablissement_id: req.session.etablissement_id })
+      .first('mdp_longueur_min');
+    exigerMotDePasseConforme(nouveau_mot_de_passe, politique, utilisateur);
+
+    const hash = await bcrypt.hash(nouveau_mot_de_passe, 12);
+
+    // Sessions à fermer : toutes SAUF celle en cours (l'utilisateur reste connecté)
+    const autres = await db('sessions')
+      .where({ utilisateur_id: utilisateur.id, revoquee: false })
+      .where('id', '!=', req.session.id)
+      .select('id', 'token_hash');
+
+    await db.transaction(async trx => {
+      await trx('utilisateurs')
+        .where({ id: utilisateur.id })
+        .update({ mot_de_passe_hash: hash, mdp_a_changer: false, updated_at: trx.raw('NOW()') });
+
+      if (autres.length) {
+        await trx('sessions')
+          .whereIn('id', autres.map(a => a.id))
+          .update({ revoquee: true, motif_revocation: 'changement_mot_de_passe' });
+      }
+    });
+
+    // Purger les caches : sinon la session courante garderait le drapeau
+    // « mot de passe à changer » (et les autres sessions resteraient
+    // utilisables) jusqu'à 10 min.
+    try {
+      const { getRedis } = require('../../../infrastructure/cache/redis');
+      const redis = getRedis();
+      const courant = crypto.createHash('sha256').update(req.headers.authorization.slice(7)).digest('hex');
+      await redis.del(`sess:${courant}`);
+      await redis.del(`profil:${utilisateur.id}`);
+      for (const a of autres) await redis.del(`sess:${a.token_hash}`);
+    } catch { /* Redis down, pas critique */ }
+
+    logger.info('Mot de passe changé', { utilisateur_id: utilisateur.id, sessions_fermees: autres.length });
+    return ok(res, {
+      message: 'Mot de passe modifié.',
+      sessions_fermees: autres.length,
+    });
   } catch (err) {
     next(err);
   }
@@ -486,7 +795,7 @@ router.post('/auth/mot-de-passe-oublie', limiterAuth, valider(schemaMotDePasseOu
   try {
     const etablissement = await db('etablissements')
       .where({ code_officiel: etablissement_code, actif: true })
-      .first('id', 'nom');
+      .first('id', 'nom', 'pays');
 
     if (!etablissement) {
       await new Promise(r => setTimeout(r, 800));
@@ -495,9 +804,7 @@ router.post('/auth/mot-de-passe-oublie', limiterAuth, valider(schemaMotDePasseOu
 
     const utilisateur = await db('utilisateurs')
       .where({ etablissement_id: etablissement.id, actif: true })
-      .andWhere(function () {
-        this.where('email', identifiant).orWhere('telephone', identifiant);
-      })
+      .andWhere(filtreIdentifiant(identifiant, etablissement.pays))
       .first('id', 'telephone', 'email');
 
     if (!utilisateur) {
@@ -507,10 +814,12 @@ router.post('/auth/mot-de-passe-oublie', limiterAuth, valider(schemaMotDePasseOu
 
     const code = String(crypto.randomInt(100000, 1000000));
     const codeHash = crypto.createHash('sha256').update(code).digest('hex');
-    const telephone = utilisateur.telephone;
+    // Clé OTP et destinataire SMS : forme normalisée (repli sur la valeur
+    // stockée si elle est inexploitable), identique à l'étape de validation
+    const telephone = normaliserTelephone(utilisateur.telephone, etablissement.pays) || utilisateur.telephone;
 
     await db('otp_verifications')
-      .where({ telephone, objectif: 'reset_mdp', utilise: false })
+      .where({ telephone, utilisateur_id: utilisateur.id, objectif: 'reset_mdp', utilise: false })
       .update({ utilise: true });
 
     await db('otp_verifications').insert({
@@ -554,29 +863,34 @@ router.post('/auth/reinitialiser-mot-de-passe', limiterAuth, valider(schemaReini
   try {
     const etablissement = await db('etablissements')
       .where({ code_officiel: etablissement_code, actif: true })
-      .first('id');
+      .first('id', 'pays');
 
     if (!etablissement) throw ApiError.nonAutorise('Établissement inconnu');
 
-    const utilisateur = await db('utilisateurs')
+    const utilisateurBrut = await db('utilisateurs')
       .where({ etablissement_id: etablissement.id, actif: true })
-      .andWhere(function () {
-        this.where('email', identifiant).orWhere('telephone', identifiant);
-      })
-      .first('id', 'telephone');
+      .andWhere(filtreIdentifiant(identifiant, etablissement.pays))
+      .first('id', 'telephone', 'email', 'nom', 'prenom');
 
-    if (!utilisateur) throw ApiError.otpInvalide('Code invalide ou expiré');
+    if (!utilisateurBrut) throw ApiError.otpInvalide('Code invalide ou expiré');
+
+    // Même clé OTP qu'à la demande (forme normalisée)
+    const utilisateur = {
+      ...utilisateurBrut,
+      telephone: normaliserTelephone(utilisateurBrut.telephone, etablissement.pays) || utilisateurBrut.telephone,
+    };
 
     const codeHash = crypto.createHash('sha256').update(code).digest('hex');
 
     await db('otp_verifications')
-      .where({ telephone: utilisateur.telephone, objectif: 'reset_mdp', utilise: false })
+      .where({ telephone: utilisateur.telephone, utilisateur_id: utilisateur.id, objectif: 'reset_mdp', utilise: false })
       .where('expire_at', '>', db.raw('NOW()'))
       .increment('nb_tentatives', 1);
 
     const otp = await db('otp_verifications')
       .where({
         telephone:       utilisateur.telephone,
+        utilisateur_id:  utilisateur.id,
         code_hash:       codeHash,
         objectif:        'reset_mdp',
         utilise:         false,
@@ -587,22 +901,20 @@ router.post('/auth/reinitialiser-mot-de-passe', limiterAuth, valider(schemaReini
 
     if (!otp) throw ApiError.otpInvalide('Code invalide, expiré ou trop de tentatives');
 
-    // Vérifier la politique de mot de passe
-    try {
-      const politique = await db('politique_securite').first('mdp_longueur_min', 'mdp_necessite_majuscule', 'mdp_necessite_chiffre');
-      const errMdp = validerMotDePasse(nouveau_mot_de_passe, politique);
-      if (errMdp) throw ApiError.validation(errMdp);
-    } catch (e) {
-      if (e.isApiError) throw e;
-      // Si la table n'existe pas encore, continuer sans validation
-    }
+    // Politique de l'établissement (ne peut que durcir le socle commun, déjà
+    // vérifié par le schéma) + interdiction de reprendre l'identité du compte.
+    // Aucune exception avalée : une erreur ici doit refuser la requête.
+    const politique = await db('politique_securite')
+      .where({ etablissement_id: etablissement.id })
+      .first('mdp_longueur_min');
+    exigerMotDePasseConforme(nouveau_mot_de_passe, politique, utilisateur);
 
     const hash = await bcrypt.hash(nouveau_mot_de_passe, 12);
 
     await db.transaction(async trx => {
       await trx('utilisateurs')
         .where({ id: utilisateur.id })
-        .update({ mot_de_passe_hash: hash, updated_at: trx.raw('NOW()') });
+        .update({ mot_de_passe_hash: hash, mdp_a_changer: false, updated_at: trx.raw('NOW()') });
 
       await trx('otp_verifications').where({ id: otp.id }).update({ utilise: true });
 
@@ -626,7 +938,9 @@ router.post('/auth/reinitialiser-mot-de-passe', limiterAuth, valider(schemaReini
 async function creerSession(db, utilisateurId, etablissementId, req) {
   // Vérifier et appliquer la limite de sessions simultanées
   try {
-    const politique = await db('politique_securite').first('session_max_simultanees');
+    const politique = await db('politique_securite')
+      .where({ etablissement_id: etablissementId })
+      .first('session_max_simultanees');
     const max = politique?.session_max_simultanees || 3;
     const sessionsActives = await db('sessions')
       .where({ utilisateur_id: utilisateurId, revoquee: false })
@@ -696,7 +1010,17 @@ router.post('/auth/refresh', limiterRefresh, valider(schemaRefresh), async (req,
       .where('refresh_expire_at', '>', db.raw('NOW()'))
       .first('id', 'utilisateur_id', 'etablissement_id', 'token_hash');
 
-    if (!session) return next(ApiError.nonAutorise('Refresh token invalide ou expiré'));
+    if (!session) {
+      // Session fermée parce que l'utilisateur a ouvert trop d'appareils :
+      // un code distinct permet au client d'expliquer la déconnexion.
+      const fermee = await db('sessions')
+        .where({ refresh_token_hash: refreshHash, revoquee: true, motif_revocation: 'session_max_atteint' })
+        .first('id');
+      if (fermee) {
+        return next(new ApiError(401, 'Vous avez été déconnecté : trop d\'appareils connectés avec ce compte', 'SESSION_REVOQUEE'));
+      }
+      return next(ApiError.nonAutorise('Refresh token invalide ou expiré'));
+    }
 
     // Le sid du JWT reste l'id de session existant — ne JAMAIS le changer :
     // il est référencé par DELETE /auth/sessions/:id et par req.session.id

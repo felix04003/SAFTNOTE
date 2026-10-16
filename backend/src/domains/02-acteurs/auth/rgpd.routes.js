@@ -16,6 +16,7 @@ const { ok } = require('../../../utils/reponse');
 const logger = require('../../../utils/logger');
 const { z } = require('zod');
 const { valider } = require('../../../middleware/validate.middleware');
+const { estDernierDirecteurActif, erreurDernierDirecteur } = require('../../../utils/dernier-directeur');
 
 const router = express.Router();
 
@@ -92,6 +93,11 @@ router.delete('/utilisateurs/moi', authentifier, async (req, res, next) => {
   const utilisateurId = req.session.utilisateur_id;
 
   try {
+    // Fermer le compte du seul directeur laisserait l'établissement sans direction (et sans moyen d'en nommer une)
+    if (await estDernierDirecteurActif(db, utilisateurId, req.session.etablissement_id)) {
+      throw erreurDernierDirecteur('Vous êtes le seul directeur de cet établissement : votre compte ne peut pas être supprimé tant qu\'un autre directeur n\'est pas nommé.');
+    }
+
     await db.transaction(async trx => {
       // 1. Anonymiser le compte utilisateur (RGPD : pseudonymisation)
       const pseudonyme = `ANONYME_${Date.now()}`;

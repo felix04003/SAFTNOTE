@@ -84,6 +84,19 @@ describe('Api.post', () => {
   });
 });
 
+describe('Api.del', () => {
+  beforeEach(() => { vi.mocked(fetch).mockClear(); });
+
+  it('204 sans corps : succès, pas d\'erreur de lecture JSON', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      status: 204, ok: true, json: () => Promise.reject(new SyntaxError('Unexpected end of JSON input')),
+    } as unknown as Response);
+    const res = await Api.del('/evenements/1');
+    expect(res).toMatchObject({ success: true, data: null });
+    expect(fetch).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ method: 'DELETE' }));
+  });
+});
+
 describe('Api.put', () => {
   beforeEach(() => { vi.mocked(fetch).mockClear(); });
 
@@ -152,5 +165,64 @@ describe('Api.del', () => {
       expect.any(String),
       expect.objectContaining({ method: 'DELETE' }),
     );
+  });
+});
+
+describe('Api.request — erreurs du serveur', () => {
+  it('affiche le message français renvoyé dans `erreur`', async () => {
+    mockFetch(422, false, { succes: false, erreur: 'Ce numéro de téléphone est déjà utilisé', code: 'VALIDATION_ECHOUEE' });
+    await expect(Api.get('/x')).rejects.toMatchObject({ message: 'Ce numéro de téléphone est déjà utilisé', code: 'VALIDATION_ECHOUEE' });
+  });
+
+  it('403 MDP_CHANGEMENT_REQUIS : redirige vers la page de changement', async () => {
+    (window as any).location.pathname = '/index.html';
+    mockFetch(403, false, { succes: false, erreur: 'Vous devez changer votre mot de passe provisoire', code: 'MDP_CHANGEMENT_REQUIS' });
+    await expect(Api.get('/eleves')).rejects.toMatchObject({ code: 'MDP_CHANGEMENT_REQUIS' });
+    expect(window.location.href).toBe('changer-mot-de-passe.html');
+  });
+
+  it('403 MDP_CHANGEMENT_REQUIS sur la page de changement elle-même : pas de boucle de redirection', async () => {
+    (window as any).location.pathname = '/changer-mot-de-passe.html';
+    mockFetch(403, false, { succes: false, erreur: 'x', code: 'MDP_CHANGEMENT_REQUIS' });
+    await expect(Api.get('/eleves')).rejects.toBeInstanceOf(ApiError);
+    expect(window.location.href).toBe('');
+  });
+});
+
+describe('Api.request — session perdue (401 sans refresh possible)', () => {
+  beforeEach(() => {
+    (window as any).location.pathname = '/parent.html';
+    (window as any).location.href = '';
+  });
+
+  it('purge le jeton, le refresh_token et le profil avant de rediriger (pas de boucle login ↔ page)', async () => {
+    sessionStorage.setItem(CONFIG.TOKEN_KEY, 'jeton-perime');
+    localStorage.setItem(CONFIG.USER_KEY, JSON.stringify({ role: 'enseignant' }));
+    mockFetch(401, false, { erreur: 'Token expiré' });
+
+    await expect(Api.get('/eleves')).rejects.toMatchObject({ status: 401 });
+
+    expect(sessionStorage.getItem(CONFIG.TOKEN_KEY)).toBeNull();
+    expect(localStorage.getItem(CONFIG.USER_KEY)).toBeNull();
+    expect(window.location.href).toBe('login.html');
+  });
+
+  it('un parent est renvoyé vers sa propre page de connexion (SMS)', async () => {
+    sessionStorage.setItem(CONFIG.TOKEN_KEY, 'jeton-perime');
+    localStorage.setItem(CONFIG.USER_KEY, JSON.stringify({ role: 'parent' }));
+    mockFetch(401, false, { erreur: 'Token expiré' });
+
+    await expect(Api.get('/parents/moi/enfants')).rejects.toBeInstanceOf(ApiError);
+
+    expect(window.location.href).toBe('parent-login.html');
+  });
+
+  it('sur une page de connexion : purge mais pas de redirection', async () => {
+    (window as any).location.pathname = '/parent-login.html';
+    sessionStorage.setItem(CONFIG.TOKEN_KEY, 'x');
+    mockFetch(401, false, { erreur: 'Code incorrect' });
+
+    await expect(Api.post('/auth/otp/valider', {})).rejects.toBeInstanceOf(ApiError);
+    expect(window.location.href).toBe('');
   });
 });
