@@ -625,6 +625,42 @@
   </div>
 </div>
 
+<!-- ═══ MODAL PARENT / TUTEUR D'UN ÉLÈVE ═══ -->
+<div class="mo" id="m-parent">
+  <div class="modal" style="max-width:480px">
+    <div class="mh"><span style="font-size:19px">👨‍👩‍👧</span><span class="mt" id="fpar-titre">Ajouter un parent ou tuteur</span><button class="mc" onclick="closeModal('m-parent')">✕</button></div>
+    <div class="mb">
+      <div class="fr">
+        <div class="fg"><label class="fl">Prénom *</label><input id="fpar-prenom" class="fi"></div>
+        <div class="fg"><label class="fl">Nom *</label><input id="fpar-nom" class="fi"></div>
+      </div>
+      <div class="fr">
+        <div class="fg"><label class="fl">Téléphone *</label><input id="fpar-tel" class="fi" placeholder="77 000 00 00"></div>
+        <div class="fg"><label class="fl">Lien</label>
+          <select id="fpar-lien" class="fs">
+            <option value="mere">Mère</option><option value="pere">Père</option><option value="tuteur">Tuteur / Tutrice</option>
+            <option value="grand_parent">Grand-parent</option><option value="oncle_tante">Oncle / Tante</option><option value="autre">Autre</option>
+          </select>
+        </div>
+      </div>
+      <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-top:6px"><input type="checkbox" id="fpar-principal"> Contact principal (reçoit les SMS)</label>
+      <div id="fpar-droits" style="display:none;margin-top:12px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--g500);margin-bottom:6px">Ce parent peut voir</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px">
+          <label><input type="checkbox" id="fpar-notes"> Les notes</label><label><input type="checkbox" id="fpar-absences"> Les absences</label>
+          <label><input type="checkbox" id="fpar-bulletins"> Les bulletins</label><label><input type="checkbox" id="fpar-discipline"> La discipline</label>
+        </div>
+      </div>
+      <p id="fpar-note-compte" style="display:none;font-size:12px;color:var(--g400);margin-top:10px">Le nom et le numéro sont ceux du compte du parent : ils changent pour tous ses enfants, et le nouveau numéro sert aussitôt à se connecter. Ils ne sont pas modifiables ici si la personne est aussi membre du personnel.</p>
+      <p style="font-size:12px;color:var(--g400);margin-top:10px">Un numéro déjà enregistré dans l'établissement est réutilisé (même personne, plusieurs enfants).</p>
+    </div>
+    <div class="mf">
+      <button class="btn btn-l" onclick="closeModal('m-parent')">Annuler</button>
+      <button id="fpar-enregistrer" class="btn btn-p" onclick="PageFicheEleve.enregistrerParent()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══ MODAL NOUVELLE ÉVALUATION ═══ -->
 <div class="mo" id="m-evaluation">
   <div class="modal">

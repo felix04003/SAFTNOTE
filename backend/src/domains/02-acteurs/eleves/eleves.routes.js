@@ -315,7 +315,8 @@ router.get('/eleves/:eleve_id', auth, isoler, perm('eleves.voir'), async (req, r
       .join('utilisateurs as up', 'up.id', 'pe.parent_id')
       .where({ 'pe.eleve_id': eleve.eleve_pk })
       .orderBy([{ column: 'pe.est_contact_principal', order: 'desc' }, 'up.nom'])
-      .select('up.id', 'up.nom', 'up.prenom', 'up.telephone', 'pe.lien', 'pe.est_contact_principal');
+      .select('up.id', 'up.nom', 'up.prenom', 'up.telephone', 'pe.lien', 'pe.est_contact_principal',
+        'pe.peut_voir_notes', 'pe.peut_voir_absences', 'pe.peut_voir_bulletins', 'pe.peut_voir_discipline');
 
     // eslint-disable-next-line no-unused-vars -- identifiant interne, retiré de la réponse
     const { eleve_pk, ...identite } = eleve;
@@ -669,5 +670,8 @@ router.put('/eleves/:eleve_id/statut', auth, isoler, perm('eleves.archiver'),
     } catch (err) { next(err); }
   }
 );
+
+// Parents et tuteurs après l'inscription (ajout, correction, retrait)
+router.use(require('./parents-eleve.routes'));
 
 module.exports = router;
