@@ -887,3 +887,47 @@ test('19. le directeur ajoute, corrige et retire un parent depuis la fiche d\'un
   const apres = (await lire(request, `/eleves/${fatou.id}`)).parents;
   expect(apres.map((p) => `${p.prenom} ${p.nom}`)).toEqual(['Papa Ndiaye']);
 });
+
+// ── 20. Discipline côté direction ───────────────────────────────────────────
+
+test('20. le directeur prononce une sanction, la retrouve dans la liste et en corrige le motif', async ({ page, request }) => {
+  await seConnecterEnDirecteur(page);
+  await aller(page, 'discipline');
+  await expect(page.locator('#tb-discipline')).toContainText('Aucune sanction', { timeout: 10000 });
+
+  // ── Prononcer : la classe d'Awa a pu changer à la fin d'année, on la cherche parmi les classes de l'année ──
+  await page.click('button:has-text("+ Prononcer une sanction")');
+  await expect(page.locator('#m-sanction')).toHaveClass(/open/);
+  const classes = await page.locator('#dsc-classe option').evaluateAll((os) => os.map((o) => o.value).filter(Boolean));
+  for (const classe of classes) {
+    await page.selectOption('#dsc-classe', classe);
+    await page.waitForFunction(() => !(document.getElementById('dsc-eleve')?.textContent || '').includes('Chargement'));
+    if (await page.locator('#dsc-eleve option', { hasText: 'Awa' }).count()) break;
+  }
+  await choisir(page, '#dsc-eleve', 'Awa');
+  await page.selectOption('#dsc-type', 'retenue');
+  await page.fill('#dsc-motif', 'ab');                                              // trop court : refusé avant tout appel
+  await page.click('#btn-sanction-save');
+  await expect(page.locator('#dsc-err')).toContainText('motif');
+  await page.fill('#dsc-motif', 'Bavardages répétés en cours');
+  await page.fill('#dsc-jours', '2');
+  await page.click('#btn-sanction-save');
+  await expect(page.locator('#m-sanction')).not.toHaveClass(/open/, { timeout: 8000 });
+  const ligne = page.locator('#tb-discipline tr', { hasText: 'Awa' });
+  await expect(ligne).toContainText('Retenue', { timeout: 8000 });
+  await expect(ligne).toContainText('Bavardages répétés en cours');
+
+  // ── Corriger le motif : l'élève et le type restent ──
+  await ligne.locator('button:has-text("Modifier")').click();
+  await expect(page.locator('#dsc-bloc-creation')).toBeHidden();
+  await page.fill('#dsc-motif', 'Bavardages répétés, deuxième fois');
+  await page.click('#btn-sanction-save');
+  await expect(ligne).toContainText('deuxième fois', { timeout: 8000 });
+  const sanctions = await lire(request, '/discipline/sanctions');
+  expect(sanctions).toHaveLength(1);
+  expect(sanctions[0]).toMatchObject({ type: 'retenue', nb_jours: 2, motif: 'Bavardages répétés, deuxième fois' });
+
+  // ── Filtre par type : un autre type ne montre rien ──
+  await page.selectOption('#dsc-fil-type', 'exclusion_definitive');
+  await expect(page.locator('#tb-discipline')).toContainText('Aucune sanction', { timeout: 8000 });
+});

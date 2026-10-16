@@ -17,6 +17,7 @@ import './pages/alertes';
 import './pages/parametres';
 import './pages/fiche-eleve';
 import './pages/agenda';
+import './pages/discipline';
 import './pages/securite';
 import './pages/passage';
 import './pages/plages';
