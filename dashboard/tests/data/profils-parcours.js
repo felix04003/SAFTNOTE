@@ -8,7 +8,7 @@
  *
  * Profils :
  *   1 école            Lycée Parcours <suffixe> (Thiès)
- *   1 directeur        Mamadou Diallo
+ *   1 directeur        Mamadou Diallo (+ un second, Khady Gueye, nommé à l'étape 16)
  *   2 enseignants      Aïssatou Sow (Mathématiques, 2 classes), Ibrahima Ba (Français, 1 classe)
  *   3 parents          dont Papa Ndiaye, père de DEUX élèves dans deux classes (fratrie)
  *   4 élèves           Fatou et Moussa Ndiaye, Awa Traoré, Cheikh Fall
@@ -40,6 +40,11 @@ function creerJeuDeProfils(suffixe = String(Date.now()).slice(-7)) {
     directeur: {
       prenom: 'Mamadou', nom: 'Diallo',
       email: mail('mamadou', 'diallo'), telephone: tel(1), mdp: 'Direction2026x',
+    },
+
+    // Second directeur, nommé par le premier (étape 16) ; le mot de passe provisoire est lu à l'écran (pas de SMS en test)
+    directeur2: {
+      prenom: 'Khady', nom: 'Gueye', email: mail('khady', 'gueye'), telephone: tel(8),
     },
 
     matieres: [

@@ -77,7 +77,7 @@ npm run test:report       # ouvrir le rapport HTML
 |---------|-------------|
 | `specs/auth.spec.js` | Connexion, déconnexion, redirections |
 | `specs/ecole.spec.js` | Création d'un établissement par le wizard `inscription.html` |
-| `specs/parcours-ecole.spec.js` | Parcours « école complète » en 12 étapes (école, directeur, matières, classes, enseignants, affectations, élèves et parents, évaluations, notes, publication, connexion de chaque profil, isolation entre écoles). Profils : `data/profils-parcours.js`. Agent : `docs/agents/testeur-parcours-web.md` |
+| `specs/parcours-ecole.spec.js` | Parcours « école complète » en 16 étapes (école, directeur, matières, classes, enseignants, affectations, élèves et parents, évaluations, notes, publication, connexion de chaque profil, isolation entre écoles, bulletins, écrans d'administration, fiche élève, nomination d'un second directeur). Profils : `data/profils-parcours.js`. Agent : `docs/agents/testeur-parcours-web.md` |
 | `specs/comptes-web.spec.js` | Parcours comptes (mot de passe provisoire, jeton expiré, session fermée, parent multi-écoles, politique), API simulée |
 | `specs/workflow-complet.spec.js` | Workflow complet : connexion → classe → élève → évaluation → notes |
 

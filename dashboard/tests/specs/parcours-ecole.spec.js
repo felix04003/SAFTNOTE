@@ -622,3 +622,55 @@ test('15. la fiche d\'un élève réunit identité, parents, résultats, notes e
   await page.click('button:has-text("Retour aux élèves")');
   await expect(page.locator('#page-eleves')).toHaveClass(/active/);
 });
+
+// ── 16. Nomination d'un second directeur ────────────────────────────────────
+
+test('16. le directeur nomme un second directeur, qui se connecte et change son mot de passe provisoire', async ({ page, request }) => {
+  const d2 = jeu.directeur2;
+  await seConnecterEnDirecteur(page);
+  await aller(page, 'securite');
+
+  // Champs incomplets : rien n'est envoyé
+  await page.click('#dir-creer');
+  await expect(page.locator('#toast-container')).toContainText('obligatoires', { timeout: 5000 });
+
+  await page.fill('#dir-prenom', d2.prenom);
+  await page.fill('#dir-nom', d2.nom);
+  await page.fill('#dir-tel', d2.telephone);
+  await page.fill('#dir-email', d2.email);
+
+  // Confirmation, puis (pas de SMS en test) alerte qui contient le mot de passe provisoire
+  const messages = [];
+  page.on('dialog', (d) => { messages.push(d.message()); d.accept(); });
+  await page.click('#dir-creer');
+  await expect.poll(() => messages.length, { timeout: 8000 }).toBeGreaterThanOrEqual(2);
+  expect(messages[0]).toContain(`${d2.prenom} ${d2.nom}`);
+  const mdpProvisoire = (messages[1].match(/Mot de passe provisoire : (\S+)/) || [])[1];
+  expect(mdpProvisoire, 'mot de passe provisoire absent de l\'alerte').toBeTruthy();
+  page.removeAllListeners('dialog');
+
+  await expect(page.locator('#dir-nom')).toHaveValue('');                       // formulaire vidé
+  await expect(page.locator('#tb-audit')).toContainText('Directeur nommé', { timeout: 8000 });
+
+  // Le même numéro ne peut pas être nommé deux fois
+  await page.fill('#dir-prenom', d2.prenom);
+  await page.fill('#dir-nom', d2.nom);
+  await page.fill('#dir-tel', d2.telephone);
+  page.once('dialog', (d) => d.accept());
+  await page.click('#dir-creer');
+  await expect(page.locator('#toast-container')).toContainText('existe déjà', { timeout: 8000 });
+
+  // Le nouveau directeur se connecte (mot de passe provisoire → changement obligatoire) puis arrive au tableau de bord
+  await page.evaluate(() => sessionStorage.clear());
+  const nouveauMdp = 'Succession2026x';
+  await seConnecter(page, { identifiant: d2.email, mdp: mdpProvisoire });
+  await page.waitForURL(/changer-mot-de-passe/, { timeout: 10000 });
+  await page.fill('#mdp-actuel', mdpProvisoire);
+  await page.fill('#mdp-nouveau', nouveauMdp);
+  await page.fill('#mdp-confirm', nouveauMdp);
+  await page.click('#btn-changer');
+  await page.waitForURL(/index\.html/, { timeout: 10000 });
+  await expect(page.locator('#sb-user-nom')).toContainText(d2.nom);
+  await aller(page, 'securite');                                                  // il a bien les droits de direction
+  await expect(page.locator('#tb-audit')).toContainText('Directeur nommé', { timeout: 8000 });
+});
