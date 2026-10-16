@@ -15,3 +15,13 @@ describe('identifiants HTML uniques par page', () => {
     });
   }
 });
+
+// Un bouton qui n'affiche qu'une bulle « fait » sans rien faire trompe le directeur (« Tout marquer lu », « Tester SMS »).
+describe('aucun bouton factice', () => {
+  for (const [nom, source] of Object.entries({ 'index.html': index, 'enseignant.html': enseignant, 'parent.html': parent })) {
+    it(nom, () => {
+      const html = source.replace(/<!--[\s\S]*?-->/g, '');
+      expect(html.match(/onclick="toast\(/g) || []).toEqual([]);
+    });
+  }
+});

@@ -9,6 +9,7 @@ export const TITRES: Record<string, string> = {
   edt:         'Emploi du temps',
   alertes:     'Alertes',
   'fiche-eleve': 'Fiche élève',
+  discipline:  'Discipline',
   agenda:      'Agenda',
   passage:     'Fin d\'année',
   securite:    'Sécurité',

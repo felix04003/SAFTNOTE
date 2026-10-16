@@ -105,7 +105,6 @@ export const PageEnseignants: any = {
         '<td><span class="badge bn">' + escapeHtml(e.type_contrat || 'titulaire') + '</span></td>' +
         '<td><span class="badge bs">Actif</span></td>' +
         '<td style="display:flex;gap:6px">' +
-          '<button class="btn btn-l btn-sm" onclick="toast(\'Fiche à venir\')">Voir</button>' +
           '<button class="btn btn-p btn-sm" onclick="PageAffectations.ouvrir(\'' + escapeHtml(e.id) + '\',' + nomArg + ')">📋 Affecter</button>' +
           '<button class="btn btn-l btn-sm" title="Envoyer un nouveau mot de passe provisoire par SMS" onclick="PageEnseignants.renvoyerMdp(\'' + escapeHtml(e.id) + '\',' + nomArg + ')">🔑 MDP</button>' +
         '</td>' +
