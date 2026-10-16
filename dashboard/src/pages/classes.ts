@@ -58,9 +58,50 @@ export const PageClasses: any = {
     }
   },
 
+  _editId: '',
+
+  _modeModale: function(edition: boolean) {
+    const titre = document.getElementById('m-classe-titre') as HTMLElement | null;
+    if (titre) titre.textContent = edition ? 'Modifier la classe' : 'Nouvelle classe';
+    const niveau = document.getElementById('m-classe-niveau') as HTMLSelectElement | null;
+    if (niveau) niveau.disabled = edition;            // le niveau porte les coefficients : on ne le change pas
+    const btn = document.getElementById('btn-creer-classe') as HTMLButtonElement | null;
+    if (btn) btn.textContent = edition ? 'Enregistrer' : 'Créer la classe';
+  },
+
   ouvrirModal: function() {
+    this._editId = '';
+    this._modeModale(false);
+    ['m-classe-nom', 'm-classe-salle', 'm-classe-effectif'].forEach(function(id) {
+      const el = document.getElementById(id) as HTMLInputElement | null;
+      if (el) el.value = '';
+    });
     this.chargerNiveaux();
     openModal('m-classe');
+  },
+
+  async modifier(id: string) {
+    const c = this.data.find(function(x: any) { return x.id === id; });
+    if (!c) return;
+    await this.chargerNiveaux();
+    this._editId = id;
+    this._modeModale(true);
+    const champ = (cible: string, valeur: any) => { const el = document.getElementById(cible) as HTMLInputElement | null; if (el) el.value = valeur == null ? '' : String(valeur); };
+    champ('m-classe-nom', c.nom); champ('m-classe-salle', c.salle_principale); champ('m-classe-effectif', c.effectif_max);
+    openModal('m-classe');
+  },
+
+  async archiver(id: string) {
+    const c = this.data.find(function(x: any) { return x.id === id; });
+    const nom = c ? (c.nom_classe || c.nom) : 'cette classe';
+    if (!confirm('Archiver la classe ' + nom + ' ?\nElle disparaît des listes ; l\'historique (notes, bulletins) est conservé. Impossible tant qu\'elle a des élèves ou des enseignants affectés.')) return;
+    try {
+      await Api.del('/classes/' + id);
+      toast('Classe ' + nom + ' archivée ✓', 's');
+      await this.charger();
+    } catch (e: any) {
+      toast(e.message || 'Archivage impossible', 'e');
+    }
   },
 
   async creer() {
@@ -69,8 +110,9 @@ export const PageClasses: any = {
     const salle     = (document.getElementById('m-classe-salle')   as HTMLInputElement  | null)?.value?.trim();
     const effectif  = parseInt((document.getElementById('m-classe-effectif') as HTMLInputElement | null)?.value || '') || undefined;
 
+    if (!nom) return toast('La lettre de classe est obligatoire', 'w');
+    if (this._editId) return this._enregistrerModif(nom, salle, effectif);
     if (!niveauId) return toast('Choisissez un niveau', 'w');
-    if (!nom)      return toast('La lettre de classe est obligatoire', 'w');
 
     const payload: Record<string, any> = {
       niveau_id:        niveauId,
@@ -93,6 +135,22 @@ export const PageClasses: any = {
       toast('Erreur : ' + (e.message || 'Création échouée'), 'd');
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = 'Créer la classe'; }
+    }
+  },
+
+  async _enregistrerModif(nom: string, salle: string | undefined, effectif: number | undefined) {
+    const btn = document.getElementById('btn-creer-classe') as HTMLButtonElement | null;
+    if (btn) btn.disabled = true;
+    try {
+      await Api.put('/classes/' + this._editId, { nom, salle_principale: salle || null, effectif_max: effectif ?? null });
+      closeModal('m-classe');
+      toast('Classe modifiée ✓', 's');
+      this._editId = '';
+      await this.charger();
+    } catch (e: any) {
+      toast('Erreur : ' + (e.message || 'Modification échouée'), 'd');
+    } finally {
+      if (btn) btn.disabled = false;
     }
   },
 
@@ -128,6 +186,8 @@ export const PageClasses: any = {
           '<div style="display:flex;gap:6px;margin-top:12px">' +
             '<button class="btn btn-l btn-sm" style="flex:1" onclick="PageClasses.voirClasse(\'' + c.id + '\')">Voir</button>' +
             '<button class="btn btn-l btn-sm" onclick="goto(\'edt\')">📅</button>' +
+            '<button class="btn btn-l btn-sm" onclick="PageClasses.modifier(\'' + c.id + '\')">Modifier</button>' +
+            '<button class="btn btn-l btn-sm" onclick="PageClasses.archiver(\'' + c.id + '\')">Archiver</button>' +
           '</div>' +
         '</div>' +
       '</div>';

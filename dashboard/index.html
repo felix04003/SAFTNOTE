@@ -133,6 +133,10 @@
           <select class="fs" style="width:130px" id="sel-classe-eleves" onchange="PageEleves.filtrerClasse(this.value)">
             <option value="">Toutes classes</option>
           </select>
+          <select class="fs" style="width:120px" id="sel-statut-eleves" onchange="PageEleves.filtrerStatut(this.value)">
+            <option value="">Inscrits</option>
+            <option value="retires">Retirés</option>
+          </select>
           <button class="btn btn-p" onclick="PageEleves.ouvrirModal()">+ Inscrire</button>
         </div>
       </div>
@@ -374,7 +378,7 @@
             <div class="ch">
               <span>📚</span>
               <span class="ct">Matières</span>
-              <button class="btn btn-p btn-sm" onclick="openModal('m-matiere')" style="margin-left:auto">+ Nouvelle matière</button>
+              <button class="btn btn-p btn-sm" onclick="PageParametres.ouvrirNouvelleMatiere()" style="margin-left:auto">+ Nouvelle matière</button>
             </div>
             <div class="cb">
               <div id="param-matieres-liste" style="min-height:40px">
@@ -531,7 +535,7 @@
 
 <div class="mo" id="m-classe">
   <div class="modal" style="max-width:440px">
-    <div class="mh"><span style="font-size:19px">🏫</span><span class="mt">Nouvelle classe</span><button class="mc" onclick="closeModal('m-classe')">✕</button></div>
+    <div class="mh"><span style="font-size:19px">🏫</span><span class="mt" id="m-classe-titre">Nouvelle classe</span><button class="mc" onclick="closeModal('m-classe')">✕</button></div>
     <div class="mb">
       <div class="fg"><label class="fl">Niveau *</label>
         <select id="m-classe-niveau" class="fs"><option value="">Chargement des niveaux…</option></select>
@@ -546,6 +550,53 @@
     <div class="mf">
       <button class="btn btn-l" onclick="closeModal('m-classe')">Annuler</button>
       <button id="btn-creer-classe" class="btn btn-p" onclick="PageClasses.creer()">Créer la classe</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL MODIFIER UN ÉLÈVE ═══ -->
+<div class="mo" id="m-eleve-modif">
+  <div class="modal" style="max-width:480px">
+    <div class="mh"><span style="font-size:19px">✏️</span><span class="mt">Modifier l'élève</span><button class="mc" onclick="closeModal('m-eleve-modif')">✕</button></div>
+    <div class="mb">
+      <div class="fr">
+        <div class="fg"><label class="fl">Prénom *</label><input id="emod-prenom" class="fi"></div>
+        <div class="fg"><label class="fl">Nom *</label><input id="emod-nom" class="fi"></div>
+      </div>
+      <div class="fr">
+        <div class="fg"><label class="fl">Date de naissance</label><input id="emod-ddn" class="fi" type="date"></div>
+        <div class="fg"><label class="fl">Sexe</label>
+          <select id="emod-genre" class="fs"><option value="">—</option><option value="F">Féminin</option><option value="M">Masculin</option></select>
+        </div>
+      </div>
+      <div class="fr">
+        <div class="fg"><label class="fl">Téléphone</label><input id="emod-tel" class="fi" placeholder="77 000 00 00"></div>
+        <div class="fg"><label class="fl">Matricule</label><input id="emod-matricule" class="fi"></div>
+      </div>
+      <div class="fg"><label class="fl">Classe</label><select id="emod-classe" class="fs"></select></div>
+      <p style="font-size:12px;color:var(--g400);margin-top:8px">Changer la classe déplace l'élève pour l'année en cours ; les notes déjà saisies restent rattachées à l'ancienne classe.</p>
+    </div>
+    <div class="mf">
+      <button class="btn btn-l" onclick="closeModal('m-eleve-modif')">Annuler</button>
+      <button id="btn-eleve-modif" class="btn btn-p" onclick="PageEleves.enregistrerModif()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL RETIRER UN ÉLÈVE ═══ -->
+<div class="mo" id="m-eleve-retrait">
+  <div class="modal" style="max-width:440px">
+    <div class="mh"><span style="font-size:19px">🚪</span><span class="mt" id="ret-titre">Retirer l'élève</span><button class="mc" onclick="closeModal('m-eleve-retrait')">✕</button></div>
+    <div class="mb">
+      <div class="fg"><label class="fl">Raison *</label>
+        <select id="ret-statut" class="fs"><option value="transfere">Transfert vers un autre établissement</option><option value="abandonne">Abandon</option><option value="exclu">Exclusion</option></select>
+      </div>
+      <div class="fg"><label class="fl">Motif * <span style="color:var(--g400)">(inscrit au journal)</span></label><input id="ret-motif" class="fi" placeholder="Déménagement à Dakar"></div>
+      <p style="font-size:12px;color:var(--g400);margin-top:8px">L'élève n'est pas supprimé : ses notes, absences et bulletins restent consultables, et il peut être réintégré.</p>
+    </div>
+    <div class="mf">
+      <button class="btn btn-l" onclick="closeModal('m-eleve-retrait')">Annuler</button>
+      <button id="btn-eleve-retrait" class="btn btn-d" onclick="PageEleves.confirmerRetrait()">Retirer</button>
     </div>
   </div>
 </div>
@@ -763,7 +814,7 @@
   <div class="modal" style="max-width:460px">
     <div class="mh">
       <span style="font-size:19px">📚</span>
-      <span class="mt">Nouvelle matière</span>
+      <span class="mt" id="m-mat-titre">Nouvelle matière</span>
       <button class="mc" onclick="closeModal('m-matiere')">✕</button>
     </div>
     <div class="mb">

@@ -174,6 +174,94 @@ router.post('/classes', auth, isoler, perm('config.modifier'),
   }
 );
 
+// ── Classes : modifier, archiver ──────────────────────────────────
+async function chargerClasse(db, classeId, etablissementId) {
+  const classe = await db('classes as c')
+    .join('annees_scolaires as a', 'a.id', 'c.annee_scolaire_id')
+    .join('niveaux as n', 'n.id', 'c.niveau_id')
+    .where({ 'c.id': classeId, 'a.etablissement_id': etablissementId })
+    .first('c.id', 'c.nom', 'c.annee_scolaire_id', 'c.niveau_id', 'c.actif', 'n.nom as niveau');
+  if (!classe) throw ApiError.nonTrouve('Classe introuvable');
+  return classe;
+}
+
+function journaliserClasse(trx, req, action, classeId, details) {
+  return trx('journal_audit').insert({
+    etablissement_id: req.etablissement_id, utilisateur_id: req.session.utilisateur_id,
+    action, resultat: 'succes', table_cible: 'classes', enregistrement_id: classeId,
+    details: JSON.stringify(details),
+  });
+}
+
+// PUT /classes/:classe_id — lettre, salle, capacité (le niveau ne change pas : il porte les coefficients)
+router.put('/classes/:classe_id', auth, isoler, perm('config.modifier'),
+  valider(z.object({
+    nom:              z.string().min(1).max(10),
+    salle_principale: z.string().max(50).nullable(),
+    effectif_max:     z.number().int().min(1).max(200).nullable(),
+  }).partial().refine(o => Object.keys(o).length > 0, { message: 'Aucun champ à modifier' })),
+  async (req, res, next) => {
+    const db = getDB();
+    try {
+      const classe = await chargerClasse(db, req.params.classe_id, req.etablissement_id);
+      const maj = {};
+      if (req.body.nom !== undefined) {
+        maj.nom = req.body.nom.toUpperCase();
+        const doublon = await db('classes')
+          .where({ annee_scolaire_id: classe.annee_scolaire_id, niveau_id: classe.niveau_id })
+          .whereRaw('UPPER(nom) = ?', [maj.nom])        // insensible à la casse : des lettres anciennes peuvent être en minuscule
+          .whereNot('id', classe.id).first('id');
+        if (doublon) throw ApiError.conflit(`La classe ${classe.niveau} ${maj.nom} existe déjà`);
+      }
+      if (req.body.salle_principale !== undefined) maj.salle_principale = req.body.salle_principale;
+      if (req.body.effectif_max !== undefined) {
+        if (req.body.effectif_max !== null) {
+          const { count } = await db('inscriptions').where({ classe_id: classe.id, statut: 'actif' }).count('id as count').first();
+          if (parseInt(count, 10) > req.body.effectif_max) {
+            throw ApiError.conflit(`La classe compte déjà ${count} élèves : capacité minimale ${count}`);
+          }
+        }
+        maj.effectif_max = req.body.effectif_max;
+      }
+
+      const [modifiee] = await db.transaction(async trx => {
+        const lignes = await trx('classes').where({ id: classe.id }).update(maj).returning('*');
+        await journaliserClasse(trx, req, 'classes.modifier', classe.id, { champs: Object.keys(maj) });
+        return lignes;
+      });
+
+      try { await invalidatePattern(`classes:${req.etablissement_id}`); } catch { /* Redis indisponible — ignoré */ }
+      return ok(res, { ...modifiee, niveau: classe.niveau });
+    } catch (err) { next(err); }
+  }
+);
+
+// DELETE /classes/:classe_id — archive la classe (actif = false) ; refusé tant qu'elle a des élèves inscrits
+// ou des enseignants affectés (il faut d'abord les déplacer : l'historique des notes reste intact)
+router.delete('/classes/:classe_id', auth, isoler, perm('config.modifier'), async (req, res, next) => {
+  const db = getDB();
+  try {
+    const classe = await chargerClasse(db, req.params.classe_id, req.etablissement_id);
+    if (!classe.actif) throw ApiError.nonTrouve('Classe introuvable');
+
+    const { count: eleves } = await db('inscriptions').where({ classe_id: classe.id, statut: 'actif' }).count('id as count').first();
+    if (parseInt(eleves, 10) > 0) {
+      throw ApiError.conflit(`Impossible : ${eleves} élève(s) sont inscrits dans ${classe.niveau} ${classe.nom}. Changez leur classe ou retirez-les d'abord.`);
+    }
+    const { count: affectations } = await db('affectations_enseignants').where({ classe_id: classe.id }).count('id as count').first();
+    if (parseInt(affectations, 10) > 0) {
+      throw ApiError.conflit(`Impossible : ${affectations} affectation(s) d'enseignants existent pour ${classe.niveau} ${classe.nom}. Supprimez-les d'abord.`);
+    }
+
+    await db.transaction(async trx => {
+      await trx('classes').where({ id: classe.id }).update({ actif: false });
+      await journaliserClasse(trx, req, 'classes.archiver', classe.id, { classe: `${classe.niveau} ${classe.nom}` });
+    });
+    try { await invalidatePattern(`classes:${req.etablissement_id}`); } catch { /* Redis indisponible — ignoré */ }
+    return vide(res);
+  } catch (err) { next(err); }
+});
+
 // ── GET /niveaux ──────────────────────────────────────────────────
 router.get('/niveaux', auth, isoler, perm('eleves.voir'), async (req, res, next) => {
   try {

@@ -36,8 +36,12 @@ router.get('/eleves', auth, isoler, perm('eleves.voir'), async (req, res, next) 
       .where({
         'a.etablissement_id': req.etablissement_id,
         'a.est_courante':     true,
-        'i.statut':           'actif',
       });
+
+    // Par défaut : élèves inscrits. ?statut=retires : transférés, abandons, exclusions (pour les réintégrer)
+    query = req.query.statut === 'retires'
+      ? query.whereNotIn('i.statut', ['actif', 'diplome'])
+      : query.where('i.statut', 'actif');
 
     if (classe_id)  query = query.where('i.classe_id', classe_id);
     if (niveau_id)  query = query.where('c.niveau_id', niveau_id);
@@ -56,7 +60,7 @@ router.get('/eleves', auth, isoler, perm('eleves.voir'), async (req, res, next) 
       .limit(limite).offset(offset)
       .select(
         'u.id', 'u.nom', 'u.prenom', 'u.photo_url', 'u.telephone',
-        'e.matricule', 'i.id as inscription_id',
+        'e.matricule', 'i.id as inscription_id', 'i.statut',
         'n.nom as niveau', db.raw("CONCAT(n.nom, ' ', c.nom) as classe"),
         // Dernière moyenne générale calculée
         db.raw(`(
@@ -132,6 +136,13 @@ router.post('/eleves', auth, isoler, perm('eleves.creer'),
           .where({ etablissement_id: req.etablissement_id, est_courante: true })
           .first('id');
         if (!annee) throw ApiError.validationEchouee('Aucune année scolaire courante');
+
+        // La classe doit être celle d'une année de CET établissement (sinon on inscrirait dans l'école d'un autre)
+        const classeOk = await trx('classes as c')
+          .join('annees_scolaires as a', 'a.id', 'c.annee_scolaire_id')
+          .where({ 'c.id': req.body.classe_id, 'a.etablissement_id': req.etablissement_id })
+          .first('c.id');
+        if (!classeOk) throw ApiError.nonTrouve('Classe introuvable');
 
         // Créer l'utilisateur
         const utilisateurId = uuid();
@@ -473,5 +484,190 @@ async function genMatriculeUnique(db) {
   }
   throw new Error('Impossible de générer un matricule unique');
 }
+
+// ── Helpers modification / retrait ────────────────────────────────
+/** Élève de l'établissement (id = identifiant UTILISATEUR, comme dans GET /eleves/:eleve_id) */
+async function chargerEleve(db, utilisateurId, etablissementId) {
+  const eleve = await db('utilisateurs as u')
+    .join('eleves as e', 'e.utilisateur_id', 'u.id')
+    .where({ 'u.id': utilisateurId, 'u.etablissement_id': etablissementId })
+    .first('u.id', 'u.nom', 'u.prenom', 'e.id as eleve_pk');
+  if (!eleve) throw ApiError.nonTrouve('Élève introuvable');
+  return eleve;
+}
+
+/** Inscription de l'année courante (quel que soit son statut) */
+function inscriptionCourante(db, elevePk, etablissementId) {
+  return db('inscriptions as i')
+    .join('annees_scolaires as a', 'a.id', 'i.annee_scolaire_id')
+    .where({ 'i.eleve_id': elevePk, 'a.etablissement_id': etablissementId, 'a.est_courante': true })
+    .first('i.id', 'i.classe_id', 'i.statut', 'i.annee_scolaire_id');
+}
+
+function journaliser(trx, req, action, cibleId, details) {
+  return trx('journal_audit').insert({
+    etablissement_id:  req.etablissement_id,
+    utilisateur_id:    req.session.utilisateur_id,
+    action,
+    resultat:          'succes',
+    table_cible:       'utilisateurs',
+    enregistrement_id: cibleId,
+    details:           JSON.stringify(details),
+  });
+}
+
+// ═════════════════════════════════════════════════════════════════
+// PUT /eleves/:eleve_id — Corriger la fiche d'un élève (identité, contact,
+// classe de l'année courante). Les champs absents ne sont pas touchés.
+// Données médicales : réservées à 'eleves.medicale', comme à la lecture.
+// ═════════════════════════════════════════════════════════════════
+router.put('/eleves/:eleve_id', auth, isoler, perm('eleves.modifier'),
+  valider(z.object({
+    nom:            z.string().min(2).max(100),
+    prenom:         z.string().min(2).max(100),
+    date_naissance: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+    genre:          z.enum(['M', 'F']).nullable(),
+    telephone:      z.string().max(25).nullable(),
+    adresse:        z.string().max(300).nullable(),
+    matricule:      z.string().min(1).max(30),
+    redoublant:     z.boolean(),
+    classe_id:      z.string().uuid('ID classe invalide'),
+    allergies:            z.string().nullable(),
+    conditions_medicales: z.string().nullable(),
+    groupe_sanguin:       z.enum(['A+','A-','B+','B-','AB+','AB-','O+','O-']).nullable(),
+    medecin_urgence:      z.string().nullable(),
+  }).partial().refine(o => Object.keys(o).length > 0, { message: 'Aucun champ à modifier' })),
+  async (req, res, next) => {
+    const db = getDB();
+    try {
+      const corps = req.body;
+      const eleve = await chargerEleve(db, req.params.eleve_id, req.etablissement_id);
+
+      const champsMedicaux = ['allergies', 'conditions_medicales', 'groupe_sanguin', 'medecin_urgence'];
+      const medicalDemande = champsMedicaux.some(c => corps[c] !== undefined);
+      if (medicalDemande && !(await utilisateurAPermission(req.session, 'eleves.medicale'))) {
+        throw ApiError.interdit('Les données médicales sont réservées à la direction');
+      }
+
+      // Colonnes de l'utilisateur
+      const colonnesUtilisateur = {};
+      for (const c of ['nom', 'prenom', 'date_naissance', 'genre', 'adresse']) {
+        if (corps[c] !== undefined) colonnesUtilisateur[c] = corps[c];
+      }
+      if (corps.telephone !== undefined) {
+        if (corps.telephone === null || corps.telephone === '') {
+          colonnesUtilisateur.telephone = null;
+        } else {
+          const pays = await paysEtablissement(db, req.etablissement_id);
+          const tel = telephoneOuErreur(corps.telephone, pays, 'Téléphone de l\'élève');
+          const doublon = await db('utilisateurs')
+            .where({ etablissement_id: req.etablissement_id })
+            .whereIn('telephone', variantesTelephone(corps.telephone, pays))
+            .whereNot('id', eleve.id)
+            .first('id');
+          if (doublon) throw ApiError.validationEchouee('Un utilisateur avec ce numéro existe déjà dans votre établissement');
+          colonnesUtilisateur.telephone = tel;
+        }
+      }
+
+      // Matricule : unique sur toute la plateforme (UNIQUE eleves.matricule)
+      if (corps.matricule !== undefined) {
+        const pris = await db('eleves').where({ matricule: corps.matricule }).whereNot('id', eleve.eleve_pk).first('id');
+        if (pris) throw ApiError.validationEchouee(`Le matricule "${corps.matricule}" est déjà attribué`);
+      }
+
+      // Changement de classe : classe de l'année courante, de cet établissement, élève encore inscrit
+      let ancienneClasse = null;
+      if (corps.classe_id !== undefined) {
+        const inscription = await inscriptionCourante(db, eleve.eleve_pk, req.etablissement_id);
+        if (!inscription) throw ApiError.validationEchouee('Cet élève n\'est pas inscrit cette année');
+        if (inscription.statut !== 'actif') {
+          throw ApiError.validationEchouee('Cet élève n\'est plus inscrit : réintégrez-le avant de changer sa classe');
+        }
+        const classe = await db('classes as c')
+          .join('annees_scolaires as a', 'a.id', 'c.annee_scolaire_id')
+          .where({ 'c.id': corps.classe_id, 'a.etablissement_id': req.etablissement_id, 'a.id': inscription.annee_scolaire_id, 'c.actif': true })
+          .first('c.id');
+        if (!classe) throw ApiError.nonTrouve('Classe introuvable');
+        if (inscription.classe_id !== corps.classe_id) ancienneClasse = inscription;
+      }
+
+      await db.transaction(async trx => {
+        if (Object.keys(colonnesUtilisateur).length) {
+          await trx('utilisateurs').where({ id: eleve.id }).update(colonnesUtilisateur);
+        }
+        const colonnesEleve = { ...preparerDonneesMediacles(trx, Object.fromEntries(champsMedicaux.filter(c => corps[c] !== undefined).map(c => [c, corps[c]]))) };
+        if (corps.matricule !== undefined) colonnesEleve.matricule = corps.matricule;
+        if (corps.redoublant !== undefined) colonnesEleve.redoublant = corps.redoublant;
+        if (Object.keys(colonnesEleve).length) {
+          await trx('eleves').where({ id: eleve.eleve_pk }).update(colonnesEleve);
+        }
+        if (ancienneClasse) {
+          await trx('inscriptions').where({ id: ancienneClasse.id }).update({ classe_id: corps.classe_id });
+        }
+        // Journal : les NOMS des champs modifiés, jamais les valeurs (données médicales, téléphone)
+        await journaliser(trx, req, 'eleves.modifier', eleve.id, {
+          champs: Object.keys(corps),
+          ...(ancienneClasse ? { classe_avant: ancienneClasse.classe_id, classe_apres: corps.classe_id } : {}),
+        });
+      });
+
+      try {
+        await invalidatePattern(`classe_eleves:${req.etablissement_id}*`);
+        if (ancienneClasse) {
+          await invalidatePattern(`classe_eleves:${ancienneClasse.classe_id}`);
+          await invalidatePattern(`classe_eleves:${corps.classe_id}`);
+        }
+        await invalidatePattern(`classes:${req.etablissement_id}`);
+      } catch { /* Redis indisponible — ignoré */ }
+
+      return ok(res, { utilisateur_id: eleve.id, classe_modifiee: Boolean(ancienneClasse) });
+    } catch (err) { next(err); }
+  }
+);
+
+// ═════════════════════════════════════════════════════════════════
+// PUT /eleves/:eleve_id/statut — Retirer un élève (transfert, abandon, exclusion)
+// ou le réintégrer. On ne supprime JAMAIS un élève : ses notes, absences et
+// bulletins restent consultables. Le retrait ne ferme pas son compte.
+// ═════════════════════════════════════════════════════════════════
+router.put('/eleves/:eleve_id/statut', auth, isoler, perm('eleves.archiver'),
+  valider(z.object({
+    statut: z.enum(['actif', 'transfere', 'abandonne', 'exclu']),
+    motif:  z.string().min(3).max(200).optional(),
+  })),
+  async (req, res, next) => {
+    const db = getDB();
+    try {
+      const eleve = await chargerEleve(db, req.params.eleve_id, req.etablissement_id);
+      const inscription = await inscriptionCourante(db, eleve.eleve_pk, req.etablissement_id);
+      if (!inscription) throw ApiError.validationEchouee('Cet élève n\'est pas inscrit cette année');
+      if (inscription.statut === 'diplome') throw ApiError.validationEchouee('Un élève diplômé ne peut plus être modifié');
+      if (inscription.statut === req.body.statut) {
+        throw ApiError.validationEchouee(`Cet élève est déjà « ${req.body.statut} »`);
+      }
+      if (req.body.statut !== 'actif' && !req.body.motif) {
+        throw ApiError.validationEchouee('Un motif est obligatoire pour retirer un élève');
+      }
+
+      await db.transaction(async trx => {
+        await trx('inscriptions').where({ id: inscription.id }).update({
+          statut:   req.body.statut,
+          date_fin: req.body.statut === 'actif' ? null : trx.raw('CURRENT_DATE'),
+        });
+        await journaliser(trx, req, req.body.statut === 'actif' ? 'eleves.reintegrer' : 'eleves.retirer', eleve.id, {
+          statut_avant: inscription.statut, statut_apres: req.body.statut, motif: req.body.motif || null,
+        });
+      });
+
+      try {
+        await invalidatePattern(`classe_eleves:${inscription.classe_id}`);
+        await invalidatePattern(`classes:${req.etablissement_id}`);
+      } catch { /* Redis indisponible — ignoré */ }
+
+      return ok(res, { utilisateur_id: eleve.id, statut: req.body.statut });
+    } catch (err) { next(err); }
+  }
+);
 
 module.exports = router;

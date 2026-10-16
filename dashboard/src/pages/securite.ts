@@ -1,5 +1,5 @@
 import { Api } from '../api';
-import { escapeHtml, toast } from '../ui';
+import { escapeHtml, jsArg, toast } from '../ui';
 import { PAGE_HOOKS } from '../router';
 
 const LIBELLES_ACTION: Record<string, string> = {
@@ -106,7 +106,7 @@ export const PageSecurite: any = {
           '<td style="display:flex;gap:5px">' +
             '<button class="btn btn-l btn-sm" onclick="PageSecurite.revoquer(\'' + escapeHtml(s.id) + '\')">Déconnecter</button>' +
             (s.utilisateur_id === moi ? '' :
-              '<button class="btn btn-d btn-sm" onclick="PageSecurite.bloquer(\'' + escapeHtml(s.utilisateur_id) + '\',\'' + escapeHtml(s.utilisateur) + '\')">Bloquer le compte</button>') +
+              '<button class="btn btn-d btn-sm" onclick="PageSecurite.bloquer(\'' + escapeHtml(s.utilisateur_id) + '\',' + jsArg(s.utilisateur) + ')">Bloquer le compte</button>') +
           '</td></tr>';
       }).join('') : '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--g400)">Aucune session active</td></tr>';
     } catch (e: any) {
@@ -186,7 +186,7 @@ export const PageSecurite: any = {
           '<td class="nc">' + escapeHtml((c.prenom || '') + ' ' + (c.nom || '')) + '</td>' +
           '<td>' + escapeHtml(c.roles || '—') + '</td>' +
           '<td>' + escapeHtml(dateHeure(c.bloque_depuis)) + '</td>' +
-          '<td><button class="btn btn-p btn-sm" onclick="PageSecurite.debloquer(\'' + escapeHtml(c.id) + '\',\'' + escapeHtml((c.prenom || '') + ' ' + (c.nom || '')) + '\')">Débloquer</button></td>' +
+          '<td><button class="btn btn-p btn-sm" onclick="PageSecurite.debloquer(\'' + escapeHtml(c.id) + '\',' + jsArg((c.prenom || '') + ' ' + (c.nom || '')) + ')">Débloquer</button></td>' +
         '</tr>';
       }).join('') : '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--g400)">Aucun compte bloqué</td></tr>';
     } catch (e: any) {
