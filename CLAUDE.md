@@ -145,6 +145,7 @@ ecolemanager/
     ├── login.html          ✅ Page de connexion uniquement (identifiant, mdp, code établissement) + lien vers inscription.html
     ├── changer-mot-de-passe.html ✅ Changement de mot de passe (obligatoire si mot de passe provisoire)
     ├── inscription.html    ✅ Wizard de création d'établissement + directeur (seul point d'entrée, POST /inscription)
+    ├── (index.html : pages Agenda, Sécurité (audit, appareils, comptes bloqués), Mes données (RGPD) ; Paramètres : plages horaires, plafond SMS ; enseignant.html et parent.html : Mes données)
     ├── css/
     │   └── style.css       ✅ Toute la feuille de style
     ├── src/                ✅ Sources TypeScript (remplace l'ancien dashboard/js/, supprimé — lot K)
@@ -473,7 +474,7 @@ META_WA_TOKEN         → WhatsApp Business API
 | 27 | Notifications SMS réparées sur base réelle (le worker ne trouvait jamais le parent : aucun SMS n'avait pu partir), publication des notes → un SMS par parent, contrôle d'établissement sur la publication, report horaire BullMQ 5, plafond mensuel de SMS par établissement avec alertes (migration 023) | ✅ |
 
 > Les compteurs de tests ci-dessus sont historiques (au moment de chaque étape). Compteurs
-> actuels (vérifiés le 2026-10-07) : backend 379 tests (40 suites Jest) + 204 tests d'intégration sur base réelle (26 suites, `npm run test:integration`), dashboard 122 tests (Vitest) + 49 tests E2E Playwright (voir dashboard/tests/README.md), mobile 119 tests (Jest) + 18 étapes de parcours contre un vrai backend (`cd mobile && npm run test:parcours`, job CI `mobile-parcours`, voir `mobile/__tests__/parcours/parcours-mobile.test.ts`).
+> actuels (vérifiés le 2026-10-07) : backend 379 tests (40 suites Jest) + 212 tests d'intégration sur base réelle (28 suites, `npm run test:integration`), dashboard 161 tests (Vitest) + 50 tests E2E Playwright (voir dashboard/tests/README.md), mobile 119 tests (Jest) + 18 étapes de parcours contre un vrai backend (`cd mobile && npm run test:parcours`, job CI `mobile-parcours`, voir `mobile/__tests__/parcours/parcours-mobile.test.ts`).
 
 ---
 

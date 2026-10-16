@@ -346,6 +346,10 @@ test('10. chaque enseignant se connecte et ne voit que ses classes', async ({ pa
       const label = `${c.niveau} ${c.lettre}`;
       if (!e.affectations.some((a) => a.classe === label)) await expect(grille).not.toContainText(label);
     }
+    // « Mes données » : consentements et suppression du compte (le personnel est averti)
+    await aller(page, 'ens-donnees');
+    await expect(page.locator('input[data-consentement="notifications_sms"]')).toBeVisible({ timeout: 8000 });
+    await expect(page.locator('#ens-donnees-conteneur')).toContainText('membre du personnel');
     await page.evaluate(() => sessionStorage.clear());                           // déconnexion pour le suivant
   }
 });
@@ -426,6 +430,10 @@ test('11. chaque parent se connecte par code SMS et ne voit que ses enfants et l
         expect(texte, `brouillon « ${ev.titre} » visible par le parent de ${el.prenom}`).not.toMatch(new RegExp(`${ev.date}|"${ev.notes[nomComplet]}"|:${ev.notes[nomComplet]}[,}]`));
       }
     }
+    // « Mes données » du parent : pas d'avertissement réservé au personnel
+    await aller(page, 'par-donnees');
+    await expect(page.locator('input[data-consentement="notifications_sms"]')).toBeVisible({ timeout: 8000 });
+    await expect(page.locator('#par-donnees-conteneur')).not.toContainText('membre du personnel');
     await page.evaluate(() => { sessionStorage.clear(); localStorage.clear(); });
   }
 });
@@ -499,4 +507,88 @@ test('13. le directeur génère les bulletins de toutes les classes, puis les va
   await expect(ligne('6ème A')).toContainText('2', { timeout: 8000 });
   await expect.poll(async () =>
     (await lire(request, `/bulletins?periode_id=${premiere}&limite=100`)).filter((b) => b.valide_at).length, { timeout: 8000 }).toBe(2);
+});
+
+// ── 14. Administration : plages horaires, SMS, agenda, sécurité, données personnelles ───
+
+test('14. le directeur règle les horaires et le plafond SMS, tient l\'agenda, surveille la sécurité et exerce ses droits RGPD', async ({ page, request }) => {
+  await seConnecterEnDirecteur(page);
+
+  // ── Plages horaires (Paramètres) : celles de l'école neuve, puis ajout et suppression ──
+  await aller(page, 'parametres');
+  const plages = page.locator('#param-plages-liste');
+  await expect(plages).toContainText('1ère heure', { timeout: 8000 });
+  await expect(plages).toContainText('Récréation');
+  await page.click('button:has-text("+ Nouvelle plage")');
+  await page.fill('#plage-numero', '12');
+  await page.fill('#plage-libelle', 'Étude du soir');
+  await page.fill('#plage-debut', '17:00');
+  await page.fill('#plage-fin', '18:00');
+  await page.click('#btn-plage-save');
+  await expect(plages).toContainText('Étude du soir', { timeout: 8000 });
+  expect((await lire(request, '/plages-horaires')).some((p) => p.libelle === 'Étude du soir')).toBe(true);
+
+  page.once('dialog', (d) => d.accept());
+  await plages.locator('tr', { hasText: 'Étude du soir' }).locator('button:has-text("Supprimer")').click();
+  await expect(plages).not.toContainText('Étude du soir', { timeout: 8000 });
+
+  // ── Plafond mensuel de SMS ──
+  await page.fill('#sms-plafond', '500');
+  await page.click('#btn-sms-plafond');
+  await expect(page.locator('#sms-etat')).toContainText('/ 500 SMS', { timeout: 8000 });
+
+  // ── Agenda : créer, modifier, supprimer ──
+  await aller(page, 'agenda');
+  await page.click('button:has-text("+ Nouvel événement")');
+  await page.fill('#agd-titre', 'Réunion de parents du 1er trimestre');
+  await page.fill('#agd-lieu', 'Salle des fêtes');
+  await page.click('#btn-evenement-save');
+  const agenda = page.locator('#tb-agenda');
+  await expect(agenda).toContainText('Réunion de parents du 1er trimestre', { timeout: 8000 });
+  await expect(agenda).toContainText('Salle des fêtes');
+
+  await agenda.locator('tr', { hasText: 'Réunion de parents' }).locator('button:has-text("Modifier")').click();
+  await page.fill('#agd-titre', 'Réunion de parents (reportée)');
+  await page.fill('#agd-lieu', '');                                   // un champ vidé doit être effacé côté serveur
+  await page.click('#btn-evenement-save');
+  await expect(agenda).toContainText('reportée', { timeout: 8000 });
+  await expect(agenda).not.toContainText('Salle des fêtes');
+
+  page.once('dialog', (d) => d.accept());
+  await agenda.locator('tr', { hasText: 'reportée' }).locator('button:has-text("Supprimer")').click();
+  await expect(agenda).not.toContainText('reportée', { timeout: 8000 });
+
+  // ── Sécurité : appareils connectés, blocage puis déblocage, journal ──
+  await aller(page, 'securite');
+  const sessions = page.locator('#tb-sessions');
+  await expect(sessions).toContainText('Diallo', { timeout: 8000 });
+  // Ses propres appareils (plusieurs : une session par connexion du parcours) : repérés « vous », jamais bloquables
+  const miennes = sessions.locator('tr', { hasText: 'Diallo' });
+  expect(await miennes.count()).toBeGreaterThanOrEqual(1);
+  await expect(miennes.first()).toContainText('vous');
+  await expect(miennes.locator('button:has-text("Bloquer")')).toHaveCount(0);
+  const enseignante = sessions.locator('tr', { hasText: 'Sow' }).first();
+  await expect(enseignante).toBeVisible();
+
+  page.once('dialog', (d) => d.accept('Absence prolongée'));
+  await enseignante.locator('button:has-text("Bloquer le compte")').click();
+  const bloques = page.locator('#tb-bloques');
+  await expect(bloques).toContainText('Sow', { timeout: 8000 });
+  await expect(sessions).not.toContainText('Sow');
+  await expect(page.locator('#tb-audit')).toContainText('Compte bloqué');
+
+  page.once('dialog', (d) => d.accept('Compte rétabli'));
+  await bloques.locator('tr', { hasText: 'Sow' }).locator('button:has-text("Débloquer")').click();
+  await expect(bloques).toContainText('Aucun compte bloqué', { timeout: 8000 });
+  await expect(page.locator('#tb-audit')).toContainText('Compte débloqué');
+
+  // ── Mes données (RGPD) : consentement enregistré côté serveur, export téléchargé ──
+  await aller(page, 'donnees');
+  await page.check('input[data-consentement="notifications_sms"]');
+  await expect.poll(async () =>
+    (await lire(request, '/utilisateurs/moi/consentements')).find((c) => c.type === 'notifications_sms')?.accorde, { timeout: 8000 }).toBe(true);
+  const [telechargement] = await Promise.all([page.waitForEvent('download'), page.click('#btn-donnees-export')]);
+  expect(telechargement.suggestedFilename()).toMatch(/^mes-donnees-\d{4}-\d{2}-\d{2}\.json$/);
+  // La suppression du compte reste verrouillée tant que le mot n'est pas tapé
+  await expect(page.locator('#btn-donnees-supprimer')).toBeDisabled();
 });

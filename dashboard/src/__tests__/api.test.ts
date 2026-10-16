@@ -84,6 +84,19 @@ describe('Api.post', () => {
   });
 });
 
+describe('Api.del', () => {
+  beforeEach(() => { vi.mocked(fetch).mockClear(); });
+
+  it('204 sans corps : succès, pas d\'erreur de lecture JSON', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      status: 204, ok: true, json: () => Promise.reject(new SyntaxError('Unexpected end of JSON input')),
+    } as unknown as Response);
+    const res = await Api.del('/evenements/1');
+    expect(res).toMatchObject({ success: true, data: null });
+    expect(fetch).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ method: 'DELETE' }));
+  });
+});
+
 describe('Api.put', () => {
   beforeEach(() => { vi.mocked(fetch).mockClear(); });
 

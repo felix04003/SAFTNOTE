@@ -113,6 +113,27 @@ router.delete('/securite/sessions/:id', auth, isoler, perm('admin.utilisateurs')
 // ═════════════════════════════════════════════════════════════════
 // POST /securite/blocage/:userId — Bloquer un compte
 // ═════════════════════════════════════════════════════════════════
+// GET /securite/comptes-bloques — comptes de l'établissement désactivés (blocage manuel ou effacement RGPD).
+// POST /securite/blocage/:userId est une bascule : sans cette liste, un compte bloqué ne pouvait être
+// retrouvé (il disparaît des listes d'enseignants et de sessions) donc jamais débloqué depuis l'interface.
+router.get('/securite/comptes-bloques', auth, isoler, perm('admin.audit'), async (req, res, next) => {
+  try {
+    const db = getDB();
+    const comptes = await db('utilisateurs as u')
+      .leftJoin('utilisateur_roles as ur', function() {
+        this.on('ur.utilisateur_id', 'u.id').andOn('ur.etablissement_id', 'u.etablissement_id');
+      })
+      .leftJoin('roles as r', 'r.id', 'ur.role_id')
+      .where({ 'u.etablissement_id': req.etablissement_id, 'u.actif': false })
+      // un compte anonymisé (droit à l'effacement) n'est pas un compte « bloqué » : on ne propose pas de le rouvrir
+      .whereNot('u.prenom', 'Anonyme')
+      .groupBy('u.id')
+      .orderBy('u.nom')
+      .select('u.id', 'u.nom', 'u.prenom', db.raw("string_agg(DISTINCT r.code, ', ') as roles"), 'u.updated_at as bloque_depuis');
+    return liste(res, comptes);
+  } catch (err) { next(err); }
+});
+
 router.post('/securite/blocage/:userId', auth, isoler, perm('admin.utilisateurs'),
   valider(z.object({
     motif: z.string().min(5).max(200),

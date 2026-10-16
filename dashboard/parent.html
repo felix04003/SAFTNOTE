@@ -36,6 +36,7 @@
     <a class="nav-item" data-page="par-notes"     onclick="goto('par-notes')"    ><span class="nav-ico">📝</span>Notes & résultats</a>
     <a class="nav-item" data-page="par-absences"  onclick="goto('par-absences')" ><span class="nav-ico">✅</span>Absences</a>
     <a class="nav-item" data-page="par-bulletins" onclick="goto('par-bulletins')"><span class="nav-ico">📄</span>Bulletins</a>
+    <a class="nav-item" data-page="par-donnees" onclick="goto('par-donnees')"><span class="nav-ico">🔒</span>Mes données</a>
   </nav>
   <div class="sb-user">
     <div class="u-avatar" id="sb-user-avatar">P</div>
@@ -138,6 +139,12 @@
         <div><div class="ph-titre">Bulletins scolaires</div><div class="ph-sous" id="par-bulletins-sous">—</div></div>
       </div>
       <div id="par-bulletins-liste"></div>
+    </div>
+
+    <!-- ═══ PAGE MES DONNÉES (RGPD) ═══ -->
+    <div class="page" id="page-par-donnees">
+      <div class="ph"><div><div class="ph-titre">Mes données personnelles</div><div class="ph-sous">Consentements, export et suppression de votre compte</div></div></div>
+      <div id="par-donnees-conteneur"></div>
     </div>
 
   </div><!-- /.content -->

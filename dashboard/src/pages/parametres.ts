@@ -1,6 +1,8 @@
 import { Api } from '../api';
 import { escapeHtml, toast, openModal, closeModal } from '../ui';
 import { PAGE_HOOKS } from '../router';
+import { PagePlages } from './plages';
+import { PageSms } from './sms';
 
 export const PageParametres: any = {
   async charger() {
@@ -294,7 +296,7 @@ export const PageParametres: any = {
     }
   },
 
-  init: function() { this.charger(); this.chargerPolitique(); }
+  init: function() { this.charger(); this.chargerPolitique(); PagePlages.charger(); PageSms.charger(); }
 };
 
 (window as any).PageParametres = PageParametres;

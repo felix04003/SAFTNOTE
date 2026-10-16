@@ -3,6 +3,7 @@ export const PAR_TITRES: Record<string, string> = {
   'par-notes':     'Mes notes',
   'par-absences':  'Absences',
   'par-bulletins': 'Bulletins',
+  'par-donnees':   'Mes données',
 };
 
 export const PAR_HOOKS: Record<string, () => void> = {};

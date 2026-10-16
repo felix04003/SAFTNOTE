@@ -39,6 +39,8 @@
     <a class="nav-item" data-page="ens-edt" onclick="goto('ens-edt')"><span class="nav-ico">🗓️</span>Mon EDT</a>
     <div class="nav-sec">Vie scolaire</div>
     <a class="nav-item" data-page="ens-discipline" onclick="goto('ens-discipline')"><span class="nav-ico">⚠️</span>Discipline</a>
+    <div class="nav-sec">Mon compte</div>
+    <a class="nav-item" data-page="ens-donnees" onclick="goto('ens-donnees')"><span class="nav-ico">🔒</span>Mes données</a>
   </nav>
   <div class="sb-user">
     <div class="u-avatar" id="sb-user-avatar">?</div>
@@ -198,6 +200,12 @@
       <div class="carte">
         <div id="ens-edt-grid" style="padding:16px"></div>
       </div>
+    </div>
+
+    <!-- ═══ PAGE MES DONNÉES (RGPD) ═══ -->
+    <div class="page" id="page-ens-donnees">
+      <div class="ph"><div><div class="ph-titre">Mes données personnelles</div><div class="ph-sous">Consentements, export et suppression de votre compte</div></div></div>
+      <div id="ens-donnees-conteneur"></div>
     </div>
 
     <!-- ═══ PAGE DISCIPLINE ═══ -->

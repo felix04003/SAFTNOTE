@@ -5,6 +5,7 @@ export const ENS_TITRES: Record<string, string> = {
   'ens-edt':        "Mon emploi du temps",
   'ens-appel':      "Faire l'appel",
   'ens-discipline': 'Discipline',
+  'ens-donnees':    'Mes données',
 };
 
 export const PAGE_HOOKS: Record<string, () => void> = {};

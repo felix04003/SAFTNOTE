@@ -125,6 +125,10 @@ export const Api = {
       throw new ApiError('Non autorisé', 'UNAUTHORIZED', 401);
     }
 
+    // 204 No Content (DELETE réussi) : pas de corps, `res.json()` lèverait une SyntaxError et l'interface
+    // afficherait une erreur alors que la suppression a réussi
+    if (res.status === 204) return { success: true, data: null } as unknown as T;
+
     const data = await res.json();
     if (generation !== generationSession) return jamais<T>();
 

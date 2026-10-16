@@ -360,6 +360,7 @@ function createIntegrationApp() {
   const pedagogieRouter   = require('../../src/domains/03-pedagogie/pedagogie.routes');
   const vieScolaireRouter = require('../../src/domains/04-vie-scolaire/vie-scolaire.routes');
   const securiteRouter    = require('../../src/domains/05-securite/securite.routes');
+  const rgpdRouter        = require('../../src/domains/02-acteurs/auth/rgpd.routes');
 
   const app = express();
   app.use(express.json({ limit: '10mb' }));
@@ -375,6 +376,7 @@ function createIntegrationApp() {
   app.use(PREFIX, pedagogieRouter);
   app.use(PREFIX, vieScolaireRouter);
   app.use(PREFIX, securiteRouter);
+  app.use(PREFIX, rgpdRouter);
 
   app.use(notFound);
   app.use(errorHandler);

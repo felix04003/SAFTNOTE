@@ -10,5 +10,8 @@ import './pages/ens-classes';
 import './pages/ens-discipline';
 import './pages/ens-edt';
 import './pages/ens-dashboard';
+import { PAGE_HOOKS } from './ens-router';
+import { PageDonnees } from './pages/donnees';
+PAGE_HOOKS['ens-donnees'] = () => PageDonnees.monter('ens-donnees-conteneur');
 import './reseau';
 import './ens-app';

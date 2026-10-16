@@ -46,7 +46,10 @@
     <div class="nav-sec">Vie scolaire</div>
     <a class="nav-item" data-page="absences" onclick="goto('absences')"><span class="nav-ico">📅</span>Absences</a>
     <a class="nav-item" data-page="edt" onclick="goto('edt')"><span class="nav-ico">🗓️</span>Emploi du temps</a>
+    <a class="nav-item" data-page="agenda" onclick="goto('agenda')"><span class="nav-ico">📅</span>Agenda</a>
     <div class="nav-sec">Administration</div>
+    <a class="nav-item" data-page="securite" onclick="goto('securite')"><span class="nav-ico">🛡️</span>Sécurité</a>
+    <a class="nav-item" data-page="donnees" onclick="goto('donnees')"><span class="nav-ico">🔒</span>Mes données</a>
     <a class="nav-item" data-page="parametres" onclick="goto('parametres')"><span class="nav-ico">⚙️</span>Paramètres</a>
   </nav>
   <div class="sb-user">
@@ -237,6 +240,55 @@
       <div id="cls-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px"></div>
     </div>
 
+    <!-- ═══ PAGE AGENDA ═══ -->
+    <div class="page" id="page-agenda">
+      <div class="ph">
+        <div><div class="ph-titre">Agenda de l'établissement</div><div class="ph-sous" id="ph-sous-agenda"></div></div>
+        <div style="display:flex;gap:9px">
+          <select class="fs" id="agenda-filtre" style="width:160px" onchange="PageAgenda.changerFiltre(this.value)">
+            <option value="a_venir">À venir</option><option value="tous">Tous</option>
+          </select>
+          <button class="btn btn-p" onclick="PageAgenda.ouvrir()">+ Nouvel événement</button>
+        </div>
+      </div>
+      <div class="carte"><div class="tw"><table><thead><tr><th>Événement</th><th>Type</th><th>Quand</th><th>Lieu</th><th>Parents</th><th>Actions</th></tr></thead><tbody id="tb-agenda"></tbody></table></div></div>
+    </div>
+
+    <!-- ═══ PAGE SÉCURITÉ ═══ -->
+    <div class="page" id="page-securite">
+      <div class="ph"><div><div class="ph-titre">Sécurité</div><div class="ph-sous">Journal d'audit, appareils connectés et comptes bloqués</div></div></div>
+      <div class="carte" style="margin-bottom:18px">
+        <div class="ch"><span>📱</span><span class="ct">Appareils connectés</span></div>
+        <div class="tw"><table><thead><tr><th>Utilisateur</th><th>Appareil</th><th>Adresse IP</th><th>Dernière activité</th><th></th></tr></thead><tbody id="tb-sessions"></tbody></table></div>
+      </div>
+      <div class="carte" style="margin-bottom:18px">
+        <div class="ch"><span>🚫</span><span class="ct">Comptes bloqués</span></div>
+        <div class="tw"><table><thead><tr><th>Nom</th><th>Rôle</th><th>Bloqué depuis</th><th></th></tr></thead><tbody id="tb-bloques"></tbody></table></div>
+      </div>
+      <div class="carte">
+        <div class="ch"><span>🗒️</span><span class="ct">Journal d'audit</span>
+          <select class="fs" id="audit-filtre" style="width:200px;margin-left:auto" onchange="PageSecurite.filtrerAudit(this.value)">
+            <option value="">Toutes les actions</option>
+            <option value="utilisateurs.bloquer">Comptes bloqués</option>
+            <option value="utilisateurs.debloquer">Comptes débloqués</option>
+            <option value="securite.politique">Politique de sécurité</option>
+          </select>
+        </div>
+        <div class="tw"><table><thead><tr><th>Date</th><th>Par</th><th>Action</th><th>Objet</th><th>Résultat</th><th>IP</th></tr></thead><tbody id="tb-audit"></tbody></table></div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 16px">
+          <button class="btn btn-l btn-sm" id="audit-prec" onclick="PageSecurite.pageAudit(-1)">← Précédent</button>
+          <span id="audit-pagination" style="font-size:12px;color:var(--g500)"></span>
+          <button class="btn btn-l btn-sm" id="audit-suiv" onclick="PageSecurite.pageAudit(1)">Suivant →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ PAGE MES DONNÉES (RGPD) ═══ -->
+    <div class="page" id="page-donnees">
+      <div class="ph"><div><div class="ph-titre">Mes données personnelles</div><div class="ph-sous">Consentements, export et suppression de votre compte</div></div></div>
+      <div id="donnees-conteneur"></div>
+    </div>
+
     <!-- ═══ PAGE PARAMÈTRES ═══ -->
     <div class="page" id="page-parametres">
       <div class="ph"><div><div class="ph-titre">Paramètres</div><div class="ph-sous">Configuration de l'établissement</div></div><button id="btn-param-save" class="btn btn-p" onclick="PageParametres.sauvegarder()">💾 Enregistrer</button></div>
@@ -278,7 +330,24 @@
               <div class="fr"><div class="fg"><label class="fl" for="pol-mdp-longueur">Longueur minimale du mot de passe (8 à 32)</label><input class="fi" id="pol-mdp-longueur" type="number" min="8" max="32"></div><div class="fg"><label class="fl" for="pol-sessions">Appareils connectés en même temps (1 à 5)</label><input class="fi" id="pol-sessions" type="number" min="1" max="5"></div></div>
               <div class="fr"><div class="fg"><label class="fl" for="pol-tentatives">Tentatives avant blocage (3 à 10)</label><input class="fi" id="pol-tentatives" type="number" min="3" max="10"></div><div class="fg"><label class="fl" for="pol-blocage">Durée du blocage en minutes (5 à 120)</label><input class="fi" id="pol-blocage" type="number" min="5" max="120"></div></div>
               <div style="font-size:11.5px;color:var(--g500);margin-bottom:12px">Un mot de passe contient toujours une minuscule, une majuscule et un chiffre ; cette règle ne peut pas être assouplie. Chaque modification est inscrite au journal d'audit.</div>
-              <button class="btn btn-d btn-sm" onclick="toast('Journal exporté','s')">📥 Journal d'audit</button>
+              <button class="btn btn-d btn-sm" onclick="goto('securite')">🗒️ Voir le journal d'audit</button>
+            </div>
+          </div>
+          <!-- Plages horaires -->
+          <div class="carte" style="margin-top:18px">
+            <div class="ch"><span>⏰</span><span class="ct">Plages horaires</span>
+              <button class="btn btn-p btn-sm" onclick="PagePlages.ouvrir()" style="margin-left:auto">+ Nouvelle plage</button></div>
+            <div class="cb"><div id="param-plages-liste" style="min-height:40px"><div style="color:var(--g400);font-size:13px;padding:10px">Chargement…</div></div></div>
+          </div>
+          <!-- SMS -->
+          <div class="carte" style="margin-top:18px">
+            <div class="ch"><span>💬</span><span class="ct">SMS de notification</span>
+              <button id="btn-sms-plafond" class="btn btn-p btn-sm" onclick="PageSms.enregistrer()" style="margin-left:auto">Enregistrer</button></div>
+            <div class="cb">
+              <div id="sms-etat" style="font-size:13px;margin-bottom:8px">Chargement…</div>
+              <div class="pb" style="height:8px;margin-bottom:12px"><div class="pf" id="sms-barre" style="width:0%;--c:var(--vert)"></div></div>
+              <div class="fg"><label class="fl" for="sms-plafond">Plafond mensuel (nombre de SMS ; 0 = illimité)</label><input class="fi" id="sms-plafond" type="number" min="0" max="100000"></div>
+              <div style="font-size:11.5px;color:var(--g500)">À 80 % le directeur est prévenu ; à 100 % les notes et bulletins ne sont plus envoyés par SMS (les absences et sanctions le sont encore) ; à 150 % plus rien. Les codes de connexion ne sont jamais limités.</div>
             </div>
           </div>
           <!-- Matières -->
@@ -638,6 +707,58 @@
     <div class="mf">
       <button class="btn btn-l" onclick="closeModal('m-affectations')">Fermer</button>
     </div>
+  </div>
+</div>
+
+<!-- MODAL ÉVÉNEMENT -->
+<div class="mo" id="m-evenement">
+  <div class="modal" style="max-width:520px">
+    <div class="mh"><span style="font-size:19px">📅</span><span class="mt" id="agd-modal-titre">Nouvel événement</span><button class="mc" onclick="closeModal('m-evenement')">✕</button></div>
+    <div class="mb">
+      <div class="login-err" id="agd-err" role="alert"></div>
+      <div class="fg"><label class="fl" for="agd-titre">Titre *</label><input id="agd-titre" class="fi" placeholder="Réunion de parents du 1er trimestre"></div>
+      <div class="fg"><label class="fl" for="agd-type">Type *</label>
+        <select id="agd-type" class="fs">
+          <option value="reunion_parents">Réunion de parents</option><option value="sortie_scolaire">Sortie scolaire</option>
+          <option value="examen_officiel">Examen officiel</option><option value="conseil_classe">Conseil de classe</option>
+          <option value="conseil_discipline">Conseil de discipline</option><option value="journee_sportive">Journée sportive</option>
+          <option value="journee_portes_ouvertes">Portes ouvertes</option><option value="conge">Congé</option>
+          <option value="formation_enseignants">Formation des enseignants</option><option value="autre">Autre</option>
+        </select></div>
+      <div class="fr">
+        <div class="fg"><label class="fl" for="agd-debut">Du *</label><input id="agd-debut" class="fi" type="date"></div>
+        <div class="fg"><label class="fl" for="agd-fin">Au</label><input id="agd-fin" class="fi" type="date"></div>
+      </div>
+      <div class="fr">
+        <div class="fg"><label class="fl" for="agd-heure-debut">De</label><input id="agd-heure-debut" class="fi" type="time"></div>
+        <div class="fg"><label class="fl" for="agd-heure-fin">À</label><input id="agd-heure-fin" class="fi" type="time"></div>
+      </div>
+      <div class="fg"><label class="fl" for="agd-lieu">Lieu</label><input id="agd-lieu" class="fi"></div>
+      <div class="fg"><label class="fl" for="agd-description">Description</label><textarea id="agd-description" class="fi" rows="3"></textarea></div>
+      <label style="display:flex;gap:8px;align-items:center;font-size:13px"><input type="checkbox" id="agd-notif"> Prévenir les parents avant l'événement</label>
+      <div style="font-size:11.5px;color:var(--g500);margin-top:6px">L'événement concerne tout l'établissement.</div>
+    </div>
+    <div class="mf"><button class="btn btn-l" onclick="closeModal('m-evenement')">Annuler</button><button id="btn-evenement-save" class="btn btn-p" onclick="PageAgenda.enregistrer()">Enregistrer</button></div>
+  </div>
+</div>
+
+<!-- MODAL PLAGE HORAIRE -->
+<div class="mo" id="m-plage">
+  <div class="modal" style="max-width:420px">
+    <div class="mh"><span style="font-size:19px">⏰</span><span class="mt" id="plage-modal-titre">Nouvelle plage horaire</span><button class="mc" onclick="closeModal('m-plage')">✕</button></div>
+    <div class="mb">
+      <div class="login-err" id="plage-err" role="alert"></div>
+      <div class="fr">
+        <div class="fg"><label class="fl" for="plage-numero">Numéro *</label><input id="plage-numero" class="fi" type="number" min="1" max="20"></div>
+        <div class="fg"><label class="fl" for="plage-libelle">Libellé</label><input id="plage-libelle" class="fi" maxlength="30" placeholder="1ère heure"></div>
+      </div>
+      <div class="fr">
+        <div class="fg"><label class="fl" for="plage-debut">Début *</label><input id="plage-debut" class="fi" type="time"></div>
+        <div class="fg"><label class="fl" for="plage-fin">Fin *</label><input id="plage-fin" class="fi" type="time"></div>
+      </div>
+      <label style="display:flex;gap:8px;align-items:center;font-size:13px"><input type="checkbox" id="plage-pause"> Pause (récréation, déjeuner) : pas de cours</label>
+    </div>
+    <div class="mf"><button class="btn btn-l" onclick="closeModal('m-plage')">Annuler</button><button id="btn-plage-save" class="btn btn-p" onclick="PagePlages.enregistrer()">Enregistrer</button></div>
   </div>
 </div>
 

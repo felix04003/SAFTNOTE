@@ -9,3 +9,6 @@ import './pages/par-dashboard';
 import './pages/par-notes';
 import './pages/par-absences';
 import './pages/par-bulletins';
+import { PAR_HOOKS } from './par-router';
+import { PageDonnees } from './pages/donnees';
+PAR_HOOKS['par-donnees'] = () => PageDonnees.monter('par-donnees-conteneur');
