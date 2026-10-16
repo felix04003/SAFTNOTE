@@ -23,7 +23,8 @@ require('dotenv').config();
 
 const { Worker }                 = require('bullmq');
 const { connectDB, getDB }       = require('../infrastructure/database/pool');
-const { connectRedis, getRedis } = require('../infrastructure/cache/redis');
+const { connectRedis, getRedis, createBullMQConnection, invalidatePattern } = require('../infrastructure/cache/redis');
+const { recalculerMoyennesClasse } = require('../domains/03-pedagogie/moyennes/calcul-moyennes.service');
 const logger                     = require('../utils/logger');
 
 const CONCURRENCE = parseInt(process.env.WORKER_MOYENNES_CONCURRENCE) || 2;
@@ -54,72 +55,33 @@ async function traiterCalcul(job) {
     return { skipped: true, reason: 'periode_id_manquant' };
   }
 
-  await job.updateProgress(5);
-
-  // 1. Inscriptions actives
-  const inscriptions = await db('inscriptions')
-    .where({ classe_id, statut: 'actif' })
-    .select('id', 'eleve_id');
-
-  if (!inscriptions.length) {
-    return { skipped: true, reason: 'aucune_inscription', classe_id };
+  // La classe doit appartenir à l'établissement du job (même garde que POST /moyennes/calculer)
+  const classe = await db('classes as c')
+    .join('annees_scolaires as a', 'a.id', 'c.annee_scolaire_id')
+    .where({ 'c.id': classe_id, 'a.etablissement_id': etablissement_id })
+    .first('c.id');
+  if (!classe) {
+    logger.warn('calcul-moyennes: classe introuvable pour cet établissement', { job_id: job.id, classe_id });
+    return { skipped: true, reason: 'classe_introuvable', classe_id };
   }
-
-  // 2. Matières à calculer
-  let matieres;
-  if (matiere_id) {
-    matieres = [{ matiere_id }];
-  } else {
-    const affectations = await db('affectations')
-      .where({ classe_id, etablissement_id })
-      .distinct('matiere_id')
-      .select('matiere_id');
-    matieres = affectations;
-  }
-
-  const nbInsc     = inscriptions.length;
-  const nbMatieres = matieres.length;
-  const totalSteps = nbInsc * nbMatieres + nbInsc;
-  let done = 0;
 
   await job.updateProgress(10);
 
-  // 3. Moyennes par matière (10–90 %)
-  for (const { matiere_id: mid } of matieres) {
-    for (const insc of inscriptions) {
-      try {
-        await db.raw('SELECT calculer_moyenne_matiere(?, ?, ?)', [insc.id, mid, periode_id]);
-      } catch (err) {
-        logger.warn('calcul-moyennes: erreur matière', {
-          inscription_id: insc.id, matiere_id: mid, periode_id, error: err.message,
-        });
-      }
-      done++;
-      await job.updateProgress(10 + Math.round((done / totalSteps) * 80));
-    }
-  }
-
-  // 4. Moyennes générales (90–100 %)
-  for (const insc of inscriptions) {
-    try {
-      await db.raw('SELECT calculer_moyenne_generale(?, ?)', [insc.id, periode_id]);
-    } catch (err) {
-      logger.warn('calcul-moyennes: erreur générale', {
-        inscription_id: insc.id, periode_id, error: err.message,
-      });
-    }
-    done++;
-    const pctGenerales = (done - nbInsc * nbMatieres) / nbInsc;
-    await job.updateProgress(90 + Math.round(pctGenerales * 10));
-  }
+  // Le calcul lui-même est partagé avec POST /moyennes/calculer (une seule implémentation)
+  const { nbCalculees, inscriptions, matieres } = await recalculerMoyennesClasse(db, { classe_id, periode_id, matiere_id });
 
   await job.updateProgress(100);
+
+  if (!inscriptions.length) return { skipped: true, reason: 'aucune_inscription', classe_id };
+
+  try { await invalidatePattern(`moyennes_classe:${classe_id}`); } catch { /* Redis indisponible : pas critique */ }
 
   const result = {
     classe_id,
     periode_id,
-    nb_inscriptions: nbInsc,
-    nb_matieres:     nbMatieres,
+    nb_inscriptions: inscriptions.length,
+    nb_matieres:     matieres.length,
+    nb_moyennes:     nbCalculees,
   };
 
   logger.info('Moyennes calculées', result);
@@ -141,7 +103,9 @@ async function init() {
   logger.info('calcul-moyennes: Redis connecté');
 
   const worker = new Worker('calcul-moyennes', traiterCalcul, {
-    connection:  getRedis(),
+    // BullMQ exige maxRetriesPerRequest: null : le client de cache (getRedis) fait échouer le démarrage
+    // (« BullMQ: Your redis options maxRetriesPerRequest must be null ») — ce worker n'avait donc jamais pu tourner
+    connection:  createBullMQConnection(),
     concurrency: CONCURRENCE,
   });
 
@@ -172,7 +136,11 @@ async function init() {
   process.on('SIGINT',  () => shutdown('SIGINT'));
 }
 
-init().catch(err => {
-  logger.error('calcul-moyennes: échec démarrage', { error: err.message });
-  process.exit(1);
-});
+// Seulement lancé comme programme (node …/calcul-moyennes.worker.js, ou fork du lanceur) : un simple require()
+// — tests, import de traiterCalcul — ne doit pas ouvrir de connexions ni démarrer de Worker.
+if (require.main === module) {
+  init().catch(err => {
+    logger.error('calcul-moyennes: échec démarrage', { error: err.message });
+    process.exit(1);
+  });
+}

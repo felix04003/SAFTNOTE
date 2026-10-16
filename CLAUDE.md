@@ -69,7 +69,7 @@ ecolemanager/
 │   │   │   ├── notifications/      ✅ SMS (Africa's Talking) + WhatsApp
 │   │   │   └── storage/            ✅ Cloudflare R2 / S3
 │   │   ├── middleware/             ✅ auth JWT, erreurs, rate-limit, validation
-│   │   ├── workers/                ✅ notification.worker.js (câblage BullMQ) + notification.processor.js (traitement, testé sur base réelle)
+│   │   ├── workers/                ✅ notification.worker.js (câblage BullMQ) + notification.processor.js (traitement, testé sur base réelle) ; calcul-moyennes.worker.js (délègue à moyennes/calcul-moyennes.service.js, partagé avec POST /moyennes/calculer) ; generation-bulletins.worker.js (PDF, Chromium) ; lanceur.js (les trois dans un seul service : `npm run workers`)
 │   │   └── utils/                  ✅ helpers divers
 │   ├── tests/                     ✅ 379 tests unitaires (40 suites Jest) + tests d'intégration
 │   │   ├── helpers/               ✅ mockKnex, testApp, fixtures
@@ -435,6 +435,7 @@ META_WA_TOKEN         → WhatsApp Business API
 14. **Notifications SMS** : le traitement vit dans `workers/notification.processor.js` (testable) ; `notification.worker.js` ne fait que le câblage BullMQ. Un report d'envoi (`statut: 'delayed'`) se fait dans le worker par `job.moveToDelayed(date, jeton)` puis `throw new DelayedError()` (BullMQ 5). Un job `nouvelle_note`/`absence`/`sanction` DOIT porter `inscription_id` (le worker retrouve le parent par l'inscription). Une panne du journal après l'envoi ne doit jamais faire échouer le job (le SMS serait renvoyé et refacturé). Les tests unitaires du worker sont simulés : toute modification de ses requêtes SQL se vérifie avec `tests/integration/notifications-worker.integration.test.js`
 15. **Plafond SMS** : `politique_securite.sms_plafond_mensuel` (0 = illimité, défaut 3000 segments/mois) borne les SMS de NOTIFICATION via `infrastructure/notifications/plafond-sms.js` (80 % → alerte directeur, 100 % → notes/bulletins bloqués, 150 % → tout bloqué). Ne jamais y soumettre le code de connexion ni le mot de passe provisoire. Réglage : `PUT /notifications/sms/plafond`, suivi : `GET /notifications/sms/consommation`
 16. **Tests manuels** : `npm run test:integration` crée puis SUPPRIME la base `ecole_manager_test` ; utiliser un autre nom de base pour des essais à la main, et lancer `redis-server --dir /tmp` (jamais depuis le dépôt : `dump.rdb`)
+17. **Workers en production** : SMS de notification, calcul des moyennes après publication et PDF de bulletins passent par des files BullMQ (Redis) et ne s'exécutent QUE si un worker tourne : Render = service `ecolemanager-workers` (payant, Docker, `lanceur.js`) + `ecolemanager-redis` ; VPS = `worker-notif`, `worker-moyennes`, `worker-bulletins` de `docker-compose.prod.yml`. Un nouveau worker : un fichier `src/workers/*.worker.js` démarré seulement si `require.main === module`, une entrée dans `lanceur.js` ET dans les deux fichiers de déploiement. Le calcul des moyennes n'existe qu'une fois (`calcul-moyennes.service.js`) : ne jamais le recopier dans un worker
 
 ---
 
