@@ -307,7 +307,7 @@ const options = {
         },
         post: {
           tags: ['Identites'], summary: 'Creer une nouvelle annee scolaire',
-          description: 'L\'annee courante precedente est automatiquement desactivee. Permission : config.annee_scolaire',
+          description: 'Cree la premiere annee d\'un etablissement. Refuse (409 PASSAGE_REQUIS) tant que des eleves sont inscrits : utiliser POST /annees-scolaires/passage. Permission : config.annee_scolaire',
           requestBody: { required: true, content: { 'application/json': { schema: {
             type: 'object', required: ['libelle', 'date_debut', 'date_fin'],
             properties: {
@@ -321,7 +321,7 @@ const options = {
               }}},
             },
           }}}},
-          responses: { 201: { description: 'Annee scolaire creee' } },
+          responses: { 201: { description: 'Annee scolaire creee' }, 409: { description: 'PASSAGE_REQUIS : des eleves sont inscrits' } },
         },
       },
       '/annees-scolaires/courante': {
@@ -357,6 +357,7 @@ const options = {
             { name: 'classe_id', in: 'query', schema: { type: 'string', format: 'uuid' } },
             { name: 'niveau_id', in: 'query', schema: { type: 'string', format: 'uuid' } },
             { name: 'recherche', in: 'query', schema: { type: 'string' }, description: 'Recherche par nom, prenom ou matricule' },
+            { name: 'statut', in: 'query', schema: { type: 'string', enum: ['retires'] }, description: 'retires : transferes, abandons et exclusions (pour les reintegrer). Sans valeur : eleves inscrits.' },
           ],
           responses: { 200: { description: 'Liste paginee', content: { 'application/json': { schema: { $ref: '#/components/schemas/PaginatedResponse' } } } } },
         },
@@ -507,9 +508,12 @@ const options = {
       '/parents/moi/enfants/{id}/bulletins': {
         get: {
           tags: ['Parents'], summary: 'Bulletins d\'un enfant',
-          description: 'Bulletins valides avec detail des matieres.',
-          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
-          responses: { 200: { description: 'Bulletins complets' }, 403: { description: 'Pas autorise a voir les bulletins' } },
+          description: 'Bulletins valides avec detail des matieres. Sans annee_id : annee courante, ou la plus recente pour un eleve sorti (diplome). La reponse liste `annees` (celles ou l\'enfant a ete inscrit) et `annee_id`.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+            { name: 'annee_id', in: 'query', schema: { type: 'string', format: 'uuid' }, description: 'Annee cloturee a consulter' },
+          ],
+          responses: { 200: { description: 'Bulletins complets' }, 403: { description: 'Pas autorise a voir les bulletins' }, 404: { description: 'Aucune inscription de l\'enfant cette annee-la' }, 422: { description: 'annee_id invalide' } },
         },
       },
 
@@ -819,14 +823,6 @@ const options = {
           responses: { 200: { description: 'Sanction modifiee' } },
         },
       },
-      '/discipline/eleve/{eleveId}': {
-        get: {
-          tags: ['Discipline'], summary: 'Dossier disciplinaire d\'un eleve',
-          description: 'Incidents + sanctions. Permission : discipline.voir',
-          parameters: [{ name: 'eleveId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
-          responses: { 200: { description: 'Dossier disciplinaire complet' } },
-        },
-      },
 
       // ════════════════════════════════════════════════
       // EVENEMENTS
@@ -996,6 +992,6 @@ const options = {
   apis: [], // No JSDoc annotations — all paths defined inline above
 };
 
-const swaggerSpec = swaggerJsdoc(options);
+const swaggerSpec = require('./swagger-complements').fusionner(swaggerJsdoc(options));
 
 module.exports = swaggerSpec;

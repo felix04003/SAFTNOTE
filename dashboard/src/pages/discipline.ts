@@ -1,5 +1,5 @@
 import { Api } from '../api';
-import { escapeHtml, toast, openModal, closeModal } from '../ui';
+import { escapeHtml, toast, openModal, closeModal, exporterCsv } from '../ui';
 import { PAGE_HOOKS } from '../router';
 
 export const TYPES_SANCTION: Record<string, string> = {
@@ -122,6 +122,10 @@ export const PageDiscipline: any = {
         '<button class="btn btn-l btn-sm" ' + (meta.page <= 1 ? 'disabled' : 'onclick="PageDiscipline.page(-1)"') + '>← Préc.</button>' +
         '<button class="btn btn-p btn-sm" ' + (meta.page >= meta.pages ? 'disabled' : 'onclick="PageDiscipline.page(1)"') + '>Suiv. →</button></div>';
     }
+  },
+
+  exporter() {
+    return exporterCsv('/exports/sanctions.csv', { classe_id: this._classeId || undefined, type: this._type || undefined });
   },
 
   async chargerEleves(classeId: string) {

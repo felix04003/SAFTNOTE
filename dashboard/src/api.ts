@@ -84,7 +84,7 @@ export const Api = {
     path: string,
     body?: any,
     params?: Record<string, any>,
-    opts: { dejaRafraichi?: boolean } = {}
+    opts: { dejaRafraichi?: boolean; brut?: boolean } = {}
   ): Promise<T> {
     const generation = generationSession;
     const token = sessionStorage.getItem(CONFIG.TOKEN_KEY);
@@ -108,7 +108,7 @@ export const Api = {
       if (!opts.dejaRafraichi) {
         const rafraichi = await Api.tenterRafraichissement();
         if (rafraichi) {
-          return Api.request<T>(method, path, body, params, { dejaRafraichi: true });
+          return Api.request<T>(method, path, body, params, { ...opts, dejaRafraichi: true });
         }
       }
       // Session définitivement perdue : la purger AVANT de rediriger. Sinon
@@ -128,6 +128,9 @@ export const Api = {
     // 204 No Content (DELETE réussi) : pas de corps, `res.json()` lèverait une SyntaxError et l'interface
     // afficherait une erreur alors que la suppression a réussi
     if (res.status === 204) return { success: true, data: null } as unknown as T;
+
+    // Fichier (export CSV) : la réponse n'est pas du JSON ; les erreurs, elles, restent du JSON et suivent le chemin normal
+    if (opts.brut && res.ok) return res as unknown as T;
 
     const data = await res.json();
     if (generation !== generationSession) return jamais<T>();
@@ -154,6 +157,12 @@ export const Api = {
 
   get<T = any>(path: string, params?: Record<string, any>): Promise<ApiResponse<T>> {
     return Api.request<ApiResponse<T>>('GET', path, undefined, params);
+  },
+  /** Télécharge un fichier (export) avec la session courante : { nom, contenu } */
+  async telecharger(path: string, params?: Record<string, any>): Promise<{ nom: string; contenu: Blob }> {
+    const res = await Api.request<Response>('GET', path, undefined, params, { brut: true });
+    const nom = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '')?.[1] || 'export.csv';
+    return { nom, contenu: await res.blob() };
   },
   post<T = any>(path: string, body: any): Promise<ApiResponse<T>> {
     return Api.request<ApiResponse<T>>('POST', path, body);

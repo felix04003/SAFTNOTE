@@ -1,5 +1,5 @@
 import { Api } from '../api';
-import { escapeHtml, jsArg, cn, init2, toast, openModal, closeModal } from '../ui';
+import { escapeHtml, jsArg, cn, init2, toast, openModal, closeModal, exporterCsv } from '../ui';
 import { PAGE_HOOKS } from '../router';
 
 export const PageEleves: any = {
@@ -118,6 +118,8 @@ export const PageEleves: any = {
       '<button class="btn btn-l btn-sm" onclick="PageEleves.retirer(\'' + id + '\',' + nom + ')">Retirer</button>';
   },
 
+  /** Exporte la liste affichée (classe et inscrits/retirés choisis) */
+  exporter: function() { return exporterCsv('/exports/eleves.csv', { statut: this.statut || 'actif', classe_id: this.classeId || undefined }); },
   filtrerStatut: function(statut: string) { this.statut = statut; this.page = 1; this.charger(); },
 
   // ── Modifier ──
