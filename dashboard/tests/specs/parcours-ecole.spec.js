@@ -674,3 +674,102 @@ test('16. le directeur nomme un second directeur, qui se connecte et change son 
   await aller(page, 'securite');                                                  // il a bien les droits de direction
   await expect(page.locator('#tb-audit')).toContainText('Directeur nommé', { timeout: 8000 });
 });
+
+// ── 17. Corriger l'inscription : élèves, classes, matières ─────────────────
+
+test('17. le directeur modifie et retire un élève, modifie et archive une classe et une matière', async ({ page, request }) => {
+  await seConnecterEnDirecteur(page);
+  const toasts = page.locator('#toast-container');
+
+  // ── Élève : changer sa classe et corriger son prénom ──
+  await aller(page, 'eleves');
+  const ligne = (texte) => page.locator('#tb-eleves tr', { hasText: texte });
+  await expect(ligne('Cheikh')).toBeVisible({ timeout: 8000 });
+  const cheikh = (await lire(request, '/eleves?recherche=Cheikh'))[0];
+  const avant = await lire(request, `/eleves/${cheikh.id}`);
+  expect(avant.classe).toContain('5ème B');
+
+  await ligne('Cheikh').locator('button:has-text("Modifier")').click();
+  await expect(page.locator('#m-eleve-modif')).toHaveClass(/open/);
+  await expect(page.locator('#emod-nom')).toHaveValue('Fall', { timeout: 8000 });
+  await page.fill('#emod-prenom', 'Cheikh Omar');
+  await choisir(page, '#emod-classe', '6ème A');
+  await page.click('#btn-eleve-modif');
+  await expect(page.locator('#m-eleve-modif')).not.toHaveClass(/open/, { timeout: 8000 });
+  await expect(ligne('Cheikh Omar')).toContainText('6ème A', { timeout: 8000 });
+  const apres = await lire(request, `/eleves/${cheikh.id}`);
+  expect(apres.prenom).toBe('Cheikh Omar');
+  expect(apres.classe).toContain('6ème A');
+
+  // ── Élève : retrait (transfert), visible dans « Retirés », puis réintégration ──
+  await ligne('Cheikh Omar').locator('button:has-text("Retirer")').click();
+  await page.click('#btn-eleve-retrait');                                   // sans motif : refusé
+  await expect(toasts).toContainText('motif', { timeout: 5000 });
+  await page.fill('#ret-motif', 'Déménagement à Dakar');
+  await page.click('#btn-eleve-retrait');
+  await expect(ligne('Cheikh Omar')).toHaveCount(0, { timeout: 8000 });
+
+  await page.selectOption('#sel-statut-eleves', 'retires');
+  await expect(ligne('Cheikh Omar')).toContainText('Transféré', { timeout: 8000 });
+  await expect(ligne('Cheikh Omar').locator('button:has-text("Modifier")')).toHaveCount(0);
+  page.once('dialog', (d) => d.accept());
+  await ligne('Cheikh Omar').locator('button:has-text("Réintégrer")').click();
+  await expect(ligne('Cheikh Omar')).toHaveCount(0, { timeout: 8000 });
+  await page.selectOption('#sel-statut-eleves', '');
+  await expect(ligne('Cheikh Omar')).toContainText('Inscrit', { timeout: 8000 });
+
+  // ── Classe : créer une classe vide, la modifier, refuser l'archivage d'une classe pleine, archiver la vide ──
+  await aller(page, 'classes');
+  await page.click('button:has-text("+ Nouvelle classe")');
+  await page.waitForFunction(() => (document.getElementById('m-classe-niveau')?.children.length || 0) > 1);
+  await choisir(page, '#m-classe-niveau', '6ème');
+  await page.fill('#m-classe-nom', 'Z');
+  await page.fill('#m-classe-salle', 'Salle provisoire');
+  await page.click('#btn-creer-classe');
+  const grille = page.locator('#cls-grid');
+  const carteZ = () => grille.locator('.carte', { hasText: 'Salle provisoire' });
+  await expect(carteZ()).toBeVisible({ timeout: 8000 });
+
+  await carteZ().locator('button:has-text("Modifier")').click();
+  await expect(page.locator('#m-classe-niveau')).toBeDisabled();
+  await page.fill('#m-classe-salle', 'Salle 99');
+  await page.click('#btn-creer-classe');
+  await expect(grille).toContainText('Salle 99', { timeout: 8000 });
+  await expect(grille).not.toContainText('Salle provisoire');
+
+  page.once('dialog', (d) => d.accept());
+  await grille.locator('.carte', { hasText: 'Salle 1' }).locator('button:has-text("Archiver")').click();   // 6ème A : élèves inscrits
+  await expect(toasts).toContainText('élève', { timeout: 8000 });
+  await expect(grille).toContainText('Salle 1');
+
+  page.once('dialog', (d) => d.accept());
+  await grille.locator('.carte', { hasText: 'Salle 99' }).locator('button:has-text("Archiver")').click();
+  await expect(grille).not.toContainText('Salle 99', { timeout: 8000 });
+  expect((await lire(request, '/classes')).some((c) => c.salle_principale === 'Salle 99')).toBe(false);
+
+  // ── Matière : créer, renommer, archiver (masquée), réactiver ; une matière enseignée ne s'archive pas ──
+  await aller(page, 'parametres');
+  const matieres = page.locator('#param-matieres-liste');
+  await page.click('button:has-text("+ Nouvelle matière")');
+  await page.fill('#m-mat-nom', 'Histoire');
+  await page.fill('#m-mat-code', 'HIST');
+  await page.click('#btn-creer-matiere');
+  const rangee = (texte) => matieres.locator('> div', { hasText: texte });
+  await expect(rangee('Histoire')).toBeVisible({ timeout: 8000 });
+
+  await rangee('Histoire').locator('button:has-text("Modifier")').click();
+  await expect(page.locator('#m-mat-code')).toHaveValue('HIST');
+  await page.fill('#m-mat-nom', 'Histoire-Géographie');
+  await page.click('#btn-creer-matiere');
+  await expect(rangee('Histoire-Géographie')).toBeVisible({ timeout: 8000 });
+
+  page.once('dialog', (d) => d.accept());
+  await rangee('Mathématiques').locator('button:has-text("Archiver")').click();
+  await expect(toasts).toContainText('affectation', { timeout: 8000 });
+
+  page.once('dialog', (d) => d.accept());
+  await rangee('Histoire-Géographie').locator('button:has-text("Archiver")').click();
+  await expect(rangee('Histoire-Géographie')).toContainText('Inactif', { timeout: 8000 });
+  await rangee('Histoire-Géographie').locator('button:has-text("Réactiver")').click();
+  await expect(rangee('Histoire-Géographie')).not.toContainText('Inactif', { timeout: 8000 });
+});

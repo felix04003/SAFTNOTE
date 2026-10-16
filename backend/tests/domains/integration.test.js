@@ -394,6 +394,8 @@ describe('Workflow 4 — POST /eleves', () => {
 
       // 1. trx('annees_scolaires')...first() → année courante
       trx.mockReturnValueOnce(mockQuery({ id: IDS.annee }));
+      // 1bis. trx('classes')...first() → la classe appartient à l'établissement
+      trx.mockReturnValueOnce(mockQuery({ id: IDS.classe }));
       // 2. trx('utilisateurs').insert()
       trx.mockReturnValueOnce(mockQuery(undefined));
       // 2bis. trx('eleves').where({ matricule }).first() → matricule généré encore libre
@@ -486,6 +488,8 @@ describe('Workflow 4 — POST /eleves', () => {
 
       // 1. annee_scolaire
       trx.mockReturnValueOnce(mockQuery({ id: IDS.annee }));
+      // 1bis. trx('classes')...first() → la classe appartient à l'établissement
+      trx.mockReturnValueOnce(mockQuery({ id: IDS.classe }));
       // 2. INSERT utilisateurs (élève)
       trx.mockReturnValueOnce(mockQuery(undefined));
       // 2bis. matricule généré : encore libre

@@ -1,3 +1,14 @@
+/**
+ * Texte destiné à être passé EN ARGUMENT d'un gestionnaire dans un attribut HTML (onclick="f(<ici>)").
+ * escapeHtml seul ne suffit pas : le navigateur décode les entités (&#039; redevient ') AVANT d'exécuter le
+ * JavaScript, donc un nom contenant une apostrophe casse le bouton et un nom piégé exécute du code. On produit
+ * un littéral JavaScript ("..." avec \" et \\ échappés) puis on l'échappe pour l'attribut.
+ * Les identifiants (UUID) n'en ont pas besoin ; les noms, libellés et textes saisis, si.
+ */
+export function jsArg(valeur: any): string {
+  return escapeHtml(JSON.stringify(valeur == null ? '' : String(valeur)));
+}
+
 export function escapeHtml(str: any): string {
   if (str == null) return '';
   return String(str)

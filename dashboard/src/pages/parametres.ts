@@ -105,10 +105,70 @@ export const PageParametres: any = {
           (m.discipline ? ' · ' + escapeHtml(m.discipline) : '') +
           (!m.actif ? ' <span class="badge bd" style="font-size:10px">Inactif</span>' : '') +
           '</span>' +
+          '<span style="white-space:nowrap">' +
+            '<button class="btn btn-l btn-sm" onclick="PageParametres.modifierMatiere(\'' + escapeHtml(m.id) + '\')">Modifier</button> ' +
+            (m.actif
+              ? '<button class="btn btn-l btn-sm" onclick="PageParametres.archiverMatiere(\'' + escapeHtml(m.id) + '\')">Archiver</button>'
+              : '<button class="btn btn-p btn-sm" onclick="PageParametres.reactiverMatiere(\'' + escapeHtml(m.id) + '\')">Réactiver</button>') +
+          '</span>' +
         '</div>';
       }).join('');
     } catch {
       liste.innerHTML = '<div style="color:var(--rouge);font-size:13px;padding:10px">Impossible de charger les matières</div>';
+    }
+  },
+
+  _matEditId: '',
+
+  _modeModaleMatiere: function(edition: boolean) {
+    const titre = document.getElementById('m-mat-titre') as HTMLElement | null;
+    if (titre) titre.textContent = edition ? 'Modifier la matière' : 'Nouvelle matière';
+    const btn = document.getElementById('btn-creer-matiere') as HTMLButtonElement | null;
+    if (btn) btn.textContent = edition ? 'Enregistrer' : 'Créer la matière';
+  },
+
+  ouvrirNouvelleMatiere: function() {
+    this._matEditId = '';
+    this._modeModaleMatiere(false);
+    ['m-mat-nom', 'm-mat-court', 'm-mat-code'].forEach(function(id) {
+      const el = document.getElementById(id) as HTMLInputElement | null;
+      if (el) el.value = '';
+    });
+    openModal('m-matiere');
+  },
+
+  modifierMatiere: function(id: string) {
+    const m = (this.matieresCache || []).find(function(x: any) { return x.id === id; });
+    if (!m) return;
+    this._matEditId = id;
+    this._modeModaleMatiere(true);
+    const champ = (cible: string, valeur: any) => { const el = document.getElementById(cible) as HTMLInputElement | null; if (el) el.value = valeur == null ? '' : String(valeur); };
+    champ('m-mat-nom', m.nom); champ('m-mat-court', m.nom_court); champ('m-mat-code', m.code);
+    champ('m-mat-moyenne', m.compte_dans_moyenne === false ? 'false' : 'true');
+    champ('m-mat-discipline', m.discipline_id);
+    openModal('m-matiere');
+  },
+
+  async archiverMatiere(id: string) {
+    const m = (this.matieresCache || []).find(function(x: any) { return x.id === id; });
+    const nom = m ? m.nom : 'cette matière';
+    if (!confirm('Archiver « ' + nom + ' » ?\nElle n\'apparaît plus dans les choix ; les notes et bulletins passés sont conservés. Impossible tant qu\'un enseignant y est affecté cette année.')) return;
+    try {
+      await Api.del('/configs/matieres/' + id);
+      toast('Matière « ' + nom + ' » archivée ✓', 's');
+      await this.chargerMatieres();
+    } catch (e: any) {
+      toast(e.message || 'Archivage impossible', 'e');
+    }
+  },
+
+  async reactiverMatiere(id: string) {
+    try {
+      await Api.put('/configs/matieres/' + id, { actif: true });
+      toast('Matière réactivée ✓', 's');
+      await this.chargerMatieres();
+    } catch (e: any) {
+      toast(e.message || 'Réactivation impossible', 'e');
     }
   },
 
@@ -126,15 +186,22 @@ export const PageParametres: any = {
     if (btn) { btn.disabled = true; btn.textContent = 'Création…'; }
 
     try {
-      await Api.post('/configs/matieres', {
-        nom,
-        nom_court: court || undefined,
-        code,
-        compte_dans_moyenne: moyenne,
-        discipline_id: disciplineId || undefined,
-      });
+      if (this._matEditId) {
+        await Api.put('/configs/matieres/' + this._matEditId, {
+          nom, nom_court: court || null, code, compte_dans_moyenne: moyenne, discipline_id: disciplineId || null,
+        });
+      } else {
+        await Api.post('/configs/matieres', {
+          nom,
+          nom_court: court || undefined,
+          code,
+          compte_dans_moyenne: moyenne,
+          discipline_id: disciplineId || undefined,
+        });
+      }
       closeModal('m-matiere');
-      toast('Matière « ' + nom + ' » créée ✓', 's');
+      toast('Matière « ' + nom + ' » ' + (this._matEditId ? 'modifiée' : 'créée') + ' ✓', 's');
+      this._matEditId = '';
       ['m-mat-nom', 'm-mat-court', 'm-mat-code'].forEach(function(id) {
         const el = document.getElementById(id) as HTMLInputElement | null;
         if (el) el.value = '';
@@ -143,7 +210,7 @@ export const PageParametres: any = {
     } catch (e: any) {
       toast('Erreur : ' + (e.message || 'Création échouée'), 'd');
     } finally {
-      if (btn) { btn.disabled = false; btn.textContent = 'Créer la matière'; }
+      if (btn) { btn.disabled = false; btn.textContent = this._matEditId ? 'Enregistrer' : 'Créer la matière'; }
     }
   },
 

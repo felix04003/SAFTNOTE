@@ -50,7 +50,7 @@ router.post('/appels', auth, isoler, perm('absences.faire_appel'),
         .where({ classe_id: edt.classe_id, annee_scolaire_id: edt.annee_id, statut: 'actif' })
         .select('id');
 
-      await withTransaction(async trx => {
+      const appelId = await withTransaction(async trx => {
         // Créer l'appel
         const appel = await trx('appels').insert({
           id:                 uuid(),
@@ -72,8 +72,11 @@ router.post('/appels', auth, isoler, perm('absences.faire_appel'),
           );
         }
 
-        return cree(res, { appel_id: appel.id, nb_eleves: inscriptions.length });
+        return appel.id;
       });
+
+      // Répondre APRÈS la validation (COMMIT) : répondre dans la transaction laissait le client lire des présences pas encore visibles
+      return cree(res, { appel_id: appelId, nb_eleves: inscriptions.length });
 
     } catch (err) { next(err); }
   }

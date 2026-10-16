@@ -92,6 +92,26 @@ describe('POST /api/v1/appels', () => {
   });
 });
 
+describe('POST /api/v1/appels — réponse après validation de la transaction', () => {
+  it('quand le COMMIT tarde, la réponse n\'est envoyée qu\'après lui : les présences sont déjà visibles', async () => {
+    const db = getTestDB();
+    // Un déclencheur de contrainte DIFFÉRÉ s'exécute au COMMIT : il le retarde de 400 ms alors que le code de la route a fini.
+    // Répondre DANS la transaction laissait le client recevoir 201 puis lire un appel sans présences (course vue en CI)
+    await db.raw('CREATE OR REPLACE FUNCTION test_commit_lent() RETURNS trigger AS $$ BEGIN PERFORM pg_sleep(0.4); RETURN NULL; END $$ LANGUAGE plpgsql');
+    await db.raw('CREATE CONSTRAINT TRIGGER test_commit_lent AFTER INSERT ON presences DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION test_commit_lent()');
+    try {
+      const res = await request.post('/api/v1/appels').set('Authorization', `Bearer ${tokenEns}`)
+        .send({ emploi_du_temps_id: edtId, date_cours: '2024-11-25' }).expect(201);
+      const presences = await db('presences').where({ appel_id: res.body.data.appel_id });
+      expect(presences.length).toBeGreaterThan(0);
+      expect(presences).toHaveLength(res.body.data.nb_eleves);
+    } finally {
+      await db.raw('DROP TRIGGER IF EXISTS test_commit_lent ON presences');
+      await db.raw('DROP FUNCTION IF EXISTS test_commit_lent()');
+    }
+  });
+});
+
 // ── Présences pré-remplies à l'ouverture de l'appel ─────────────
 
 describe('présences d\'un appel ouvert', () => {

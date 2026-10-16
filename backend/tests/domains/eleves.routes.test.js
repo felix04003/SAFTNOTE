@@ -94,6 +94,7 @@ describe('Eleves Routes', () => {
     test('inscrit un élève sans données médicales', async () => {
       const trx = jest.fn()
         .mockReturnValueOnce(mockQuery({ id: IDS.annee }))
+        .mockReturnValueOnce(mockQuery({ id: IDS.classe }))     // la classe est bien celle de l'établissement
         .mockReturnValueOnce(mockQuery(null))
         .mockReturnValueOnce(mockQuery(null))                       // matricule généré : encore libre
         .mockReturnValueOnce(mockQuery([{ id: IDS.eleve }]))
@@ -117,6 +118,7 @@ describe('Eleves Routes', () => {
     test('inscrit un élève avec données médicales', async () => {
       const trx = jest.fn()
         .mockReturnValueOnce(mockQuery({ id: IDS.annee }))
+        .mockReturnValueOnce(mockQuery({ id: IDS.classe }))     // la classe est bien celle de l'établissement
         .mockReturnValueOnce(mockQuery(null))
         .mockReturnValueOnce(mockQuery(null))                       // matricule généré : encore libre
         .mockReturnValueOnce(mockQuery([{ id: IDS.eleve }]))

@@ -9,7 +9,7 @@ const { avecContexteEtablissement } = require('../../../infrastructure/database/
 const { authentifier } = require('../../../middleware/auth.middleware');
 const { exigerPermission, isolerEtablissement } = require('../../../middleware/permission.middleware');
 const { valider }    = require('../../../middleware/validate.middleware');
-const { ok, cree, liste } = require('../../../utils/reponse');
+const { ok, cree, liste, vide } = require('../../../utils/reponse');
 const ApiError       = require('../../../utils/ApiError');
 const logger         = require('../../../utils/logger');
 const { getOrSet, invalidatePattern } = require('../../../infrastructure/cache/redis');
@@ -294,5 +294,91 @@ router.post('/configs/matieres', auth, isoler, perm('config.modifier'),
     } catch (err) { next(err); }
   }
 );
+
+// ═════════════════════════════════════════════════════════════════
+// PUT /configs/matieres/:id — Modifier une matière (ou la réactiver : actif = true)
+// DELETE /configs/matieres/:id — Archiver (actif = false). Jamais supprimée : les notes
+// et bulletins passés la référencent. Refusé tant qu'un enseignant y est affecté cette année.
+// ═════════════════════════════════════════════════════════════════
+async function chargerMatiere(db, id, etablissementId) {
+  const matiere = await db('matieres').where({ id, etablissement_id: etablissementId }).first('id', 'nom', 'code', 'actif');
+  if (!matiere) throw ApiError.nonTrouve('Matière introuvable');
+  return matiere;
+}
+
+async function affectationsCourantes(db, matiereId, etablissementId) {
+  const { count } = await db('affectations_enseignants as ae')
+    .join('annees_scolaires as a', 'a.id', 'ae.annee_scolaire_id')
+    .where({ 'ae.matiere_id': matiereId, 'a.etablissement_id': etablissementId, 'a.est_courante': true })
+    .count('ae.id as count').first();
+  return parseInt(count, 10);
+}
+
+function journaliserMatiere(trx, req, action, matiereId, details) {
+  return trx('journal_audit').insert({
+    etablissement_id: req.etablissement_id, utilisateur_id: req.session.utilisateur_id,
+    action, resultat: 'succes', table_cible: 'matieres', enregistrement_id: matiereId,
+    details: JSON.stringify(details),
+  });
+}
+
+router.put('/configs/matieres/:id', auth, isoler, perm('config.modifier'),
+  valider(z.object({
+    nom:                 z.string().min(2).max(150),
+    nom_court:           z.string().max(20).nullable(),
+    code:                z.string().min(1).max(20),
+    discipline_id:       z.string().uuid().nullable(),
+    compte_dans_moyenne: z.boolean(),
+    est_eliminatoire:    z.boolean(),
+    seuil_eliminatoire:  z.number().min(0).max(20).nullable(),
+    est_optionnelle:     z.boolean(),
+    actif:               z.boolean(),
+  }).partial().refine(o => Object.keys(o).length > 0, { message: 'Aucun champ à modifier' })),
+  async (req, res, next) => {
+    try {
+      const db = getDB();
+      const matiere = await chargerMatiere(db, req.params.id, req.etablissement_id);
+
+      if (req.body.code !== undefined) {
+        const doublon = await db('matieres')
+          .where({ etablissement_id: req.etablissement_id, code: req.body.code }).whereNot('id', matiere.id).first('id');
+        if (doublon) throw ApiError.validationEchouee(`Une matière avec le code "${req.body.code}" existe déjà`);
+      }
+      if (req.body.discipline_id) {
+        const discipline = await db('disciplines_matieres')
+          .where({ id: req.body.discipline_id, etablissement_id: req.etablissement_id }).first('id');
+        if (!discipline) throw ApiError.nonTrouve('Discipline introuvable');
+      }
+      if (req.body.actif === false && await affectationsCourantes(db, matiere.id, req.etablissement_id) > 0) {
+        throw ApiError.conflit('Impossible de désactiver : des enseignants sont affectés à cette matière cette année');
+      }
+
+      const [modifiee] = await db.transaction(async trx => {
+        const lignes = await trx('matieres').where({ id: matiere.id, etablissement_id: req.etablissement_id }).update(req.body).returning('*');
+        await journaliserMatiere(trx, req, 'matieres.modifier', matiere.id, { champs: Object.keys(req.body) });
+        return lignes;
+      });
+      try { await invalidatePattern(`matieres:${req.etablissement_id}`); } catch { /* Redis down */ }
+      return ok(res, modifiee);
+    } catch (err) { next(err); }
+  }
+);
+
+router.delete('/configs/matieres/:id', auth, isoler, perm('config.modifier'), async (req, res, next) => {
+  try {
+    const db = getDB();
+    const matiere = await chargerMatiere(db, req.params.id, req.etablissement_id);
+    if (!matiere.actif) throw ApiError.nonTrouve('Matière introuvable');
+    const n = await affectationsCourantes(db, matiere.id, req.etablissement_id);
+    if (n > 0) throw ApiError.conflit(`Impossible : ${n} affectation(s) d'enseignants utilisent « ${matiere.nom} » cette année. Supprimez-les d'abord.`);
+
+    await db.transaction(async trx => {
+      await trx('matieres').where({ id: matiere.id, etablissement_id: req.etablissement_id }).update({ actif: false });
+      await journaliserMatiere(trx, req, 'matieres.archiver', matiere.id, { matiere: matiere.nom });
+    });
+    try { await invalidatePattern(`matieres:${req.etablissement_id}`); } catch { /* Redis down */ }
+    return vide(res);
+  } catch (err) { next(err); }
+});
 
 module.exports = router;

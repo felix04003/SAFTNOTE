@@ -1,5 +1,5 @@
 import { Api } from '../api';
-import { escapeHtml, init2, toast, openModal, closeModal } from '../ui';
+import { escapeHtml, jsArg, init2, toast, openModal, closeModal } from '../ui';
 import { PAGE_HOOKS } from '../router';
 import { verifierMotDePasse } from '../password';
 
@@ -96,7 +96,7 @@ export const PageEnseignants: any = {
 
     tbody.innerHTML = enseignants.map(function(e: any) {
       const nom = escapeHtml((e.prenom || '') + ' ' + (e.nom || ''));
-      const nomForAttr = nom.replace(/'/g, '');
+      const nomArg = jsArg((e.prenom || '') + ' ' + (e.nom || ''));
       return '<tr>' +
         '<td class="nc" style="display:flex;align-items:center;gap:9px"><div class="av" style="background:var(--bleu)">' + init2(nom) + '</div>' + nom + '</td>' +
         '<td><span class="badge bo">' + escapeHtml(e.specialite || '—') + '</span></td>' +
@@ -106,8 +106,8 @@ export const PageEnseignants: any = {
         '<td><span class="badge bs">Actif</span></td>' +
         '<td style="display:flex;gap:6px">' +
           '<button class="btn btn-l btn-sm" onclick="toast(\'Fiche à venir\')">Voir</button>' +
-          '<button class="btn btn-p btn-sm" onclick="PageAffectations.ouvrir(\'' + escapeHtml(e.id) + '\',\'' + nomForAttr + '\')">📋 Affecter</button>' +
-          '<button class="btn btn-l btn-sm" title="Envoyer un nouveau mot de passe provisoire par SMS" onclick="PageEnseignants.renvoyerMdp(\'' + escapeHtml(e.id) + '\',\'' + nomForAttr + '\')">🔑 MDP</button>' +
+          '<button class="btn btn-p btn-sm" onclick="PageAffectations.ouvrir(\'' + escapeHtml(e.id) + '\',' + nomArg + ')">📋 Affecter</button>' +
+          '<button class="btn btn-l btn-sm" title="Envoyer un nouveau mot de passe provisoire par SMS" onclick="PageEnseignants.renvoyerMdp(\'' + escapeHtml(e.id) + '\',' + nomArg + ')">🔑 MDP</button>' +
         '</td>' +
       '</tr>';
     }).join('');

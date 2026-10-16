@@ -1,5 +1,5 @@
 import { Api } from '../api';
-import { escapeHtml, cn, init2, toast, openModal, closeModal } from '../ui';
+import { escapeHtml, jsArg, cn, init2, toast, openModal, closeModal } from '../ui';
 import { PAGE_HOOKS } from '../router';
 
 export const PageEleves: any = {
@@ -8,6 +8,10 @@ export const PageEleves: any = {
   total: 0,
   classeId: '',
   recherche: '',
+  statut: '',          // '' = inscrits, 'retires' = transferts, abandons, exclusions
+  _editId: '',
+  _editClasseInitiale: '',
+  _retraitId: '',
   data: [],
   _classes: [],   // cache des classes pour le select du modal
 
@@ -16,6 +20,7 @@ export const PageEleves: any = {
       const params: Record<string, any> = { page: this.page, limite: this.limite };
       if (this.classeId) params['classe_id'] = this.classeId;
       if (this.recherche) params['recherche'] = this.recherche;
+      if (this.statut) params['statut'] = this.statut;
 
       const res = await Api.get('/eleves', params);
       this.data = res.data;
@@ -35,12 +40,13 @@ export const PageEleves: any = {
     try {
       const res = await Api.get('/classes');
       this._classes = res.data || [];
+      const options = this._classes.map(function(c: any) {
+        return '<option value="' + escapeHtml(c.id) + '">' + escapeHtml(c.nom_classe || c.nom || c.id) + '</option>';
+      }).join('');
       const sel = document.getElementById('m-eleve-classe') as HTMLSelectElement | null;
-      if (!sel) return;
-      sel.innerHTML = '<option value="">— Choisir une classe —</option>' +
-        this._classes.map(function(c: any) {
-          return '<option value="' + escapeHtml(c.id) + '">' + escapeHtml(c.nom_classe || c.nom || c.id) + '</option>';
-        }).join('');
+      if (sel) sel.innerHTML = '<option value="">— Choisir une classe —</option>' + options;
+      const selModif = document.getElementById('emod-classe') as HTMLSelectElement | null;
+      if (selModif) selModif.innerHTML = options;
     } catch (e: any) {
       console.warn('PageEleves.chargerClasses —', e.message);
     }
@@ -93,6 +99,115 @@ export const PageEleves: any = {
     }
   },
 
+  badgeStatut: function(statut: string) {
+    const libelles: Record<string, string> = { transfere: 'Transféré', abandonne: 'Abandon', exclu: 'Exclu' };
+    return statut && statut !== 'actif'
+      ? '<span class="badge bd">' + escapeHtml(libelles[statut] || statut) + '</span>'
+      : '<span class="badge bs">✓ Inscrit</span>';
+  },
+
+  actions: function(e: any) {
+    const id  = escapeHtml(e.id);
+    const nom = jsArg(((e.prenom || '') + ' ' + (e.nom || '')).trim());
+    const fiche = '<button class="btn btn-l btn-sm" onclick="PageEleves.voirFiche(\'' + id + '\')">Fiche</button> ';
+    if (e.statut && e.statut !== 'actif') {
+      return fiche + '<button class="btn btn-p btn-sm" onclick="PageEleves.reintegrer(\'' + id + '\',' + nom + ')">Réintégrer</button>';
+    }
+    return fiche +
+      '<button class="btn btn-l btn-sm" onclick="PageEleves.modifier(\'' + id + '\')">Modifier</button> ' +
+      '<button class="btn btn-l btn-sm" onclick="PageEleves.retirer(\'' + id + '\',' + nom + ')">Retirer</button>';
+  },
+
+  filtrerStatut: function(statut: string) { this.statut = statut; this.page = 1; this.charger(); },
+
+  // ── Modifier ──
+  async modifier(id: string) {
+    this._classes = [];          // liste fraîche : une classe a pu être créée ou archivée depuis
+    await this.chargerClasses();
+    try {
+      const res = await Api.get('/eleves/' + id);
+      const e = res.data || {};
+      const champ = (cible: string, valeur: any) => { const el = document.getElementById(cible) as HTMLInputElement | null; if (el) el.value = valeur == null ? '' : String(valeur); };
+      champ('emod-prenom', e.prenom); champ('emod-nom', e.nom);
+      champ('emod-ddn', e.date_naissance ? String(e.date_naissance).slice(0, 10) : '');
+      champ('emod-genre', e.genre); champ('emod-tel', e.telephone); champ('emod-matricule', e.matricule);
+      champ('emod-classe', e.classe_id);
+      this._editId = id;
+      this._editClasseInitiale = e.classe_id || '';
+      openModal('m-eleve-modif');
+    } catch (err: any) {
+      toast('Erreur : ' + (err.message || 'Fiche introuvable'), 'd');
+    }
+  },
+
+  async enregistrerModif() {
+    const val = (cible: string) => ((document.getElementById(cible) as HTMLInputElement | null)?.value || '').trim();
+    const prenom = val('emod-prenom'), nom = val('emod-nom'), matricule = val('emod-matricule');
+    if (prenom.length < 2 || nom.length < 2) return toast('Prénom et nom obligatoires', 'w');
+    if (!matricule) return toast('Le matricule est obligatoire', 'w');
+
+    const payload: Record<string, any> = {
+      prenom, nom, matricule,
+      date_naissance: val('emod-ddn') || null,
+      genre: val('emod-genre') || null,
+      telephone: val('emod-tel') || null,
+    };
+    const classe = val('emod-classe');
+    if (classe && classe !== this._editClasseInitiale) payload['classe_id'] = classe;
+
+    const btn = document.getElementById('btn-eleve-modif') as HTMLButtonElement | null;
+    if (btn) btn.disabled = true;
+    try {
+      await Api.put('/eleves/' + this._editId, payload);
+      closeModal('m-eleve-modif');
+      toast('Élève modifié ✓', 's');
+      await this.charger();
+    } catch (e: any) {
+      toast('Erreur : ' + (e.message || 'Modification échouée'), 'd');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  },
+
+  // ── Retirer / réintégrer ──
+  retirer: function(id: string, nom: string) {
+    this._retraitId = id;
+    const titre = document.getElementById('ret-titre') as HTMLElement | null;
+    if (titre) titre.textContent = 'Retirer ' + nom;
+    const motif = document.getElementById('ret-motif') as HTMLInputElement | null;
+    if (motif) motif.value = '';
+    openModal('m-eleve-retrait');
+  },
+
+  async confirmerRetrait() {
+    const statut = (document.getElementById('ret-statut') as HTMLSelectElement | null)?.value || 'transfere';
+    const motif = ((document.getElementById('ret-motif') as HTMLInputElement | null)?.value || '').trim();
+    if (motif.length < 3) return toast('Indiquez le motif (3 caractères minimum)', 'w');
+    const btn = document.getElementById('btn-eleve-retrait') as HTMLButtonElement | null;
+    if (btn) btn.disabled = true;
+    try {
+      await Api.put('/eleves/' + this._retraitId + '/statut', { statut, motif });
+      closeModal('m-eleve-retrait');
+      toast('Élève retiré ✓', 's');
+      await this.charger();
+    } catch (e: any) {
+      toast('Erreur : ' + (e.message || 'Retrait échoué'), 'd');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  },
+
+  async reintegrer(id: string, nom: string) {
+    if (!confirm('Réintégrer ' + nom + ' dans sa classe ?')) return;
+    try {
+      await Api.put('/eleves/' + id + '/statut', { statut: 'actif' });
+      toast(nom + ' : réintégré ✓', 's');
+      await this.charger();
+    } catch (e: any) {
+      toast('Erreur : ' + (e.message || 'Réintégration échouée'), 'd');
+    }
+  },
+
   renderTable: function(eleves: any[]) {
     const tbody = document.getElementById('tb-eleves') as HTMLElement | null;
     if (!tbody) return;
@@ -110,11 +225,11 @@ export const PageEleves: any = {
         '<td class="nc" style="display:flex;align-items:center;gap:9px"><div class="av" style="background:' + cn(moy) + '">' + init2(nom) + '</div>' + nom + '</td>' +
         '<td style="font-family:\'Space Mono\',monospace;font-size:11.5px;color:var(--g400)">' + escapeHtml(e.matricule || '—') + '</td>' +
         '<td><span class="badge bp">' + escapeHtml(e.classe || e.niveau || '—') + '</span></td>' +
-        '<td><span class="badge bs">✓ Inscrit</span></td>' +
+        '<td>' + PageEleves.badgeStatut(e.statut) + '</td>' +
         '<td>' + (moy != null ? '<span style="font-weight:700;color:' + cn(moy) + '">' + moy + '/20</span>' : '<span class="badge bn">—</span>') + '</td>' +
         '<td><span style="font-weight:600;color:' + (abs >= 10 ? 'var(--rouge)' : abs >= 5 ? 'var(--warning)' : 'var(--g700)') + '">' + abs + 'j</span></td>' +
         '<td style="font-size:12px;color:var(--g500)">' + escapeHtml(e.parent_nom || '—') + '</td>' +
-        '<td><button class="btn btn-l btn-sm" onclick="PageEleves.voirFiche(\'' + escapeHtml(e.id) + '\')">Fiche</button></td>' +
+        '<td style="white-space:nowrap">' + PageEleves.actions(e) + '</td>' +
       '</tr>';
     }).join('');
   },
