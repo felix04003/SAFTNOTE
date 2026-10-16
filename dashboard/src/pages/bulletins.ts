@@ -5,10 +5,45 @@ import { PAGE_HOOKS } from '../router';
 export const PageBulletins: any = {
   data: [],
   _bulletinCourant: null,  // détail affiché dans le modal
+  _periodes: [] as any[],  // périodes de l'année courante (sélecteur)
+  _periodeId: '',          // période affichée
+  _occupe: false,          // génération en cours (évite le double clic)
+
+  // Période par défaut : celle qui contient aujourd'hui, sinon la dernière commencée, sinon la première
+  _periodeParDefaut(periodes: any[]): string {
+    if (!periodes.length) return '';
+    const jour = new Date().toISOString().slice(0, 10);
+    const dedans = periodes.find(function(p: any) { return String(p.date_debut).slice(0, 10) <= jour && jour <= String(p.date_fin).slice(0, 10); });
+    if (dedans) return dedans.id;
+    const commencees = periodes.filter(function(p: any) { return String(p.date_debut).slice(0, 10) <= jour; });
+    return (commencees.length ? commencees[commencees.length - 1] : periodes[0]).id;
+  },
+
+  async _chargerPeriodes() {
+    if (this._periodes.length) return;
+    try {
+      const r = await Api.get('/annees-scolaires/courante');
+      this._periodes = (r.data && r.data.periodes) || [];
+    } catch (e: any) { this._periodes = []; }
+    this._periodeId = this._periodeId || this._periodeParDefaut(this._periodes);
+    const sel = document.getElementById('bull-periode') as HTMLSelectElement | null;
+    if (sel) {
+      sel.innerHTML = this._periodes.map(function(p: any) {
+        return '<option value="' + escapeHtml(p.id) + '">' + escapeHtml(p.libelle || ('Période ' + p.numero)) + '</option>';
+      }).join('');
+      sel.value = this._periodeId;
+    }
+  },
+
+  async changerPeriode(id: string) {
+    this._periodeId = id;
+    await this.charger();
+  },
 
   async charger() {
     try {
-      const res = await Api.get('/bulletins/classes');
+      await this._chargerPeriodes();
+      const res = await Api.get('/bulletins/classes', this._periodeId ? { periode_id: this._periodeId } : undefined);
       this.data = res.data;
       this.renderTable(res.data);
       this.updateKpis(res.data);
@@ -44,9 +79,11 @@ export const PageBulletins: any = {
 
     tbody.innerHTML = bulletins.map(function(b: any) {
       const moy = b.moyenne_classe != null ? b.moyenne_classe : null;
-      const effectif = b.effectif || 0;
-      const generes = b.generes || 0;
-      const valides = b.valides || 0;
+      // Les COUNT(*) de PostgreSQL arrivent en texte (« 0 ») : sans conversion, `valides === 0` n'était jamais
+      // vrai et le bouton « Valider » d'une classe n'apparaissait jamais
+      const effectif = parseInt(b.effectif || 0, 10);
+      const generes = parseInt(b.generes || 0, 10);
+      const valides = parseInt(b.valides || 0, 10);
       const taux = b.taux_reussite || '—';
 
       return '<tr>' +
@@ -59,8 +96,8 @@ export const PageBulletins: any = {
         '<td><span class="badge ' + (parseFloat(taux) >= 80 ? 'bs' : parseFloat(taux) >= 70 ? 'bw' : 'bd') + '">' + taux + '</span></td>' +
         '<td style="display:flex;gap:5px">' +
           '<button class="btn btn-l btn-sm" onclick="PageBulletins.voirClasse(\'' + b.id + '\',\'' + (b.classe || '') + '\')">Voir</button>' +
+          (effectif > 0 && generes < effectif ? '<button class="btn btn-o btn-sm" onclick="PageBulletins.genererClasse(\'' + b.id + '\')">⚡ Générer</button>' : '') +
           (valides === 0 && generes > 0 ? '<button class="btn btn-p btn-sm" onclick="PageBulletins.validerClasse(\'' + b.id + '\')">Valider</button>' : '') +
-          '<button class="btn btn-l btn-sm">📥</button>' +
         '</td>' +
       '</tr>';
     }).join('');
@@ -77,7 +114,7 @@ export const PageBulletins: any = {
     openModal('m-detail-bulletin');
 
     try {
-      const res = await Api.get('/bulletins', { classe_id: classeId });
+      const res = await Api.get('/bulletins', { classe_id: classeId, periode_id: this._periodeId });
       const items = res.data || [];
       if (!items.length) {
         if (corps) corps.innerHTML = '<p style="text-align:center;padding:30px;color:var(--g400)">Aucun bulletin généré pour cette classe.</p>';
@@ -97,6 +134,7 @@ export const PageBulletins: any = {
             '<td style="text-align:center">' + (b.valide_at ? '<span style="color:var(--success)">✓</span>' : '<span style="color:var(--g300)">—</span>') + '</td>' +
             '<td><button class="btn btn-l btn-sm" onclick="PageBulletins.voirBulletin(\'' + b.id + '\')">Détail</button>' +
               (!b.valide_at ? ' <button class="btn btn-p btn-sm" onclick="PageBulletins.validerBulletin(\'' + b.id + '\')">Valider</button>' : '') +
+              (b.valide_at ? ' <button class="btn btn-l btn-sm" title="' + (b.bulletin_disponible ? 'Télécharger le PDF' : 'PDF en cours de préparation') + '" onclick="PageBulletins.telecharger(\'' + b.id + '\')">📥 PDF</button>' : '') +
             '</td>' +
           '</tr>';
         }).join('') +
@@ -167,7 +205,7 @@ export const PageBulletins: any = {
   async validerClasse(classeId: string) {
     if (!confirm('Valider tous les bulletins générés de cette classe ?')) return;
     try {
-      const res = await Api.get('/bulletins', { classe_id: classeId });
+      const res = await Api.get('/bulletins', { classe_id: classeId, periode_id: this._periodeId });
       const items = (res.data || []).filter(function(b: any) { return !b.valide_at && b.bulletin_genere; });
       if (!items.length) return toast('Aucun bulletin à valider', 'w');
 
@@ -182,6 +220,65 @@ export const PageBulletins: any = {
       await this.charger();
     } catch (e: any) {
       toast(e.message || 'Erreur de validation', 'e');
+    }
+  },
+
+  // ── Calculer les moyennes puis générer les bulletins d'une classe ─
+  // Renvoie un compte rendu au lieu de lever : « Générer tous » continue avec les classes suivantes.
+  async _genererPour(classeId: string): Promise<{ ok: boolean; nb?: number; message?: string }> {
+    try {
+      await Api.post('/moyennes/calculer', { classe_id: classeId, periode_id: this._periodeId });
+      const res = await Api.post('/bulletins/generer', { classe_id: classeId, periode_id: this._periodeId });
+      return { ok: true, nb: res.data && res.data.nb_bulletins };
+    } catch (e: any) {
+      return { ok: false, message: e.message || 'Erreur' };
+    }
+  },
+
+  async genererClasse(classeId: string) {
+    if (this._occupe) return;
+    if (!this._periodeId) return toast('Aucune période scolaire', 'w');
+    this._occupe = true;
+    try {
+      toast('Calcul des moyennes et génération en cours…', 's');
+      const r = await this._genererPour(classeId);
+      if (r.ok) toast((r.nb || 0) + ' bulletin(s) généré(s) ✓ (PDF en préparation)', 's');
+      else toast(r.message || 'Génération impossible', 'e');
+      await this.charger();
+    } finally { this._occupe = false; }
+  },
+
+  async genererTous() {
+    if (this._occupe) return;
+    if (!this._periodeId) return toast('Aucune période scolaire', 'w');
+    const classes = (this.data || []).filter(function(c: any) { return parseInt(c.effectif || 0) > 0 && parseInt(c.generes || 0) < parseInt(c.effectif || 0); });
+    if (!classes.length) return toast('Tous les bulletins sont déjà générés', 'w');
+    if (!confirm('Calculer les moyennes et générer les bulletins de ' + classes.length + ' classe(s) ?')) return;
+
+    this._occupe = true;
+    try {
+      let nb = 0; const echecs: string[] = [];
+      for (let i = 0; i < classes.length; i++) {
+        const r = await this._genererPour(classes[i].id);
+        if (r.ok) nb += r.nb || 0;
+        else echecs.push((classes[i].classe || '?') + ' : ' + r.message);
+      }
+      if (nb) toast(nb + ' bulletin(s) généré(s) ✓', 's');
+      // Une classe sans note publiée n'a pas de moyenne : on le dit au lieu de l'ignorer
+      if (echecs.length) toast(echecs.length + ' classe(s) non générée(s) — ' + echecs[0], 'w');
+      await this.charger();
+    } finally { this._occupe = false; }
+  },
+
+  // ── Télécharger le PDF d'un bulletin validé (URL signée, 1 h) ────
+  async telecharger(bulletinId: string) {
+    try {
+      const res = await Api.get('/bulletins/' + bulletinId + '/download');
+      const url = res.data && res.data.download_url;
+      if (!url) return toast('PDF indisponible', 'w');
+      window.open(url, '_blank', 'noopener');
+    } catch (e: any) {
+      toast(e.message || 'PDF indisponible', 'e');
     }
   },
 

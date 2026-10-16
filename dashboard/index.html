@@ -207,9 +207,8 @@
       <div class="ph">
         <div><div class="ph-titre">Bulletins scolaires</div><div class="ph-sous" id="ph-sous-bulletins"></div></div>
         <div style="display:flex;gap:9px">
-          <select class="fs" style="width:150px"><option>Trimestre 2</option><option>Trimestre 1</option></select>
-          <button class="btn btn-o" onclick="toast('Génération lancée pour 247 bulletins…','s')">⚡ Générer tous</button>
-          <button class="btn btn-l">📥 ZIP</button>
+          <select class="fs" id="bull-periode" style="width:170px" onchange="PageBulletins.changerPeriode(this.value)"></select>
+          <button class="btn btn-o" onclick="PageBulletins.genererTous()">⚡ Générer tous</button>
         </div>
       </div>
       <div class="sg" style="margin-bottom:18px">

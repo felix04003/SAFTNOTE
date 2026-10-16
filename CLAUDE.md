@@ -21,7 +21,7 @@ d'Afrique de l'Ouest francophone (Sénégal, Côte d'Ivoire, Mali, Burkina Faso�
 - Mobile : React Native 0.76 + Expo SDK 52 + SQLite (offline-first)
 - Dashboard : Vite + TypeScript + Vitest (compilé en `dashboard/dist/`, plus « zéro dépendance NPM » depuis la migration vers l'outillage Vite)
 - Infra : Docker Compose (dev) ; déploiement cible **Render** (API + Postgres + Redis managés via `render.yaml`) ; Nginx/Docker Compose prod (`docker-compose.prod.yml`) documenté comme alternative auto-hébergée (VPS), voir `docs/DEPLOY_VPS.md`
-- Migrations : dossier unique `migrations/` à la racine (000→026), appliqué par `backend/src/utils/migrate.js` (table de suivi `_migrations`) ; seeds de test séparés dans `backend/tests/seeds/`, jamais appliqués en production (`TRUST_PROXY_HOPS` documenté dans `.env.example` pour le comptage IP réel derrière Nginx/Render)
+- Migrations : dossier unique `migrations/` à la racine (000→027), appliqué par `backend/src/utils/migrate.js` (table de suivi `_migrations`) ; seeds de test séparés dans `backend/tests/seeds/`, jamais appliqués en production (`TRUST_PROXY_HOPS` documenté dans `.env.example` pour le comptage IP réel derrière Nginx/Render)
 
 ---
 
@@ -133,6 +133,7 @@ ecolemanager/
 │   ├── 024_telephone_unique_par_etablissement.sql  ✅ UNIQUE (etablissement_id, telephone) au lieu de UNIQUE (telephone) : parent multi-écoles
 │   ├── 025_evaluations_types_oral_projet.sql      ✅ CHECK evaluations.type aligné sur les 7 types de l'API (oral et projet étaient refusés)
 │   ├── 026_plages_horaires_defaut.sql             ✅ trigger : chaque établissement reçoit ses plages horaires par défaut (+ rattrapage) ; routes POST/PUT/DELETE /plages-horaires
+│   ├── 027_moyenne_matiere_config_defaut.sql      ✅ calculer_moyenne_matiere : valeurs de l'établissement quand aucune config matière × niveau (la composition était ignorée)
 │   └── run_all_migrations.sql      ⚠️  Legacy psql (\i + schema_migrations) —
 │                                       préférer `cd backend && npm run migrate`
 │
@@ -472,7 +473,7 @@ META_WA_TOKEN         → WhatsApp Business API
 | 27 | Notifications SMS réparées sur base réelle (le worker ne trouvait jamais le parent : aucun SMS n'avait pu partir), publication des notes → un SMS par parent, contrôle d'établissement sur la publication, report horaire BullMQ 5, plafond mensuel de SMS par établissement avec alertes (migration 023) | ✅ |
 
 > Les compteurs de tests ci-dessus sont historiques (au moment de chaque étape). Compteurs
-> actuels (vérifiés le 2026-10-07) : backend 379 tests (40 suites Jest) + 196 tests d'intégration sur base réelle (24 suites, `npm run test:integration`), dashboard 114 tests (Vitest) + 36 tests E2E Playwright (voir dashboard/tests/README.md), mobile 119 tests (Jest) + 18 étapes de parcours contre un vrai backend (`cd mobile && npm run test:parcours`, job CI `mobile-parcours`, voir `mobile/__tests__/parcours/parcours-mobile.test.ts`).
+> actuels (vérifiés le 2026-10-07) : backend 379 tests (40 suites Jest) + 204 tests d'intégration sur base réelle (26 suites, `npm run test:integration`), dashboard 122 tests (Vitest) + 49 tests E2E Playwright (voir dashboard/tests/README.md), mobile 119 tests (Jest) + 18 étapes de parcours contre un vrai backend (`cd mobile && npm run test:parcours`, job CI `mobile-parcours`, voir `mobile/__tests__/parcours/parcours-mobile.test.ts`).
 
 ---
 

@@ -464,3 +464,39 @@ test('12. une seconde école ne voit rien de la première (et inversement)', asy
   });
   expect(croise.status()).toBe(401);
 });
+
+// ── 13. Bulletins : génération depuis le tableau de bord, puis validation ───
+
+test('13. le directeur génère les bulletins de toutes les classes, puis les valide', async ({ page, request }) => {
+  await seConnecterEnDirecteur(page);
+  await aller(page, 'bulletins');
+
+  // Les notes ont été saisies sur la première période de l'année (étape 8)
+  await expect(page.locator('#bull-periode option').first()).toBeAttached({ timeout: 8000 });
+  const premiere = await page.locator('#bull-periode option').first().getAttribute('value');
+  await page.selectOption('#bull-periode', premiere);
+
+  const ligne = (classe) => page.locator('#tb-bull tr', { hasText: classe });
+  await expect(ligne('6ème A')).toContainText('0/2', { timeout: 8000 });         // rien de généré au départ
+
+  page.once('dialog', (d) => d.accept());                                         // « Calculer les moyennes et générer… ? »
+  await page.click('button:has-text("Générer tous")');
+  await expect(ligne('6ème A')).toContainText('2/2', { timeout: 15000 });
+  await expect(ligne('5ème B')).toContainText('2/2');
+
+  // Moyennes et rangs réellement calculés : 6ème A (coefficients égaux) = Awa (12,5 et 16) devant Fatou (15 et 13)
+  const bulletins = await lire(request, `/bulletins?periode_id=${premiere}&limite=100`);
+  const de = (prenom) => bulletins.find((b) => b.prenom === prenom);
+  expect(Number(de('Awa').moyenne_generale)).toBeCloseTo(14.25, 2);
+  expect(Number(de('Fatou').moyenne_generale)).toBeCloseTo(14, 2);
+  expect([de('Awa').rang, de('Fatou').rang]).toEqual([1, 2]);
+  expect(de('Cheikh').rang).toBe(1);                                              // 5ème B : 17 devant 9
+  await expect(page.locator('#bull-kpi-generes')).toHaveText('4');
+
+  // Validation d'une classe depuis la page
+  page.once('dialog', (d) => d.accept());
+  await ligne('6ème A').locator('button:has-text("Valider")').click();
+  await expect(ligne('6ème A')).toContainText('2', { timeout: 8000 });
+  await expect.poll(async () =>
+    (await lire(request, `/bulletins?periode_id=${premiere}&limite=100`)).filter((b) => b.valide_at).length, { timeout: 8000 }).toBe(2);
+});
