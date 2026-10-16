@@ -49,12 +49,13 @@ router.post('/annees-scolaires/passage', auth, isoler, perm('config.annee_scolai
       date_fin:   date,
     })).optional(),
     copier_affectations: z.boolean().default(false),
+    copier_edt:          z.boolean().default(false),   // reconduit la grille hebdomadaire : suppose copier_affectations
     decisions: z.array(z.object({
       inscription_id: z.string().uuid(),
       decision:       z.enum(service.DECISIONS),
       classe_cible:   z.object({ niveau_id: z.string().uuid(), nom: z.string().regex(/^[A-Za-z0-9]{1,10}$/, 'Lettre de classe invalide') }).optional(),
     })).max(5000),
-  })),
+  }).refine((c) => !c.copier_edt || c.copier_affectations, { message: 'L\'emploi du temps ne se reconduit qu\'avec les affectations', path: ['copier_edt'] })),
   async (req, res, next) => {
     try {
       const compteRendu = await withTransaction((trx) => service.effectuerPassage(trx, {

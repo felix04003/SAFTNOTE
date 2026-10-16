@@ -931,3 +931,31 @@ test('20. le directeur prononce une sanction, la retrouve dans la liste et en co
   await page.selectOption('#dsc-fil-type', 'exclusion_definitive');
   await expect(page.locator('#tb-discipline')).toContainText('Aucune sanction', { timeout: 8000 });
 });
+
+// ── 21. Bulletins des années clôturées, côté parent ─────────────────────────
+
+test('21. après la fin d\'année, le parent retrouve les bulletins de l\'année clôturée', async ({ page }) => {
+  test.skip(!psqlDisponible, 'psql est nécessaire pour fixer le code SMS (variables POSTGRES_* de la base de test)');
+  const papa = jeu.parents.ndiaye;
+  await page.goto('/parent-login.html');
+  await page.fill('#inp-telephone', papa.telephone);
+  await page.click('#btn-demander');
+  await expect(page.locator('#etape2')).toBeVisible({ timeout: 10000 });
+  fixerCodeSms(papa.telephone, '424242');
+  const cases = page.locator('#otp-inputs input');
+  for (let i = 0; i < 6; i++) await cases.nth(i).fill('424242'[i]);
+  await page.click('#btn-valider');
+  await page.waitForURL(/parent\.html/, { timeout: 10000 });
+
+  await choisir(page, '#par-enfant-sel', 'Fatou');
+  await aller(page, 'par-bulletins');
+  // Nouvelle année : rien de validé, mais le sélecteur propose l'année clôturée
+  const annees = page.locator('#par-bulletins-annee option');
+  await expect(annees).toHaveCount(2, { timeout: 8000 });
+  await expect(page.locator('#par-bulletins-liste')).toContainText('Aucun bulletin');
+  await page.selectOption('#par-bulletins-annee', { index: 1 });                  // la plus ancienne vient en dernier
+  await expect(page.locator('#par-bulletins-liste')).not.toContainText('Aucun bulletin', { timeout: 8000 });
+  await expect(page.locator('#par-bulletins-liste')).toContainText('Trimestre 1');
+  await expect(page.locator('#par-bulletins-liste')).toContainText('Mathématiques');   // détail des matières de l'ancienne année
+  await page.evaluate(() => { sessionStorage.clear(); localStorage.clear(); });
+});

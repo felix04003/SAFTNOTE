@@ -156,11 +156,21 @@ export const PagePassage: any = {
     const libelle = val('psg-libelle'), debut = val('psg-debut'), fin = val('psg-fin');
     if (!/^\d{4}-\d{4}$/.test(libelle)) { toast('Libellé de l\'année : 2026-2027', 'w'); return null; }
     if (!debut || !fin || fin <= debut) { toast('Les dates de l\'année sont invalides (la fin doit suivre le début)', 'w'); return null; }
+    const affectations = Boolean((document.getElementById('psg-affectations') as HTMLInputElement | null)?.checked);
     return {
       libelle, date_debut: debut, date_fin: fin,
       nb_periodes: parseInt(val('psg-nb'), 10) === 2 ? 2 : 3,
-      copier_affectations: Boolean((document.getElementById('psg-affectations') as HTMLInputElement | null)?.checked),
+      copier_affectations: affectations,
+      // L'emploi du temps se rattache aux affectations : sans elles, il n'y a rien à reconduire
+      copier_edt: affectations && Boolean((document.getElementById('psg-edt') as HTMLInputElement | null)?.checked),
     };
+  },
+
+  /** L'option « emploi du temps » n'a de sens qu'avec les affectations */
+  majOptions() {
+    const aff = document.getElementById('psg-affectations') as HTMLInputElement | null;
+    const edt = document.getElementById('psg-edt') as HTMLInputElement | null;
+    if (edt && aff) { edt.disabled = !aff.checked; if (!aff.checked) edt.checked = false; }
   },
 
   async confirmer() {

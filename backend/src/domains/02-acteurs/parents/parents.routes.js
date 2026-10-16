@@ -52,6 +52,33 @@ async function getInscriptionCourante(db, eleveIdPk, etablissementId) {
   return inscription;
 }
 
+/**
+ * Inscription d'un enfant pour une année donnée (bulletins des années clôturées). Sans `anneeId` : l'année courante, ou à
+ * défaut la plus récente (un élève diplômé n'a plus d'inscription courante mais garde ses bulletins). L'année doit être
+ * celle de l'établissement de la session et l'enfant doit y avoir été inscrit, sinon 404.
+ */
+async function getInscriptionAnnee(db, eleveIdPk, etablissementId, anneeId) {
+  const base = () => db('inscriptions as i')
+    .join('classes as c',          'c.id', 'i.classe_id')
+    .join('niveaux as n',          'n.id', 'c.niveau_id')
+    .join('annees_scolaires as a', 'a.id', 'i.annee_scolaire_id')
+    .where({ 'i.eleve_id': eleveIdPk, 'a.etablissement_id': etablissementId })
+    .first(
+      'i.id as inscription_id', 'i.classe_id',
+      db.raw("CONCAT(n.nom, ' ', c.nom) as classe"),
+      'n.nom as niveau', 'a.id as annee_id', 'a.libelle as annee_libelle'
+    );
+  let inscription;
+  if (anneeId) {
+    inscription = await base().where('a.id', anneeId);
+  } else {
+    inscription = await base().where({ 'a.est_courante': true, 'i.statut': 'actif' })
+      || await base().orderBy('a.date_debut', 'desc');
+  }
+  if (!inscription) throw ApiError.nonTrouve('Aucune inscription de cet enfant pour cette année');
+  return inscription;
+}
+
 // ═════════════════════════════════════════════════════════════════
 // GET /parents/moi/enfants
 // Liste des enfants du parent connecté avec leurs inscriptions
@@ -286,7 +313,18 @@ router.get('/parents/moi/enfants/:id/bulletins', auth, isoler, async (req, res, 
       throw ApiError.interdit('Vous n\'avez pas l\'autorisation de voir les bulletins de cet enfant');
     }
 
-    const inscription = await getInscriptionCourante(db, lien.eleve_id_pk, req.etablissement_id);
+    // ?annee_id= : bulletins d'une année clôturée (le parent y retrouve l'historique de son enfant)
+    const anneeId = req.query.annee_id;
+    if (anneeId !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(anneeId))) {
+      throw ApiError.validationEchouee('annee_id invalide');
+    }
+    const inscription = await getInscriptionAnnee(db, lien.eleve_id_pk, req.etablissement_id, anneeId);
+
+    const annees = await db('inscriptions as i')
+      .join('annees_scolaires as a', 'a.id', 'i.annee_scolaire_id')
+      .where({ 'i.eleve_id': lien.eleve_id_pk, 'a.etablissement_id': req.etablissement_id })
+      .orderBy('a.date_debut', 'desc')
+      .select('a.id', 'a.libelle', 'a.est_courante');
 
     const bulletins = await db('moyennes_generales as mg')
       .join('periodes as p', 'p.id', 'mg.periode_id')
@@ -308,9 +346,7 @@ router.get('/parents/moi/enfants/:id/bulletins', auth, isoler, async (req, res, 
           .leftJoin('disciplines_matieres as dm', 'dm.id', 'm.discipline_id')
           .join('periodes as p2', 'p2.id', 'mm.periode_id')
           .where({ 'mm.inscription_id': inscription.inscription_id, 'p2.numero': bulletin.trimestre })
-          .whereIn('p2.annee_scolaire_id',
-            db('annees_scolaires').select('id').where({ etablissement_id: req.etablissement_id, est_courante: true })
-          )
+          .where('p2.annee_scolaire_id', inscription.annee_id)
           .orderBy('m.nom')
           .select(
             'm.nom as matiere', 'dm.couleur_affichage',
@@ -340,6 +376,8 @@ router.get('/parents/moi/enfants/:id/bulletins', auth, isoler, async (req, res, 
     return ok(res, {
       enfant: { classe: inscription.classe, niveau: inscription.niveau },
       annee: inscription.annee_libelle,
+      annee_id: inscription.annee_id,
+      annees,
       bulletins: bulletinsComplets,
     });
   } catch (err) { next(err); }

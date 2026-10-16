@@ -7,6 +7,7 @@ const _parCn = parCn;
 
 export const PageParBulletins: any = {
   _bulletinsData: null as any,
+  _anneeId: '' as string,                 // vide = année courante (ou la dernière, pour un élève sorti)
 
   init: async function() {
     const enfant = ParApp.enfantLien();
@@ -14,7 +15,23 @@ export const PageParBulletins: any = {
       PageParBulletins._accesRefuse();
       return;
     }
+    PageParBulletins._anneeId = '';
     await PageParBulletins.charger();
+  },
+
+  changerAnnee: function(anneeId: string) {
+    PageParBulletins._anneeId = anneeId;
+    return PageParBulletins.charger();
+  },
+
+  /** Sélecteur d'année : visible seulement quand l'enfant a plus d'une année d'historique */
+  _peuplerAnnees: function(annees: any[], choisie: string) {
+    const sel = document.getElementById('par-bulletins-annee') as HTMLSelectElement | null;
+    if (!sel) return;
+    sel.style.display = annees && annees.length > 1 ? '' : 'none';
+    sel.innerHTML = (annees || []).map(function(a: any) {
+      return '<option value="' + escapeHtml(a.id) + '"' + (a.id === choisie ? ' selected' : '') + '>' + escapeHtml(a.libelle) + '</option>';
+    }).join('');
   },
 
   charger: async function() {
@@ -25,8 +42,9 @@ export const PageParBulletins: any = {
     liste.innerHTML = '<div style="text-align:center;padding:40px;color:var(--g400)">Chargement…</div>';
 
     try {
-      const res = await Api.get('/parents/moi/enfants/' + id + '/bulletins');
+      const res = await Api.get('/parents/moi/enfants/' + id + '/bulletins', PageParBulletins._anneeId ? { annee_id: PageParBulletins._anneeId } : undefined);
       PageParBulletins._bulletinsData = res.data || {};
+      PageParBulletins._peuplerAnnees(PageParBulletins._bulletinsData.annees || [], PageParBulletins._bulletinsData.annee_id);
       const bulletins = PageParBulletins._bulletinsData.bulletins || [];
 
       const sous = document.getElementById('par-bulletins-sous') as HTMLElement | null;

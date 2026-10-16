@@ -52,11 +52,22 @@ beforeAll(async () => {
   // Matières et affectations : une active (copiée), une archivée (non copiée)
   const [mat] = await db('matieres').insert({ etablissement_id: seed.etablissement.id, nom: 'Philosophie', code: 'PHI', actif: true }).returning('*');
   const [matArchivee] = await db('matieres').insert({ etablissement_id: seed.etablissement.id, nom: 'Latin', code: 'LAT', actif: false }).returning('*');
-  [affectTerminale] = await db('affectations_enseignants').insert([
+  const affectations = await db('affectations_enseignants').insert([
     { enseignant_id: seed.enseignant.id, matiere_id: mat.id, classe_id: seed.classe.id, annee_scolaire_id: seed.annee.id },
     { enseignant_id: seed.enseignant.id, matiere_id: matArchivee.id, classe_id: seed.classe.id, annee_scolaire_id: seed.annee.id },
     { enseignant_id: seed.enseignant.id, matiere_id: mat.id, classe_id: classe2nde.id, annee_scolaire_id: seed.annee.id },
   ]).returning('*');
+  affectTerminale = affectations[0];
+
+  // Emploi du temps : 2 créneaux reconduits (Philosophie en Terminale et en 2nde), 1 de la matière archivée (affectation
+  // non reconduite) et 1 déjà terminé en cours d'année : ces deux-là ne le sont pas
+  const plage = await db('plages_horaires').where({ etablissement_id: seed.etablissement.id }).orderBy('numero').first('id');
+  await db('emplois_du_temps').insert([
+    { classe_id: seed.classe.id, affectation_id: affectations[0].id, plage_id: plage.id, jour_semaine: 1, salle: 'T1' },
+    { classe_id: seed.classe.id, affectation_id: affectations[1].id, plage_id: plage.id, jour_semaine: 2, salle: 'T2' },
+    { classe_id: classe2nde.id,  affectation_id: affectations[2].id, plage_id: plage.id, jour_semaine: 3, salle: 'S2A', date_debut_validite: '2025-10-01' },
+    { classe_id: seed.classe.id, affectation_id: affectations[0].id, plage_id: plage.id, jour_semaine: 4, salle: 'T4', date_fin_validite: '2026-01-31' },
+  ]);
 
   // Autre établissement
   const [etabB] = await db('etablissements').insert({ nom: 'Lycée B', code_officiel: 'PASS_B', type: 'lycee', pays: 'Sénégal', region: 'Thiès', ville: 'Thiès', actif: true }).returning('*');
@@ -143,6 +154,8 @@ describe('refus : rien ne change', () => {
     // un admis ne peut pas être placé dans un niveau inférieur
     await avec('post', '/annees-scolaires/passage', tokenDir)
       .send({ ...NOUVELLE, decisions: toutes.map((x) => (x.inscription_id === e1.ins.id ? { ...x, classe_cible: { niveau_id: nv2nde.id, nom: 'A' } } : x)) }).expect(422);
+    // l'emploi du temps ne se reconduit pas sans les affectations auxquelles il se rattache
+    await avec('post', '/annees-scolaires/passage', tokenDir).send({ ...NOUVELLE, copier_edt: true, copier_affectations: false, decisions: toutes }).expect(422);
     expect(await etat()).toEqual(avant);
   });
 
@@ -189,7 +202,7 @@ describe('le passage', () => {
   ];
 
   test('deux passages simultanés : un seul réussit', async () => {
-    const corps = (libelle) => ({ ...NOUVELLE, libelle, copier_affectations: true, decisions: decisions() });
+    const corps = (libelle) => ({ ...NOUVELLE, libelle, copier_affectations: true, copier_edt: true, decisions: decisions() });
     const [a, b] = await Promise.all([
       avec('post', '/annees-scolaires/passage', tokenDir).send(corps('2026-2027')),
       avec('post', '/annees-scolaires/passage', tokenDir).send(corps('2026-2028')),
@@ -257,6 +270,23 @@ describe('le passage', () => {
     expect(lignes).toHaveLength(2);
     expect(lignes.every((l) => l.annee_classe === compteRendu.annee_id && l.code === 'PHI')).toBe(true);
     expect(affectTerminale.annee_scolaire_id).toBe(seed.annee.id);
+  });
+
+  test('emploi du temps reconduit : grille valable toute l\'année, créneaux terminés et matière archivée écartés', async () => {
+    expect(compteRendu.creneaux_copies).toBe(2);
+    const lignes = await db('emplois_du_temps as e')
+      .join('affectations_enseignants as ae', 'ae.id', 'e.affectation_id').join('classes as c', 'c.id', 'e.classe_id')
+      .where({ 'ae.annee_scolaire_id': compteRendu.annee_id })
+      .orderBy('e.jour_semaine')
+      .select('e.jour_semaine', 'e.salle', 'e.actif', 'e.date_debut_validite', 'e.date_fin_validite', 'e.classe_id', 'e.plage_id',
+        'c.annee_scolaire_id as annee_classe', 'ae.classe_id as classe_affectation');
+    expect(lignes.map((l) => [l.jour_semaine, l.salle])).toEqual([[1, 'T1'], [3, 'S2A']]);
+    for (const l of lignes) {
+      expect(l).toMatchObject({ actif: true, date_debut_validite: null, date_fin_validite: null, annee_classe: compteRendu.annee_id });
+      expect(l.classe_id).toBe(l.classe_affectation);                  // le créneau et son affectation visent la même classe
+    }
+    // l'ancienne grille est intacte
+    expect(await db('emplois_du_temps').where({ actif: true }).whereIn('affectation_id', db('affectations_enseignants').select('id').where({ annee_scolaire_id: seed.annee.id }))).toHaveLength(4);
   });
 
   test('journal d\'audit', async () => {
